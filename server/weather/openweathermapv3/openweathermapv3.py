@@ -22,8 +22,11 @@ class OpenWeatherMapv3Service(WeatherService):
                 self.lat, self.lon, self.apikey, self.units
             )
         )
+        if res.status_code != 200:
+            raise ValueError("Non-200 response from weather api: {}".format(res.history))
+                
         data = res.json()
-        # print(data)
+
         if self.units == "metric":
             units = "\N{DEGREE SIGN}C"
         else:
@@ -50,11 +53,11 @@ class OpenWeatherMapv3Service(WeatherService):
                 self.num_hours, self.lat, self.lon, self.apikey, self.units
             )
         )
+        
+        if res.status_code != 200:
+            raise ValueError("Non-200 response from weather api: {}".format(res.history))
+        
         data = res.json()
-
-        # code = data["cod"]
-        # if int(code) != 200:
-        #     raise ValueError("Non-200 response from weather api: {}".format(data))
 
         if self.units == "metric":
             temp_units = "\N{DEGREE SIGN}C"
@@ -92,6 +95,9 @@ class OpenWeatherMapv3Service(WeatherService):
             + "/geo/1.0/direct?q={}&limit=1&appid={}".format(location, self.apikey)
         )
         data = res.json()
+
+        if res.status_code != 200:
+            raise ValueError("Non-200 response from weather api: {}".format(res.history))
 
         if len(data) == 0 or len(data) > 1:
             raise ValueError("Unexpected response from weather api: {}".format(data))
