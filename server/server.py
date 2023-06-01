@@ -41,7 +41,7 @@ def main():
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
-    if weather_service_type not in ["accuweather", "openweathermap"]:
+    if weather_service_type not in ["accuweather", "openweathermap", "openweathermapv3"]:
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
