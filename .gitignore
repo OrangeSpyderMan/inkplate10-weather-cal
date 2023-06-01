@@ -99,3 +99,5 @@ workspace.code-workspace
 .vscode/ipch
 .vscode/extensions.json
 .build
+server/REAL_config.yaml
+server/config.yaml

@@ -12,12 +12,12 @@ weather:
 google:
   apikey: XXXX
   staticmaps_mapid: XXXX
-location: Dublin
+location: Landry, FR
 image:
   width: 825
   height: 1200
 mqtt:
-  enabled: false
+  enabled: true
   host: localhost
   port: 1883
   topic: mqtt/eink-cal-client

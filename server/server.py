@@ -41,7 +41,7 @@ def main():
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
-    if weather_service_type not in ["accuweather", "openweathermap"]:
+    if weather_service_type not in ["accuweather", "openweathermap", "openweathermapv3"]:
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
@@ -96,6 +96,15 @@ def main():
         from weather.openweathermap.openweathermap import OpenWeatherMapService
 
         weather_svc = OpenWeatherMapService(
+            weather_apikey,
+            location,
+            metric=weather_metric,
+            num_hours=weather_num_hourly_forecasts,
+        )
+    elif weather_service_type == "openweathermapv3":
+        from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
+
+        weather_svc = OpenWeatherMapv3Service(
             weather_apikey,
             location,
             metric=weather_metric,

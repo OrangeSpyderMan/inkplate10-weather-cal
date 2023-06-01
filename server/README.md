@@ -35,6 +35,8 @@ In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [g
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `openweathermap`.
 
+Currently, the openweathermap API has changed.  There is a provider in this version called OpenWeatherMapv3 that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+
 ### Google StaticMaps API
 
 <img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />
