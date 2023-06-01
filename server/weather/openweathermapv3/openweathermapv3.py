@@ -18,23 +18,25 @@ class OpenWeatherMapv3Service(WeatherService):
         data = None
         res = requests.get(
             self.baseurl
-            + "/data/2.5/weather?lat={}&lon={}&appid={}&units={}".format(
+            + "/data/3.0/onecall?lat={}&lon={}&appid={}&units={}".format(
                 self.lat, self.lon, self.apikey, self.units
             )
         )
         data = res.json()
-
+        # print(data)
         if self.units == "metric":
             units = "\N{DEGREE SIGN}C"
         else:
             units = ("\N{DEGREE SIGN}F",)
 
         forecast = {
-            "icon": self.get_icon(data["weather"][0]["icon"]),
+            
+            "icon": self.get_icon(data["daily"][0]["weather"][0]["icon"]),
             "temperature": {
                 "unit": units,
-                "min": round(data["main"]["temp_min"]),
-                "max": round(data["main"]["temp_max"]),
+                "value": round(data["daily"][0]["temp"]["day"]),
+                "min": round(data["daily"][0]["temp"]["min"]),
+                "max": round(data["daily"][0]["temp"]["max"]),
             },
         }
 
@@ -44,15 +46,15 @@ class OpenWeatherMapv3Service(WeatherService):
         data = None
         res = requests.get(
             self.baseurl
-            + "/data/2.5/forecast?cnt={}&lat={}&lon={}&appid={}&units={}".format(
+            + "/data/3.0/onecall?cnt={}&lat={}&lon={}&appid={}&units={}".format(
                 self.num_hours, self.lat, self.lon, self.apikey, self.units
             )
         )
         data = res.json()
 
-        code = data["cod"]
-        if int(code) != 200:
-            raise ValueError("Non-200 response from weather api: {}".format(data))
+        # code = data["cod"]
+        # if int(code) != 200:
+        #     raise ValueError("Non-200 response from weather api: {}".format(data))
 
         if self.units == "metric":
             temp_units = "\N{DEGREE SIGN}C"
@@ -62,19 +64,19 @@ class OpenWeatherMapv3Service(WeatherService):
             speed_units = "mph"
 
         forecasts = []
-        for entry in data["list"]:
+        for entry in data["hourly"]:
             forecast = {
                 "dt": datetime.fromtimestamp(entry["dt"]),
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
                 "temperature": {
                     "unit": temp_units,
-                    "value": round(entry["main"]["feels_like"]),
+                    "value": round(entry["temp"]),
                 },
                 "wind": {
                     "unit": speed_units,
-                    "real": entry["wind"]["speed"],
+                    "real": (entry["wind_speed"]),
                 },
-                "humidity": entry["main"]["humidity"],
+                "humidity": (entry["humidity"]),
                 "rain_probability": round(entry["pop"] * 100),
             }
 
