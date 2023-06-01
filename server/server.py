@@ -101,6 +101,15 @@ def main():
             metric=weather_metric,
             num_hours=weather_num_hourly_forecasts,
         )
+    elif weather_service_type == "openweathermapv3":
+        from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
+
+        weather_svc = OpenWeatherMapv3Service(
+            weather_apikey,
+            location,
+            metric=weather_metric,
+            num_hours=weather_num_hourly_forecasts,
+        )
     else:
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
