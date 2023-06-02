@@ -1,0 +1,9 @@
+services:
+  inkplate:
+    ports:
+      - "8080:8080"
+      - "1883:1883"
+    build: 
+      context: .
+    volumes:
+      - ./server:/srv/inkplate/server

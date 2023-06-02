@@ -10,6 +10,8 @@
     "04n": "cloudy.png",
     "09d": "day/partly-clear-showers.png",
     "09n": "night/partly-clear-showers.png",
+    "10d": "rainy.png",
+    "10n": "rainy.png",
     "11d": "rainy-thunder.png",
     "11n": "rainy-thunder.png",
     "13d": "cloudy-snowy.png",
