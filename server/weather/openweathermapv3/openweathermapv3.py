@@ -38,7 +38,7 @@ class OpenWeatherMapv3Service(WeatherService):
             "icon": self.get_icon(data["current"]["weather"][0]["icon"]),
             "temperature": {
                 "unit": units,
-                "value": round(data["current"]["temp"]["day"]),
+                "value": round(data["current"]["temp"]),
                 "min": round(data["daily"][0]["temp"]["min"]),
                 "max": round(data["daily"][0]["temp"]["max"]),
             },

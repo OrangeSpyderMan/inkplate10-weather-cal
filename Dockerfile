@@ -28,15 +28,22 @@ RUN echo '0 * * * * inkplate /srv/inkplate//inkplate_venv/bin/activate && /srv/i
 USER $USERNAME
 WORKDIR /srv/inkplate
 COPY ./server/requirements.txt /srv/inkplate/installed-requirements.txt
+ENV VIRTUAL_ENV=/srv/inkplate/inkplate_venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install dependencies:
+RUN pip install -r installed-requirements.txt
 
 RUN python3 -m venv inkplate_venv
-RUN . ./inkplate_venv/bin/activate
+# RUN . ./inkplate_venv/bin/activate
 
 RUN ./inkplate_venv/bin/pip install -r /srv/inkplate/installed-requirements.txt
 
 EXPOSE 8080
 EXPOSE 1883
 
-CMD . ./inkplate_venv/bin/activate && /srv/inkplate/inkplate_venv/python3 ./server/server.py
+CMD ["python", "server/server.py"]
+# CMD . ./inkplate_venv/bin/activate && /srv/inkplate/inkplate_venv/python3 ./server/server.py
 
 
