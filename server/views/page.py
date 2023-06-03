@@ -57,6 +57,9 @@ class Page:
         opts.add_argument("--hide-scrollbars")
         opts.add_argument("--window-size={},{}".format(self.image_width, self.image_height))
         opts.add_argument("--force-device-scale-factor=1")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-extensions")
+        opts.add_argument("--no-sandbox")
 
         driver = None
         try:

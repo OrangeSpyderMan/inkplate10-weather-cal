@@ -64,11 +64,8 @@ def main():
 
     server_enabled = get_prop_by_keys(config, "server", "enabled", default=True)
     server_port = get_prop_by_keys(config, "server", "port", default=8080)
-    server_alive_seconds = get_prop_by_keys(
-        config, "server", "aliveSeconds", default=60
-    )
-    server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
-
+    server_always_on = get_prop_by_keys(config, "server", "alwayson", default=False)
+    server_refresh_seconds = 3600 * get_prop_by_keys(config, "server", "refreshhours", default=3)
     image_width = get_prop_by_keys(config, "image", "width", default=825)
     image_height = get_prop_by_keys(config, "image", "height", default=1200)
 
@@ -114,20 +111,7 @@ def main():
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
-    daily_summary = weather_svc.get_daily_summary()
-    hourly_forecasts = weather_svc.get_hourly_forecast()
 
-    try:
-        # generate page images
-        page = CalendarPage(image_width, image_height)
-        page.template(
-            map_url=map_url,
-            daily_summary=daily_summary,
-            hourly_forecasts=hourly_forecasts,
-        )
-        page.save()
-    except Exception as e:
-        raise e
 
     # bail early if http server is not enabled
     if not server_enabled:
@@ -139,33 +123,75 @@ def main():
         mqtt_client = get_client_mqtt_logging(mqtt_host, mqtt_port, mqtt_topic)
 
     # setup http server
-    http_server = ServerThread(app, server_port)
-    http_server.start()
+    if (server_always_on):
+        http_server = ServerThread(app, server_port)
+        http_server.start()
+        log.info(f"Starting always on server")
+        while True:
+            log.info(f"Retrieving forecast data")
+            daily_summary = weather_svc.get_daily_summary()
+            hourly_forecasts = weather_svc.get_hourly_forecast()
+            try:
+                # generate page images
+                log.info(f"Generating page")
+                page = CalendarPage(image_width, image_height)
+                page.template(
+                    map_url=map_url,
+                    daily_summary=daily_summary,
+                    hourly_forecasts=hourly_forecasts,
+                )
+                page.save()
+            except Exception as e:
+                raise e
+            log.info(f"Serving current image for {server_refresh_seconds} seconds")
+            time.sleep(server_refresh_seconds)
+            log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
+        
+    else:
+        server_alive_seconds = get_prop_by_keys(
+            config, "server", "aliveSeconds", default=60
+        )
+        server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
+        daily_summary = weather_svc.get_daily_summary()
+        hourly_forecasts = weather_svc.get_hourly_forecast()
+        try:
+            # generate page images
+            page = CalendarPage(image_width, image_height)
+            page.template(
+                map_url=map_url,
+                daily_summary=daily_summary,
+                hourly_forecasts=hourly_forecasts,
+            )
+            page.save()
+        except Exception as e:
+            raise e
+        http_server = ServerThread(app, server_port)
+        http_server.start()
 
-    enable_wait = server_alive_seconds > 0
-    enable_max_serves = server_max_serves > 0
+        enable_wait = server_alive_seconds > 0
+        enable_max_serves = server_max_serves > 0
 
-    if enable_wait:
-        log.info(f"Serving images for {server_alive_seconds} seconds before shutdown")
-    if enable_max_serves:
-        log.info(f"Serving images for max {server_max_serves} times before shutdown")
+        if enable_wait:
+            log.info(f"Serving images for {server_alive_seconds} seconds before shutdown")
+        if enable_max_serves:
+            log.info(f"Serving images for max {server_max_serves} times before shutdown")
 
-    start_wait_dt = dt.datetime.now()
-    diff = dt.datetime.now() - start_wait_dt
-    while (enable_max_serves and server_num_serves < server_max_serves) and (
-        enable_wait and diff.seconds < server_alive_seconds
-    ):
-        time.sleep(1)
+        start_wait_dt = dt.datetime.now()
         diff = dt.datetime.now() - start_wait_dt
+        while (enable_max_serves and server_num_serves < server_max_serves) and (
+            enable_wait and diff.seconds < server_alive_seconds
+        ):
+            time.sleep(1)
+            diff = dt.datetime.now() - start_wait_dt
 
-    http_server.shutdown(timeout=10)
+        http_server.shutdown(timeout=10)
 
-    if mqtt_client:
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
+        if mqtt_client:
+            mqtt_client.loop_stop()
+            mqtt_client.disconnect()
 
-    log.info(f"Exiting")
-    sys.exit(0)
+        log.info(f"Exiting")
+        sys.exit(0)
 
 
 def get_client_mqtt_logging(host, port, topic):

@@ -1,4 +1,5 @@
 import requests
+import itertools
 from datetime import datetime
 from ..service import WeatherService
 
@@ -34,10 +35,10 @@ class OpenWeatherMapv3Service(WeatherService):
 
         forecast = {
             
-            "icon": self.get_icon(data["daily"][0]["weather"][0]["icon"]),
+            "icon": self.get_icon(data["current"]["weather"][0]["icon"]),
             "temperature": {
                 "unit": units,
-                "value": round(data["daily"][0]["temp"]["day"]),
+                "value": round(data["current"]["temp"]),
                 "min": round(data["daily"][0]["temp"]["min"]),
                 "max": round(data["daily"][0]["temp"]["max"]),
             },
@@ -67,7 +68,7 @@ class OpenWeatherMapv3Service(WeatherService):
             speed_units = "mph"
 
         forecasts = []
-        for entry in data["hourly"]:
+        for entry in itertools.islice(data["hourly"],2 , self.num_hours*3, 3):
             forecast = {
                 "dt": datetime.fromtimestamp(entry["dt"]),
                 "icon": self.get_icon(entry["weather"][0]["icon"]),

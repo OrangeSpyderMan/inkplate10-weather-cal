@@ -20,7 +20,7 @@
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
 // Fallback time to refresh.
-#define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_TIME "09:00:00"
+#define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
 // The path on SD card where calendar images are downloaded to and read from.
 #define CALENDAR_RW_PATH "/calendar.png"
 // Guestimate file size for PNG image @ 1200x825
