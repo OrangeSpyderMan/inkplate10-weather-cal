@@ -316,65 +316,23 @@ esp_err_t configureTime(const char* ntpHost, const char* timezoneName) {
 }
 
 /**
-  Get the next scheduled time to wake from deep sleep.
-
-  @param refreshTime the time of the day to wake in HH::MM:SS format (eg.
-  09:00:00). error.
-  @returns the epoch time of when to wake.
-  If the real-time clock is not configured, it will return the last configured
-  RTC epoch time + DEEP_SLEEP_FALLBACK_SECONDS.
-*/
-time_t getWakeTime(const char* refreshTime) {
-    if (!board.rtcIsSet()) {
-        log(LOG_WARNING, "cannot determine wake time: RTC not set");
-        return board.rtcGetEpoch() + DEEP_SLEEP_FALLBACK_SECONDS;
-    }
-
-    tmElements_t tm;
-    int hr, min, sec;
-    sscanf(refreshTime, "%d:%d:%d", &hr, &min, &sec);
-
-    tm.Hour = hr;
-    tm.Minute = min;
-    tm.Second = sec;
-
-    tm.Day = myTz.day();
-    tm.Month = myTz.month();
-    tm.Year = CalendarYrToTm(myTz.year());
-
-    time_t targetTime = makeTime(tm);
-    time_t nowTime = myTz.now();
-
-    // Rollover to tomorrow
-    if (nowTime > targetTime) {
-        targetTime += SECS_PER_DAY;
-    }
-
-    return targetTime;
-}
-
-/**
   Enter deep sleep.
 
-  @param refreshTime the time of the day to wake in HH:MM:SS format (eg.
-  09:00:00). error.
-*/
-void sleep(const char* refreshTime) {
-    targetWakeTime = getWakeTime(refreshTime);
+  @param sleepHours the number of hours we should sleep for
 
+*/
+void sleep(const int sleepHours)
+{
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtcGetEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
-    logf(LOG_DEBUG, "setting deep sleep RTC wakeup on pin %d", GPIO_NUM_39);
 
-    board.rtcSetAlarmEpoch(targetWakeTime, RTC_ALARM_MATCH_DHHMMSS);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0);
-
-    logf(LOG_INFO, "waking at %s", dateTime(targetWakeTime, RFC3339).c_str());
+    logf(LOG_INFO, "waking at in %d hours", sleepHours);
     log(LOG_NOTICE, "deep sleeping in 5 seconds");
     delay(5000);
 
-    WiFi.mode(WIFI_OFF);
     lastSleepTime = rtcTime;
+    WiFi.mode(WIFI_OFF);
+    esp_sleep_enable_timer_wakeup(sleepHours * 60 * 60); // Convert hours to seconds
     esp_deep_sleep_start();
 }

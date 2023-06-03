@@ -111,6 +111,12 @@ This should be as simple as running the following command from the root of your 
 ```
 docker compose up
 ```
+or if you don't want to attach to the running container :
+
+```
+docker compose up -d 
+```
+
 
 It will download the base image and apply some changes to build a virtual environment for the python modules.  It can be made to run permanently with the option `alwayson: true`in the config.yaml file (defaults to `false`).  It will then refresh the calendar image every `refreshhours` as specified also in the `server:` section of config.yaml (defaults to every 3 hours if no value provided)
 

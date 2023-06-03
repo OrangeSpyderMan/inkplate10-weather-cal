@@ -103,7 +103,7 @@ Place `config.yaml` in the root directory of an SD card and connect it to your I
 ```
 calendar:
   url: http://localhost:8080/calendar.png
-  daily_refresh_time: 09:00:00
+  refresh_interval: 3
   retries: 3
 wifi:
   ssid: XXXX
@@ -125,7 +125,7 @@ Likely parameters you'll need to change is
 - `wifi.ssid` - the SSID if your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from.
-- `calendar.daily_refresh_time` - the time you want the client to wake each day, in `HH:MM:SS` format.
+- `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.  
 - `mqtt_logger.broker` - the hostname or IP address of your server (likely the same server as the image host).
 
@@ -139,7 +139,7 @@ Should be as simple as cloning the project from GitHub and importing into Platfo
 
 ### Building with Arduino IDE
 
-Although this is largely untested, the firmware can be made to compile correctly on the Arduino IDE, if that is your environment of choice. At least one user has seen issues with SDCard reading on the PlatformIO built firmware, which seems not to happen on the Arduino IDE build.
+The firmware can be made to compile correctly on the Arduino IDE, if that is your environment of choice. At least one user has seen issues with SDCard reading on the PlatformIO built firmware, which seems not to happen on the Arduino IDE build.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition).   The documentation for that is available here :
 

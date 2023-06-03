@@ -58,8 +58,8 @@ void setup() {
         const char* errMsg = "SD card init failure";
         log(LOG_ERROR, errMsg);
         displayMessage(errMsg);
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_TIME);
-    }
+        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
+}
 
     // Attempt to get config yaml file.
     File file = sd.open(CONFIG_FILE_PATH, FILE_READ);
@@ -67,7 +67,7 @@ void setup() {
         const char* errMsg = "Failed to open config file";
         logf(LOG_ERROR, errMsg);
         displayMessage(errMsg);
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_TIME);
+        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
 
     // Attempt to parse yaml file.
@@ -78,15 +78,15 @@ void setup() {
         const char* errMsg = "Failed to load config from file";
         logf(LOG_ERROR, "failed to deserialize YAML: %s", dse.c_str());
         displayMessage(errMsg);
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_TIME);
+        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
     file.close();
 
     // Assign config values.
     JsonObject calendarCfg = doc["calendar"];
     const char* calendarUrl = calendarCfg["url"];
-    const char* calendarDailyRefreshTime = calendarCfg["daily_refresh_time"];
     int calendarRetries = calendarCfg["retries"];
+    int calendarRefreshInterval = calendarCfg["refresh_interval"];
 
     // Wifi config.
     JsonObject wifiCfg = doc["wifi"];
@@ -113,7 +113,7 @@ void setup() {
         const char* errMsg = "wifi connect timeout";
         log(LOG_ERROR, errMsg);
         displayMessage(errMsg);
-        sleep(calendarDailyRefreshTime);
+        sleep(calendarRefreshInterval);
     }
 
     if (mqttLoggerEnabled) {
@@ -135,18 +135,18 @@ void setup() {
     // Print some information about sleep and wake times.
     if (lastBootTime > 0) {
         logf(LOG_DEBUG, "last boot time: %s",
-             dateTime(lastBootTime, RFC3339).c_str());
+            dateTime(lastBootTime, RFC3339).c_str());
     }
     lastBootTime = bootTime;
 
     if (lastSleepTime > 0) {
         logf(LOG_INFO, "last sleep time: %s",
-             dateTime(lastSleepTime, RFC3339).c_str());
+            dateTime(lastSleepTime, RFC3339).c_str());
     }
 
     if (targetWakeTime > 0) {
         logf(LOG_INFO, "expected wake time: %s",
-             dateTime(targetWakeTime, RFC3339).c_str());
+            dateTime(targetWakeTime, RFC3339).c_str());
         driftSecs = targetWakeTime - bootTime;
     }
 
@@ -166,7 +166,7 @@ void setup() {
             log(LOG_NOTICE, "battery near empty! - sleeping until charged");
             displayMessage("Battery empty, please charge!");
             // Sleep instead of proceeding when battery is too low.
-            sleep(calendarDailyRefreshTime);
+            sleep(calendarRefreshInterval);
         } else if (bvolt < 3.3) {
             log(LOG_WARNING, "battery low, charge soon!");
         } else {
@@ -204,7 +204,7 @@ void setup() {
     }
 
     // Deep sleep until next refresh time
-    sleep(calendarDailyRefreshTime);
+    sleep(calendarRefreshInterval);
 }
 
 void loop() {}

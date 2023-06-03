@@ -64,10 +64,6 @@ def main():
 
     server_enabled = get_prop_by_keys(config, "server", "enabled", default=True)
     server_port = get_prop_by_keys(config, "server", "port", default=8080)
-    server_alive_seconds = get_prop_by_keys(
-        config, "server", "aliveSeconds", default=60
-    )
-    server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
     server_always_on = get_prop_by_keys(config, "server", "alwayson", default=False)
     server_refresh_seconds = 3600 * get_prop_by_keys(config, "server", "refreshhours", default=3)
     image_width = get_prop_by_keys(config, "image", "width", default=825)
@@ -152,6 +148,10 @@ def main():
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
         
     else:
+        server_alive_seconds = get_prop_by_keys(
+            config, "server", "aliveSeconds", default=60
+        )
+        server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
         daily_summary = weather_svc.get_daily_summary()
         hourly_forecasts = weather_svc.get_hourly_forecast()
         try:
