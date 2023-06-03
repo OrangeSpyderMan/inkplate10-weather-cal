@@ -35,7 +35,11 @@ In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [g
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `openweathermap`.
 
-Currently, the openweathermap API has changed.  There is a provider in this version called OpenWeatherMapv3 that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+Currently, the openweathermap API has changed, and I don't think that OpenWeatherMap API works anymore (some data is no longer returned by their 2.5 API  There is a provider in this version called [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+
+### OpenWeatherMapv3 API
+
+This provides a lot more data, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  I would recommend using this one rather than trying to fix the 2.5 API as I believe the provider is moving away from it.
 
 ### Google StaticMaps API
 
@@ -91,3 +95,27 @@ Add this line:
 0 9 * * * /usr/bin/python3 /path/to/server.py
 ```
 `/path/to/server.py` should be updated to whatever the absolute path is to where `server.py` is on your filesystem.
+
+## Running in Docker
+
+In the server directory there is a docker-compose.yml and a Dockerfile that should allow the container to be created automagically.  There are a couple of things to know first.  
+
+1. You will need a working server/config.yaml in the server directory.  An example is provided but it needs to be updated as per the instructions above and renamed to config.yaml
+2. The container supplies the server directory to the container in order to allow adjustments to the config (or code...) to sync between the cloned local repo and the code on the server
+3. It tries to run every hour as a cron job, but that really needs a lot more testing...
+
+### Starting the container
+
+This should be as simple as running the following command from the root of your cloned repository :
+
+```
+docker compose up
+```
+
+It will download the base image and apply some changes to build a virtual environment for the python modules.
+
+### Known issues / TODO
+
+1. There's an error between the chromium version and the chromium-driver version.  It seems to work but [TODO] Fix this
+2. Test running from cron and/or make the server stay up between calendar refreshes
+
