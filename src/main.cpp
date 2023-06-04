@@ -86,7 +86,7 @@ void setup() {
     JsonObject calendarCfg = doc["calendar"];
     const char* calendarUrl = calendarCfg["url"];
     int calendarRetries = calendarCfg["retries"];
-    int calendarRefreshInterval = calendarCfg["refresh_interval"];
+    const int calendarRefreshInterval = calendarCfg["refresh_interval"];
 
     // Wifi config.
     JsonObject wifiCfg = doc["wifi"];
