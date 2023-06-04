@@ -333,6 +333,7 @@ void sleep(const int sleepHours)
 
     lastSleepTime = rtcTime;
     WiFi.mode(WIFI_OFF);
-    esp_sleep_enable_timer_wakeup(sleepHours * 60 * 60); // Convert hours to seconds
+    unsigned long long ullSleepMicroseconds = sleepHours * 60 * 60 * 1000 * 1000; // Convert hours to microseconds in an unsigned long long
+    esp_sleep_enable_timer_wakeup(ullSleepMicroseconds);
     esp_deep_sleep_start();
 }
