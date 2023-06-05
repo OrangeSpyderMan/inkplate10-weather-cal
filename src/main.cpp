@@ -50,10 +50,10 @@ void setup() {
     // Init storage.
     if (board.sdCardInit()) {
         // If previous image exists, load into board buffer.
-        err = displayImage(CALENDAR_RW_PATH);
-        if (err != ESP_OK) {
-            log(LOG_WARNING, "load previous calendar error");
-        }
+        // err = displayImage(CALENDAR_RW_PATH);
+        // if (err != ESP_OK) {
+        //     log(LOG_WARNING, "load previous calendar error");
+        // }
     } else {
         const char* errMsg = "SD card init failure";
         log(LOG_ERROR, errMsg);
