@@ -321,18 +321,20 @@ esp_err_t configureTime(const char* ntpHost, const char* timezoneName) {
   @param sleepHours the number of hours we should sleep for
 
 */
-void sleep(const int sleepHours)
-{
+void sleep(const int sleepHours) {
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtcGetEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
-    logf(LOG_INFO, "waking at in %d hours", sleepHours);
+    logf(LOG_INFO, "waking in %d hours", sleepHours);
     log(LOG_NOTICE, "deep sleeping in 5 seconds");
     delay(5000);
 
     lastSleepTime = rtcTime;
+
+    const uint64_t sleepMicroseconds = ((uint64_t)sleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
+    logf(LOG_INFO, "waking in %llu microseconds", sleepMicroseconds);
     WiFi.mode(WIFI_OFF);
-    esp_sleep_enable_timer_wakeup(sleepHours * 60 * 60); // Convert hours to seconds
+    esp_sleep_enable_timer_wakeup(sleepMicroseconds);
     esp_deep_sleep_start();
 }

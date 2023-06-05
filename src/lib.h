@@ -138,10 +138,10 @@ time_t getWakeTime(const char* refreshTime);
 /**
   Enter deep sleep.
 
-  @param refreshTime the time of the day to wake in HH:MM:SS format (eg.
-  09:00:00). error.
+  @param sleepHours the number of hours we should sleep for
+
 */
-void sleep(const char* refreshTime);
+void sleep(const int sleepHours);
 
 /**
   Connect to a MQTT broker for remote logging.
