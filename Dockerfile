@@ -41,7 +41,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN ./inkplate_venv/bin/pip install -r /srv/inkplate/installed-requirements.txt
 
 EXPOSE 8080
-EXPOSE 1883
+# EXPOSE 1883
 
 # Start the server code
 CMD ["python", "server/server.py"]
