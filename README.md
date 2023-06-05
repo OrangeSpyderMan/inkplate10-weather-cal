@@ -9,7 +9,6 @@ Display today's date, weather forecast and a stylised map of your city using an 
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
 - [Firmware](#firmware)
-  - [Building with PlatformIO](#building-with-platformio)
   - [Building with Arduino IDE](#building-with-arduino-ide)
 - [License](#license)
 
@@ -133,13 +132,9 @@ See the [server](/server) for info on server setup.
 
 ## Firmware
 
-### Building with PlatformIO
-
-Should be as simple as cloning the project from GitHub and importing into PlatformIO. `platformio.ini` has everything setup to build and upload to Inkplate 10.
-
 ### Building with Arduino IDE
 
-The firmware can be made to compile correctly on the Arduino IDE, if that is your environment of choice. At least one user has seen issues with SDCard reading on the PlatformIO built firmware, which seems not to happen on the Arduino IDE build.
+The firmware can be compiled correctly on the Arduino IDE.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition).   The documentation for that is available here :
 
