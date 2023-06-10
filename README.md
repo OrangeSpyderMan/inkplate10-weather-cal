@@ -141,13 +141,6 @@ The below assumes you already have a working Arduino environment, configure for 
 
 - https://inkplate.readthedocs.io/en/latest/get-started.html#arduino
 
-A few changes will be made, and you will need to install the relevant libraries to meet the dependencies.
-
-Change the source to match Arduino IDE's Sketch requirements :
-- Rename main.cpp to main.ino
-- Place main.ino, lib.h and lib.cpp in a folder called main.
-- You can then open the sketch in Arduino
-
 The following libraries should be installed in your Arduino IDE.  They are available in the IDE's Library Manager :
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [Arduinojson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
