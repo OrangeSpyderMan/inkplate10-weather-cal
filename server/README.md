@@ -31,15 +31,14 @@ Make sure you update the config `weather.apikey` with your generated api key and
 
 ### OpenWeatherMap API
 
-In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
-
-Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `openweathermap`.
-
-Currently, the openweathermap API has changed, and I don't think that OpenWeatherMap API works anymore (some data is no longer returned by their 2.5 API  There is a provider in this version called [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+[DEPRECATED]
+This provider is no longer supported in this version.  Please consider using [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
 
 ### OpenWeatherMapv3 API
 
-This provides a lot more data, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  I would recommend using this one rather than trying to fix the 2.5 API as I believe the provider is moving away from it.
+In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
+
+This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine no only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
 
 ### Google StaticMaps API
 
