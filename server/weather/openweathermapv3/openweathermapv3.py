@@ -104,7 +104,7 @@ class OpenWeatherMapv3Service(WeatherService):
             raise ValueError("Unexpected response from weather api: {}".format(data))
 
         data = data[0]
-        lat = round(data["lat"])
-        lon = round(data["lon"])
+        lat = data["lat"]
+        lon = data["lon"]
 
         return lat, lon
