@@ -90,14 +90,9 @@ def main():
             num_hours=weather_num_hourly_forecasts,
         )
     elif weather_service_type == "openweathermap":
-        from weather.openweathermap.openweathermap import OpenWeatherMapService
-
-        weather_svc = OpenWeatherMapService(
-            weather_apikey,
-            location,
-            metric=weather_metric,
-            num_hours=weather_num_hourly_forecasts,
-        )
+        log.error(f"{weather_service_type} is no longer supported.   Please use the V3 API (openweathermapv3)")
+        sys.exit(1)
+        
     elif weather_service_type == "openweathermapv3":
         from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
 
