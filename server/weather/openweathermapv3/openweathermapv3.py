@@ -68,7 +68,7 @@ class OpenWeatherMapv3Service(WeatherService):
             speed_units = "mph"
 
         forecasts = []
-        for entry in itertools.islice(data["hourly"],2 , self.num_hours*3, 3):
+        for entry in itertools.islice(data["hourly"],4 , self.num_hours*3, 3):
             forecast = {
                 "dt": datetime.fromtimestamp(entry["dt"]),
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
