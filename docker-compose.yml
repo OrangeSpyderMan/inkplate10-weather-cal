@@ -7,3 +7,4 @@ services:
       context: .
     volumes:
       - ./server:/srv/inkplate/server
+    restart: always
