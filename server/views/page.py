@@ -43,6 +43,7 @@ class Page:
         driver.get("file://" + html_fp)
         sleep(1)
         driver.get_screenshot_as_file(png_fp)
+	driver.close()
         driver.quit()
 
         img = Image.open(png_fp)
