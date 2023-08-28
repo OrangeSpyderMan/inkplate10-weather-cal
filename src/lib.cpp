@@ -1,7 +1,5 @@
 #include "lib.h"
 
-// The number of times we have booted (from off or from sleep).
-RTC_DATA_ATTR int bootCount = 0;
 // RTC epoch of the last time we booted.
 RTC_DATA_ATTR time_t lastBootTime = 0;
 // RTC epoch of the last time deep sleep was initiated.

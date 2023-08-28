@@ -6,7 +6,6 @@
 #include "lib.h"
 
 void setup() {
-    ++bootCount;
     Serial.begin(115200);
     // Init inkplate board.
     board.begin();
@@ -18,7 +17,6 @@ void setup() {
     time_t bootTime = board.rtcGetEpoch();
     setTime(bootTime);
 
-    logf(LOG_INFO, "boot count: %d", bootCount);
     logf(LOG_DEBUG, "boot time: %s", dateTime(bootTime, RFC3339).c_str());
 
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();

@@ -46,8 +46,6 @@
 #define LOG_LEVEL LOG_DEBUG
 #endif
 
-// The number of times we have booted (from off or from sleep).
-extern RTC_DATA_ATTR int bootCount;
 // RTC epoch of the last time we booted.
 extern RTC_DATA_ATTR time_t lastBootTime;
 // RTC epoch of the last time deep sleep was initiated.
