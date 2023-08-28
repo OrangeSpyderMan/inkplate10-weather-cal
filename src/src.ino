@@ -156,10 +156,7 @@ void setup() {
     float bvolt = board.readBattery();
     logf(LOG_INFO, "battery voltage: %sv", String(bvolt, 2));
 
-    if (isVbusPresent()) {
-        const char* bstat = (bvolt < 4.0) ? "charging" : "charged";
-        logf(LOG_INFO, "USB power present - battery %s", bstat);
-    } else if (bvolt > 0.0) {
+    if (bvolt > 0.0) {
         if (bvolt < 3.1) {
             log(LOG_NOTICE, "battery near empty! - sleeping until charged");
             displayMessage("Battery empty, please charge!");

@@ -189,13 +189,6 @@ const char* msgPrefix(uint16_t pri);
 void ensureQueue(char* msg);
 
 /**
-  Check whether 5v USB power is detected.
-
-  @returns a boolean whether 5v USB power is detected.
-*/
-bool isVbusPresent();
-
-/**
   Gets a reading of the battery voltage by a calibrated ADC.
 
   @returns a float of the battery voltage.

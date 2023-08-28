@@ -298,16 +298,7 @@ void ensureQueue(char *logMsg)
     mqttLogger.println(logMsg);
 }
 
-/**
-  Check whether 5v USB power is detected.
 
-  @returns a boolean whether 5v USB power is detected.
-*/
-bool isVbusPresent()
-{
-    // TODO: determine USB power?
-    return false;
-}
 
 /**
   Connect to an NTP server and synchronize the on-board real-time clock.
