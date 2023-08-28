@@ -43,7 +43,7 @@ class Page:
         driver.get("file://" + html_fp)
         sleep(1)
         driver.get_screenshot_as_file(png_fp)
-	driver.close()
+        self.log.info("Calling quit...")
         driver.quit()
 
         img = Image.open(png_fp)
@@ -64,13 +64,13 @@ class Page:
 
         driver = None
         try:
-            driver = webdriver.Chrome(ChromeDriverManager().install(), options=opts)
+            driver =  webdriver.Chrome(ChromeDriverManager().install(), options=opts)
         except Exception as e:
             self.log.warning(e)
-            try:
-                driver = webdriver.Chrome(options=opts)
-            except WebDriverException as wde:
-                raise wde 
+        try:
+             driver = webdriver.Chrome(options=opts)
+        except WebDriverException as wde:
+             raise wde 
 
         driver.set_window_rect(width=self.image_width, height=self.image_height)
 
