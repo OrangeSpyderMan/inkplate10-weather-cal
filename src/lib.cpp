@@ -33,20 +33,23 @@ Timezone myTz;
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t configureWiFi(const char* ssid, const char* pass, int retries) {
+esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
+{
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pass);
     logf(LOG_INFO, "connecting to WiFi SSID %s...", ssid);
 
     // Retry until success or give up
     int attempts = 0;
-    while (attempts++ <= retries && WiFi.status() != WL_CONNECTED) {
+    while (attempts++ <= retries && WiFi.status() != WL_CONNECTED)
+    {
         logf(LOG_DEBUG, "connection attempt #%d...", attempts);
         delay(1000);
     }
 
     // If still not connected, error with timeout.
-    if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() != WL_CONNECTED)
+    {
         return ESP_ERR_TIMEOUT;
     }
     // Print the IP address
@@ -66,12 +69,14 @@ esp_err_t configureWiFi(const char* ssid, const char* pass, int retries) {
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t downloadFile(const char* url, int32_t size, const char* filePath) {
+esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
+{
     logf(LOG_INFO, "downloading file at URL %s", url);
 
     // Download file from URL
-    uint8_t* buf = board.downloadFile(url, &size);
-    if (!buf) {
+    uint8_t *buf = board.downloadFile(url, &size);
+    if (!buf)
+    {
         return ESP_ERR_EDL;
     }
 
@@ -79,12 +84,14 @@ esp_err_t downloadFile(const char* url, int32_t size, const char* filePath) {
     SdFat sd = board.getSdFat();
 
     // Write image buffer to SD card
-    if (sd.exists(filePath)) {
+    if (sd.exists(filePath))
+    {
         sd.remove(filePath);
     }
 
     File sdfile = sd.open(filePath, FILE_WRITE);
-    if (!sdfile) {
+    if (!sdfile)
+    {
         return ESP_ERR_EFILEW;
     }
 
@@ -104,11 +111,13 @@ esp_err_t downloadFile(const char* url, int32_t size, const char* filePath) {
   - ESP_ERR_EDL if download file fails.
   - ESP_ERR_EFILEW if writing file to filePath fails.
 */
-esp_err_t displayImage(const char* filePath) {
+esp_err_t displayImage(const char *filePath)
+{
     logf(LOG_INFO, "drawing image from path: %s", filePath);
 
     board.clearDisplay();
-    if (!board.drawImage(filePath, 0, 0, false, true)) {
+    if (!board.drawImage(filePath, 0, 0, false, true))
+    {
         return ESP_ERR_EDRAW;
     }
     board.display();
@@ -123,7 +132,8 @@ esp_err_t displayImage(const char* filePath) {
   @param msg the message to display.
   error.
 */
-void displayMessage(const char* msg) {
+void displayMessage(const char *msg)
+{
     board.setTextSize(4);
     board.setTextColor(1, 0);
     board.setTextWrap(true);
@@ -145,19 +155,22 @@ void displayMessage(const char* msg) {
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t configureMQTT(const char* broker, int port, const char* topic,
-                        const char* clientID, int max_retries) {
+esp_err_t configureMQTT(const char *broker, int port, const char *topic,
+                        const char *clientID, int max_retries)
+{
     log(LOG_INFO, "configuring remote MQTT logging...");
 
     client.setServer(broker, port);
     // Attempt to connect to MQTT broker.
     int attempts = 0;
-    while (attempts++ <= max_retries && !client.connect(clientID)) {
+    while (attempts++ <= max_retries && !client.connect(clientID))
+    {
         logf(LOG_DEBUG, "connection attempt #%d...", attempts);
         delay(250);
     }
 
-    if (!client.connected()) {
+    if (!client.connected())
+    {
         return ESP_ERR_TIMEOUT;
     }
 
@@ -176,34 +189,36 @@ esp_err_t configureMQTT(const char* broker, int port, const char* topic,
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @returns the string value of the priority.
 */
-const char* msgPrefix(uint16_t pri) {
-    char* priority;
+const char *msgPrefix(uint16_t pri)
+{
+    char *priority;
 
-    switch (pri) {
-        case LOG_CRIT:
-            priority = (char*)"CRITICAL";
-            break;
-        case LOG_ERROR:
-            priority = (char*)"ERROR";
-            break;
-        case LOG_WARNING:
-            priority = (char*)"WARNING";
-            break;
-        case LOG_NOTICE:
-            priority = (char*)"NOTICE";
-            break;
-        case LOG_INFO:
-            priority = (char*)"INFO";
-            break;
-        case LOG_DEBUG:
-            priority = (char*)"DEBUG";
-            break;
-        default:
-            priority = (char*)"INFO";
-            break;
+    switch (pri)
+    {
+    case LOG_CRIT:
+        priority = (char *)"CRITICAL";
+        break;
+    case LOG_ERROR:
+        priority = (char *)"ERROR";
+        break;
+    case LOG_WARNING:
+        priority = (char *)"WARNING";
+        break;
+    case LOG_NOTICE:
+        priority = (char *)"NOTICE";
+        break;
+    case LOG_INFO:
+        priority = (char *)"INFO";
+        break;
+    case LOG_DEBUG:
+        priority = (char *)"DEBUG";
+        break;
+    default:
+        priority = (char *)"INFO";
+        break;
     }
 
-    char* prefix = new char[35];
+    char *prefix = new char[35];
     sprintf(prefix, "%s - %s - ", myTz.dateTime(RFC3339).c_str(), priority);
     return prefix;
 }
@@ -214,10 +229,12 @@ const char* msgPrefix(uint16_t pri) {
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @param msg the message to log.
 */
-void log(uint16_t pri, const char* msg) {
-    if (pri > LOG_LEVEL) return;
+void log(uint16_t pri, const char *msg)
+{
+    if (pri > LOG_LEVEL)
+        return;
 
-    const char* prefix = msgPrefix(pri);
+    const char *prefix = msgPrefix(pri);
     size_t prefixLen = strlen(prefix);
     size_t msgLen = strlen(msg);
     char buf[prefixLen + msgLen + 1];
@@ -232,10 +249,12 @@ void log(uint16_t pri, const char* msg) {
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @param fmt the format of the log message
 */
-void logf(uint16_t pri, const char* fmt, ...) {
-    if (pri > LOG_LEVEL) return;
+void logf(uint16_t pri, const char *fmt, ...)
+{
+    if (pri > LOG_LEVEL)
+        return;
 
-    const char* prefix = msgPrefix(pri);
+    const char *prefix = msgPrefix(pri);
     size_t prefixLen = strlen(prefix);
     size_t msgLen = strlen(fmt);
     char a[prefixLen + msgLen + 1];
@@ -256,15 +275,21 @@ void logf(uint16_t pri, const char* fmt, ...) {
 
   @param msg the log message.
 */
-void ensureQueue(char* logMsg) {
-    if (!client.connected()) {
+void ensureQueue(char *logMsg)
+{
+    if (!client.connected())
+    {
         // populate log queue while no mqtt connection
         logQ.push(logMsg);
-    } else {
+    }
+    else
+    {
         // send queued logs once we are connected.
-        if (logQ.getCount() > 0) {
+        if (logQ.getCount() > 0)
+        {
             mqttLogger.setMode(MqttLoggerMode::MqttOnly);
-            while (!logQ.isEmpty()) {
+            while (!logQ.isEmpty())
+            {
                 logQ.pop(logMsg);
                 mqttLogger.println(logMsg);
             }
@@ -280,7 +305,8 @@ void ensureQueue(char* logMsg) {
 
   @returns a boolean whether 5v USB power is detected.
 */
-bool isVbusPresent() {
+bool isVbusPresent()
+{
     // TODO: determine USB power?
     return false;
 }
@@ -295,12 +321,14 @@ bool isVbusPresent() {
   - ESP_OK if successful.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
-esp_err_t configureTime(const char* ntpHost, const char* timezoneName) {
+esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
+{
     log(LOG_INFO, "configuring network time and RTC...");
 
     setServer(ntpHost);
 
-    if (!waitForSync()) {
+    if (!waitForSync())
+    {
         return ESP_ERR_ENTP;
     }
     myTz.setLocation(F(timezoneName));
@@ -321,7 +349,8 @@ esp_err_t configureTime(const char* ntpHost, const char* timezoneName) {
   @param sleepHours the number of hours we should sleep for
 
 */
-void sleep(const int sleepHours) {
+void sleep(const int sleepHours)
+{
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtcGetEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
@@ -332,9 +361,17 @@ void sleep(const int sleepHours) {
 
     lastSleepTime = rtcTime;
 
-    const uint64_t sleepMicroseconds = ((uint64_t)sleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
-    logf(LOG_INFO, "waking in %llu microseconds", sleepMicroseconds);
+    log(LOG_NOTICE, "Shutdown is NOW!");
+    log(LOG_DEBUG, "Disconnect WiFi...");
+    WiFi.disconnect();
+    log(LOG_DEBUG, "Turn off WiFi...");
     WiFi.mode(WIFI_OFF);
+    log(LOG_DEBUG, "Sleep SDCard...");
+    board.sdCardSleep();
+
+    const uint64_t sleepMicroseconds = ((uint64_t)sleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
+    logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);
     esp_sleep_enable_timer_wakeup(sleepMicroseconds);
+    log(LOG_NOTICE, "Sleeping...");
     esp_deep_sleep_start();
 }
