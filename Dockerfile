@@ -1,4 +1,6 @@
 # Uses the slim Debian Boookworm Image
+
+#FROM python:3-slim
 FROM debian:bookworm-slim
 
 # Set up the debconfig to be non-interactive
