@@ -20,6 +20,9 @@ RUN apt-get update && \
 RUN mkdir /srv/inkplate
 RUN mkdir /srv/inkplate/server
 
+# Copy across the directories for the server 
+COPY ./server /srv/inkplate/server
+
 # Change this if you want a different username
 ARG USERNAME=inkplate
 
@@ -30,9 +33,6 @@ RUN chown -R $USERNAME:$USERNAME /srv/inkplate
 # Switch to the new unprivileged user, in the server directory
 USER $USERNAME
 WORKDIR /srv/inkplate
-
-# Copy across the requirements.txt file so we can run pip install over it later
-COPY ./server /srv/inkplate/server
 
 # Create a python venv to install the additional python modules we need
 ENV VIRTUAL_ENV=/srv/inkplate/inkplate_venv
