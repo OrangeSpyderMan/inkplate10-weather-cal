@@ -40,6 +40,7 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Then install the modules we need from the requirements files we copied earlier
+RUN ./inkplate_venv/bin/pip install -U pip setuptools wheel
 RUN ./inkplate_venv/bin/pip install -r /srv/inkplate/server/requirements.txt
 
 EXPOSE 8080
