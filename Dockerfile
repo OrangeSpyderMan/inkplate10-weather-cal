@@ -1,6 +1,4 @@
 # Uses the slim Debian Boookworm Image
-
-#FROM python:3-slim
 FROM debian:bookworm-slim
 
 # Set up the debconfig to be non-interactive
@@ -48,6 +46,3 @@ EXPOSE 8080
 
 # Start the server code
 CMD ["python", "server/server.py"]
-# CMD . ./inkplate_venv/bin/activate && /srv/inkplate/inkplate_venv/python3 ./server/server.py
-
-
