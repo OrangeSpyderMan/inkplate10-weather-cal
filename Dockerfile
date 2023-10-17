@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install the packages we need, then clean up apt files to save space
 RUN apt-get update && \
+    apt-get upgrade && \
     apt-get install -y \
     chromium-driver \
     python3 \
