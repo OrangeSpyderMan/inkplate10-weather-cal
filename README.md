@@ -63,8 +63,6 @@ See the [server](/server) for more features.
 - **Inkplate 10 by Soldered Electronics ~€150**
 
   The [Inkplate 10](https://www.crowdsupply.com/soldered/inkplate-10) is an all-in-one hardware solution for something like this. It has a 9.7" 1200x825 display with integrated ESP32, real-time clock, and battery power management. You can get it either [directly from Soldered Electronics](https://soldered.com/product/soldered-inkplate-10-9-7-e-paper-board-with-enclosure-copy) or from a [UK reseller like Pimoroni](https://shop.pimoroni.com/products/inkplate-10-9-7-e-paper-display?variant=39959293591635). While it might seem pricey at first glance, a [similarly sized raw display from Waveshare](https://www.amazon.co.uk/Waveshare-Parallel-Resolution-Industrial-Instrument/dp/B07JG4SXBV) can cost the same or likely more, and you would still need to source the microcontroller, RTC, and BMS yourself.
-
-  If you want to use a more generic e-ink display or you just want to do a DIY build, there is a [branch](https://github.com/chrisjtwomey/inkplate10-weather-cal/tree/gxepd2) that's designed to work with GXEPD2, but it's likely missing fixes and features from the main branch.
   
 - **2 GB microSD card ~€5**
   
@@ -84,7 +82,7 @@ See the [server](/server) for more features.
   
 - **Black photo frame 8"x10" ~€10**
 
-  This might be the trickiest part to source, as the card insert (also called the 'mount') needs to fit the 8"x10" frame but fit a photo closer in dimension to 5.5"x7.5" in order for just the e-ink part of the board to be in-frame.
+  This might be the trickiest part to source, as the card insert (also called the 'mount') needs to fit the 8"x10" frame but fit a photo closer in dimension to 5.5"x7.5" in order for just the e-ink part of the board to be in-frame.  The inkplate I bought came with a 3D printed case that looks good enough, and has ports in the right places for charging/SD card access etc and a handy (but a flaky..) on/off switch.
 
 ## Setup
 
