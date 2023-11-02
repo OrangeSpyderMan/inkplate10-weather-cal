@@ -4,9 +4,6 @@ FROM debian:bookworm-slim
 # Set up the debconfig to be non-interactive
 ENV DEBIAN_FRONTEND=noninteractive
 
-# We'll be sending the server code to the container as a volume to be run
-#VOLUME /srv/inkplate/server
-
 # Install the packages we need, then clean up apt files to save space
 RUN apt-get update && \
     apt-get upgrade && \
@@ -16,6 +13,7 @@ RUN apt-get update && \
     python3.11-venv \
     systemd-container \
     && rm -rf /var/lib/apt/lists/*
+
 # Create the directory that we'll use for the server code
 RUN mkdir /srv/inkplate
 RUN mkdir /srv/inkplate/server
