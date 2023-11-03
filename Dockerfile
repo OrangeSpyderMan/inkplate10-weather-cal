@@ -11,7 +11,6 @@ RUN apt-get update && \
     chromium-driver \
     python3 \
     python3.11-venv \
-    systemd-container \
     && rm -rf /var/lib/apt/lists/*
 
 # Create the directory that we'll use for the server code

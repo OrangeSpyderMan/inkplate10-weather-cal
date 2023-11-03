@@ -125,7 +125,6 @@ def main():
         while True:
             log.info(f"Retrieving forecast data")
             daily_summary = weather_svc.get_daily_summary()
-            time.sleep(5)
             hourly_forecasts = weather_svc.get_hourly_forecast()
             try:
                 # generate page images
