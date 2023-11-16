@@ -121,10 +121,11 @@ def main():
     if (server_always_on):
         http_server = ServerThread(app, server_port)
         http_server.start()
-        log.info(f"Starting always on server")
+        log.info(f"Started always on server")
         while True:
             log.info(f"Retrieving forecast data")
             daily_summary = weather_svc.get_daily_summary()
+            time.sleep(1)
             hourly_forecasts = weather_svc.get_hourly_forecast()
             try:
                 # generate page images
