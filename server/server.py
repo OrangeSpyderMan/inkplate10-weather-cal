@@ -266,7 +266,7 @@ def serve_cal_png():
         # incr number of times served
         server_num_serves += 1
         if server_max_serves > 0:
-        log.info(f"Served {server_num_serves}/{server_max_serves} times")
+            log.info(f"Served {server_num_serves}/{server_max_serves} times")
     else:
         log.info(f"Served the image")
         
