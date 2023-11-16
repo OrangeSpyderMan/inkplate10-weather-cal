@@ -6,8 +6,8 @@ PyYAML==6.0.1
 googlemaps==4.10.0
 Flask==3.0.0
 Pillow==10.1.0
-protobuf==4.25.0
+protobuf==4.25.1
 requests==2.31.0
 Werkzeug==3.0.1
 paho-mqtt==1.6.1
-numpy==1.26.1
+numpy==1.26.2
