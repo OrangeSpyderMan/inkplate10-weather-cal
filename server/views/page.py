@@ -5,7 +5,6 @@ from PIL import Image
 from airium import Airium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException
 
 
@@ -63,10 +62,6 @@ class Page:
         opts.add_argument("--no-sandbox")
 
         driver = None
-        try:
-            driver =  webdriver.Chrome(ChromeDriverManager().install(), options=opts)
-        except Exception as e:
-            self.log.warning(e)
         try:
              driver = webdriver.Chrome(options=opts)
         except WebDriverException as wde:

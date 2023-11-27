@@ -1,5 +1,5 @@
 # Uses the slim Debian Boookworm Image
-FROM debian:bookworm-slim
+FROM python:3-slim-bookworm
 
 # Set up the debconfig to be non-interactive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -10,7 +10,7 @@ RUN apt-get update && \
     apt-get install -y \
     chromium-driver \
     python3 \
-    python3.11-venv \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Create the directory that we'll use for the server code
