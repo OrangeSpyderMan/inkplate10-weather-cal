@@ -42,7 +42,7 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
     while (attempts++ <= retries && WiFi.status() != WL_CONNECTED)
     {
         logf(LOG_DEBUG, "connection attempt #%d...", attempts);
-        delay(1000);
+        delay(2500);
     }
 
     // If still not connected, error with timeout.
