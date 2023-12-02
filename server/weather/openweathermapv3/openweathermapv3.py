@@ -44,6 +44,7 @@ class OpenWeatherMapv3Service(WeatherService):
             },
         }
 
+        res.close()
         return forecast
 
     def get_hourly_forecast(self):
@@ -85,7 +86,7 @@ class OpenWeatherMapv3Service(WeatherService):
             }
 
             forecasts.append(forecast)
-
+        res.close()
         return forecasts
 
     def _get_location_coords(self, location):
@@ -107,4 +108,5 @@ class OpenWeatherMapv3Service(WeatherService):
         lat = data["lat"]
         lon = data["lon"]
 
+        res.close()
         return lat, lon
