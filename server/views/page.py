@@ -42,7 +42,6 @@ class Page:
         driver.get("file://" + html_fp)
         sleep(1)
         driver.get_screenshot_as_file(png_fp)
-        self.log.info("Calling quit...")
         driver.quit()
 
         img = Image.open(png_fp)
