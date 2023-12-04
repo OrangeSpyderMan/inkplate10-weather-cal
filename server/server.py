@@ -138,7 +138,10 @@ def main():
                 )
                 page.save()
             except Exception as e:
-                raise e
+                log.error(f"Error {e} whilst getting weather data! ")
+                log.error(f"Sleeping for 120 seconds before retrying")
+                time.sleep(120)
+                continue
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
             time.sleep(server_refresh_seconds)
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
