@@ -124,8 +124,14 @@ def main():
         log.info(f"Started always on server")
         while True:
             log.info(f"Retrieving forecast data")
-            daily_summary = weather_svc.get_daily_summary()
-            hourly_forecasts = weather_svc.get_hourly_forecast()
+            try:
+                daily_summary = weather_svc.get_daily_summary()
+                hourly_forecasts = weather_svc.get_hourly_forecast()
+            except Exception as e:
+                log.error(f"Error {e} whilst getting weather data! ")
+                log.error(f"Sleeping for 120 seconds before retrying....")
+                time.sleep(120)
+                continue
             try:
                 # generate page images
                 log.info(f"Generating page")
@@ -137,8 +143,8 @@ def main():
                 )
                 page.save()
             except Exception as e:
-                log.error(f"Error {e} whilst getting weather data! ")
-                log.error(f"Sleeping for 120 seconds before retrying")
+                log.error(f"Error {e} whilst creating page! ")
+                log.error(f"Sleeping for 120 seconds before retrying....") 
                 time.sleep(120)
                 continue
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
@@ -150,8 +156,12 @@ def main():
             config, "server", "aliveSeconds", default=60
         )
         server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
-        daily_summary = weather_svc.get_daily_summary()
-        hourly_forecasts = weather_svc.get_hourly_forecast()
+        try:
+            daily_summary = weather_svc.get_daily_summary()
+            hourly_forecasts = weather_svc.get_hourly_forecast()
+        except Exception as e:
+                log.error(f"Error {e} whilst getting weather data! ")
+                log.error(f"Will retry on next cycle...")
         try:
             # generate page images
             page = CalendarPage(image_width, image_height)
@@ -162,7 +172,7 @@ def main():
             )
             page.save()
         except Exception as e:
-            log.error(f"Error {e} whilst getting weather data! ")
+            log.error(f"Error {e} whilst creating page! ")
             log.error(f"Retrying on next cycle")
         http_server = ServerThread(app, server_port)
         http_server.start()
