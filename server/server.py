@@ -128,7 +128,7 @@ def main():
                 daily_summary = weather_svc.get_daily_summary()
                 hourly_forecasts = weather_svc.get_hourly_forecast()
             except Exception as e:
-                log.error(f"Error {e} whilst getting weather data! ")
+                log.error(f"Error {e.message} whilst getting weather data! ")
                 log.error(f"Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
@@ -143,7 +143,7 @@ def main():
                 )
                 page.save()
             except Exception as e:
-                log.error(f"Error {e} whilst creating page! ")
+                log.error(f"Error {e.message} whilst creating page! ")
                 log.error(f"Sleeping for 120 seconds before retrying....") 
                 time.sleep(120)
                 continue
@@ -160,7 +160,7 @@ def main():
             daily_summary = weather_svc.get_daily_summary()
             hourly_forecasts = weather_svc.get_hourly_forecast()
         except Exception as e:
-                log.error(f"Error {e} whilst getting weather data! ")
+                log.error(f"Error {e.message} whilst getting weather data! ")
                 log.error(f"Will retry on next cycle...")
         try:
             # generate page images
@@ -172,7 +172,7 @@ def main():
             )
             page.save()
         except Exception as e:
-            log.error(f"Error {e} whilst creating page! ")
+            log.error(f"Error {e.message} whilst creating page! ")
             log.error(f"Retrying on next cycle")
         http_server = ServerThread(app, server_port)
         http_server.start()
