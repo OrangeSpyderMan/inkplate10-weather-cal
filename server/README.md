@@ -119,8 +119,6 @@ docker compose up -d
 
 It will download the base image and apply some changes to build a virtual environment for the python modules.  It can be made to run permanently with the option `alwayson: true`in the config.yaml file (defaults to `false`).  It will then refresh the calendar image every `refreshhours` as specified also in the `server:` section of config.yaml (defaults to every 3 hours if no value provided)
 
-### Known issues / TODO
-
-1. There's an error between the chromium version and the chromium-driver version.  It seems to work but [TODO] Fix this
+There is a sample crontab called [docker-errorlog](docker-errorlog) that can be used to check the docker logs for any ERROR messages.  By default that runs every hour, on the hour but may need some local tweaking.
 
 
