@@ -41,7 +41,11 @@ def main():
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
-    if weather_service_type not in ["accuweather", "openweathermap", "openweathermapv3"]:
+    if weather_service_type not in [
+        "accuweather",
+        "openweathermap",
+        "openweathermapv3",
+    ]:
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
@@ -65,7 +69,9 @@ def main():
     server_enabled = get_prop_by_keys(config, "server", "enabled", default=True)
     server_port = get_prop_by_keys(config, "server", "port", default=8080)
     server_always_on = get_prop_by_keys(config, "server", "alwayson", default=False)
-    server_refresh_seconds = 3600 * get_prop_by_keys(config, "server", "refreshhours", default=3)
+    server_refresh_seconds = 3600 * get_prop_by_keys(
+        config, "server", "refreshhours", default=3
+    )
     image_width = get_prop_by_keys(config, "image", "width", default=825)
     image_height = get_prop_by_keys(config, "image", "height", default=1200)
 
@@ -90,9 +96,11 @@ def main():
             num_hours=weather_num_hourly_forecasts,
         )
     elif weather_service_type == "openweathermap":
-        log.error(f"{weather_service_type} is no longer supported.   Please use the V3 API (openweathermapv3)")
+        log.error(
+            f"{weather_service_type} is no longer supported.   Please use the V3 API (openweathermapv3)"
+        )
         sys.exit(1)
-        
+
     elif weather_service_type == "openweathermapv3":
         from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
 
@@ -106,8 +114,6 @@ def main():
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
-
-
     # bail early if http server is not enabled
     if not server_enabled:
         sys.exit(0)
@@ -118,15 +124,23 @@ def main():
         mqtt_client = get_client_mqtt_logging(mqtt_host, mqtt_port, mqtt_topic)
 
     # setup http server
-    if (server_always_on):
+    if server_always_on:
         http_server = ServerThread(app, server_port)
         http_server.start()
         log.info(f"Started always on server")
         while True:
             log.info(f"Retrieving forecast data")
-            daily_summary = weather_svc.get_daily_summary()
-            time.sleep(1)
-            hourly_forecasts = weather_svc.get_hourly_forecast()
+            try:
+                daily_summary = weather_svc.get_daily_summary()
+                hourly_forecasts = weather_svc.get_hourly_forecast()
+            except Exception as e:
+                error_string = repr(e)
+                log.error(f"An error occurred whilst getting weather data!")
+                log.error(f"The error was :")
+                log.error(f"{error_string}")
+                log.error(f"Sleeping for 120 seconds before retrying....")
+                time.sleep(120)
+                continue
             try:
                 # generate page images
                 log.info(f"Generating page")
@@ -138,18 +152,31 @@ def main():
                 )
                 page.save()
             except Exception as e:
-                raise e
+                error_string = repr(e)
+                log.error(f"An error occurred whilst creating page!")
+                log.error(f"The error was :")
+                log.error(f"{error_string}")
+                log.error(f"Sleeping for 120 seconds before retrying....")
+                time.sleep(120)
+                continue
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
             time.sleep(server_refresh_seconds)
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
-        
+
     else:
         server_alive_seconds = get_prop_by_keys(
             config, "server", "aliveSeconds", default=60
         )
         server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
-        daily_summary = weather_svc.get_daily_summary()
-        hourly_forecasts = weather_svc.get_hourly_forecast()
+        try:
+            daily_summary = weather_svc.get_daily_summary()
+            hourly_forecasts = weather_svc.get_hourly_forecast()
+        except Exception as e:
+            error_string = repr(e)
+            log.error(f"An error occurred whilst getting weather data!")
+            log.error(f"The error was :")
+            log.error(f"{error_string}")
+            log.error(f"Will retry on next cycle...")
         try:
             # generate page images
             page = CalendarPage(image_width, image_height)
@@ -160,7 +187,11 @@ def main():
             )
             page.save()
         except Exception as e:
-            raise e
+            error_string = repr(e)
+            log.error(f"An error occurred whilst creating page!")
+            log.error(f"The error was :")
+            log.error(f"{error_string}")
+            log.error(f"Retrying on next cycle")
         http_server = ServerThread(app, server_port)
         http_server.start()
 
@@ -168,9 +199,13 @@ def main():
         enable_max_serves = server_max_serves > 0
 
         if enable_wait:
-            log.info(f"Serving images for {server_alive_seconds} seconds before shutdown")
+            log.info(
+                f"Serving images for {server_alive_seconds} seconds before shutdown"
+            )
         if enable_max_serves:
-            log.info(f"Serving images for max {server_max_serves} times before shutdown")
+            log.info(
+                f"Serving images for max {server_max_serves} times before shutdown"
+            )
 
         start_wait_dt = dt.datetime.now()
         diff = dt.datetime.now() - start_wait_dt
@@ -263,7 +298,7 @@ def serve_cal_png():
     stream = io.BytesIO(f.read())
 
     log.info(f"Served the image")
-        
+
     return send_file(
         stream,
         mimetype="image/png",
