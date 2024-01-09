@@ -2,7 +2,7 @@
 
 Display today's date, weather forecast and a stylised map of your city using an Inkplate 10 that can last for months on a single battery.
 
-<img src=https://user-images.githubusercontent.com/5797356/223708925-131d7ecc-5e95-453a-b687-427b75d959dd.jpg width=800 />
+<img src=<https://user-images.githubusercontent.com/5797356/223708925-131d7ecc-5e95-453a-b687-427b75d959dd.jpg> width=800 />
 
 - [Background](#background)
 - [How it Works](#how-it-works)
@@ -20,9 +20,10 @@ I was looking for a weather station for my home.  I googled a few projects, and 
 
 Both a server and client and required. The main workload is in the server which allows the client to save power by not generating the image itself. The client can also be placed where it has access to your WiFi network.
 
-<img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/ff903fe3-4576-41d1-92b5-3a374242759a width=800 />
+<img src=<https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/ff903fe3-4576-41d1-92b5-3a374242759a> width=800 />
 
 ### Client (Inkplate 10)
+
 1. Wakes from deep sleep and attempts to connect to WiFi.
 2. Attempts to get current network time and update real-time clock.
 3. (Optional) Attempts to connect a MQTT topic to publish logs. This allows us to see what the ESP32 controller is doing without needing to monitor the serial connection.
@@ -31,21 +32,21 @@ Both a server and client and required. The main workload is in the server which 
 6. Read the PNG image back from SD card and write to the e-ink display.
 7. Returns to deep sleep until the next scheduled wake time (eg. 24 hours).
 
-#### Features:
-  - Ultra-low power consumption:
-    - approx 21µA in deep sleep
-    - approx 240mA awake
-    - approx 30 seconds awake time daily
-  - Real-time clock for precise sleep/wake times.
-  - Daylight savings time handled automatically.
-  - Can publish to a MQTT topic for remote-logging.
-  - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
-  - Stores calendar images on SD card.
-  - Reconfigure client by updating YAML file on SD card and reboot - easy!
+#### Features
 
-
+- Ultra-low power consumption:
+  - approx 21µA in deep sleep
+  - approx 240mA awake
+  - approx 30 seconds awake time daily
+- Real-time clock for precise sleep/wake times.
+- Daylight savings time handled automatically.
+- Can publish to a MQTT topic for remote-logging.
+- Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
+- Stores calendar images on SD card.
+- Reconfigure client by updating YAML file on SD card and reboot - easy!
 
 ### Server (Raspberry Pi)
+
 1. Gets any relevant new data (ie. weather, maps).
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Chromedriver](https://chromedriver.chromium.org/downloads) is then used to turn that generated HTML file into PNG image that fits the dimensions of e-ink resolution.
@@ -54,9 +55,9 @@ Both a server and client and required. The main workload is in the server which 
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
 7. A cronjob ensures the server is started at the next scheduled wake time of the client.
 
-#### Features:
-See the [server](/server) for more features.
+#### Server Features
 
+See the [server](/server) for more features.
 
 ## Bill of Materials
 
@@ -70,7 +71,7 @@ See the [server](/server) for more features.
 
 - **3000mAh LiPo battery pack ~€10**
 
-  Any Lithium-Ion/Polymer battery will do as long as they have a JST connector for hooking up to the Inkplate board. Some Inkplate 10's are sold with a 3000mAh battery which should give approximately 6 months of life. Here is [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf). See section on [power consumption](#power-consumption) for more info on real-world calculations.
+  Any Lithium-Ion/Polymer battery will do as long as they have a JST connector for hooking up to the Inkplate board. Some Inkplate 10's are sold with a 3000mAh battery which should give approximately 6 months of life. Here is [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
 - **CR2032 3V coin cell ~€1**
 
@@ -88,7 +89,7 @@ See the [server](/server) for more features.
 
 Place `config.yaml` in the root directory of an SD card and connect it to your Inkplate 10 board.
 
-```
+``` yaml
 calendar:
   url: http://localhost:8080/calendar.png
   refresh_interval: 3
@@ -109,7 +110,8 @@ mqtt_logger:
   retries: 3
 ```
 
-Likely parameters you'll need to change is 
+Likely parameters you'll need to change is
+
 - `wifi.ssid` - the SSID if your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from.
@@ -127,9 +129,10 @@ The firmware can be compiled correctly on the Arduino IDE.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition).   The documentation for that is available here :
 
-- https://inkplate.readthedocs.io/en/latest/get-started.html#arduino
+- <https://inkplate.readthedocs.io/en/latest/get-started.html#arduino>
 
 The following libraries should be installed in your Arduino IDE.  They are available in the IDE's Library Manager :
+
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [Arduinojson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
 - [MQTTLogger](https://github.com/androbi-com/MqttLogger)
@@ -137,7 +140,6 @@ The following libraries should be installed in your Arduino IDE.  They are avail
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)
 - [ezTime](https://github.com/ropg/ezTime)
-
 
 ## License
 
