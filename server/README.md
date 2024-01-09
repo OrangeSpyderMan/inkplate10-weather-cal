@@ -2,23 +2,26 @@
 
 A service for the weather calendar client written in Python3, backed by [Airium](https://pypi.org/project/airium/) and [Chromedriver](https://chromedriver.chromium.org/downloads).
 
+
+
 Example 1                  | Example 2                 | Example 3
 :-------------------------:|:-------------------------:|:-------------------------:
-<img src=<https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/c37e6b65-a226-40d7-b1c7-cb3d72973054> width=300 /> | <img src=<https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/71958bcb-839d-447a-b671-a4cb5fbca25e> width=300 /> | <img src=<https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/90608c9f-c16e-4d56-9edc-13b9d85ef659> width=300 />
+<img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/c37e6b65-a226-40d7-b1c7-cb3d72973054 width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/71958bcb-839d-447a-b671-a4cb5fbca25e width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/90608c9f-c16e-4d56-9edc-13b9d85ef659 width=300 />
 
 <img width="1044" alt="Screenshot 2023-05-17 at 01 07 53" src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/e02e672b-7ad0-431d-8a29-c2740857a4d7">
+
+
 
 - Uses [Accuweather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) and [Chromedriver](https://chromedriver.chromium.org/downloads) to generate HTML and PNG files for image serving.
 - Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
 
-## Setup
+## Setup 
 
 ### Accuweather API
 
 In order to obtain an API Key, you will need to:
-
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
 2. Create an app in [https://developer.accuweather.com/user/me/apps](https://developer.accuweather.com/user/me/apps).
 3. Enter some details about the app's usage and purpose.
@@ -65,38 +68,31 @@ You can now use the map style to create a map ID that we can reference in our se
 ### Server setup
 
 Ensure Python3 is installed on your system
-
-``` bash
+```
 python3 --version
 Python 3.9.2
 ```
 
 Download project and install dependencies
-
-``` bash
+```
 git clone https://github.com/chrisjtwomey/inkplate10-weather-cal.git
 cd inkplate10-weather-cal
 python3 -m pip install -r requirements.txt
 ```
 
 Run the server manually:
-
-``` bash
+```
 python3 server.py
 ```
 
 Run the server 9am each day:
-
-``` bash
+```
 crontab -e
 ```
-
 Add this line:
-
-``` bash
+```
 0 9 * * * /usr/bin/python3 /path/to/server.py
 ```
-
 `/path/to/server.py` should be updated to whatever the absolute path is to where `server.py` is on your filesystem.
 
 ## Running in Docker
@@ -111,16 +107,18 @@ In the server directory there is a docker-compose.yml and a Dockerfile that shou
 
 This should be as simple as running the following command from the root of your cloned repository :
 
-``` bash
+```
 docker compose up
 ```
-
 or if you don't want to attach to the running container :
 
-``` bash
+```
 docker compose up -d 
 ```
+
 
 It will download the base image and apply some changes to build a virtual environment for the python modules.  It can be made to run permanently with the option `alwayson: true`in the config.yaml file (defaults to `false`).  It will then refresh the calendar image every `refreshhours` as specified also in the `server:` section of config.yaml (defaults to every 3 hours if no value provided)
 
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be used to check the docker logs for any ERROR messages.  By default that runs every hour, on the hour but may need some local tweaking.
+
+
