@@ -1,11 +1,11 @@
-selenium==4.18.1
+selenium==4.19.0
 airium==0.2.6
 packaging==24.0
 PyYAML==6.0.1
 googlemaps==4.10.0
 Flask==3.0.2
 Pillow==10.2.0
-protobuf==5.26.0
+protobuf==5.26.1
 requests==2.31.0
 Werkzeug==3.0.1
 paho-mqtt==2.0.0
