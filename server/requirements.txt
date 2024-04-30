@@ -8,5 +8,5 @@ Pillow==10.3.0
 protobuf==5.26.1
 requests==2.31.0
 Werkzeug==3.0.2
-paho-mqtt==2.0.0
+paho-mqtt==2.1.0
 numpy==1.26.4
