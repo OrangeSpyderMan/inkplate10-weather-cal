@@ -190,6 +190,7 @@ void setup() {
         if (err != ESP_OK) {
             errMsg = "image display error";
             log(LOG_ERROR, errMsg);
+            continue;
         }
     } while (err != ESP_OK && ++attempts <= calendarRetries);
 
