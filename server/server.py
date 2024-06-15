@@ -159,15 +159,11 @@ def main():
                 log.error(f"Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
-            log.info(f"Starting http_server...")
             http_server.start()
-            log.info(f"Done!")
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
             time.sleep(server_refresh_seconds)
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
-            log.info(f"Shutting down http_server...")
             http_server.shutdown(timeout=10)
-            log.info(f"Done!")
     else:
         server_alive_seconds = get_prop_by_keys(
             config, "server", "aliveSeconds", default=60
