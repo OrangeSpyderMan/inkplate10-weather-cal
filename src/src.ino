@@ -46,13 +46,7 @@ void setup() {
     esp_err_t err = ESP_OK;
 
     // Init storage.
-    if (board.sdCardInit()) {
-        // If previous image exists, load into board buffer.
-        // err = displayImage(CALENDAR_RW_PATH);
-        // if (err != ESP_OK) {
-        //     log(LOG_WARNING, "load previous calendar error");
-        // }
-    } else {
+    if (!board.sdCardInit()) {
         const char* errMsg = "SD card init failure";
         log(LOG_ERROR, errMsg);
         displayMessage(errMsg);
