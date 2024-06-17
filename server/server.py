@@ -126,7 +126,7 @@ def main():
     # setup http server
     if server_always_on:
         http_server = ServerThread(app, server_port)
-        # http_server.start()
+        http_server.start()
         log.info(f"Started always on server")
         while True:
             log.info(f"Retrieving forecast data")
@@ -159,11 +159,10 @@ def main():
                 log.error(f"Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
-            http_server.start()
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
             time.sleep(server_refresh_seconds)
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
-            #http_server.shutdown(timeout=10)
+
     else:
         server_alive_seconds = get_prop_by_keys(
             config, "server", "aliveSeconds", default=60
