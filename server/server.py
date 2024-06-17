@@ -163,7 +163,7 @@ def main():
             log.info(f"Serving current image for {server_refresh_seconds} seconds")
             time.sleep(server_refresh_seconds)
             log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
-            http_server.shutdown(timeout=10)
+            #http_server.shutdown(timeout=10)
     else:
         server_alive_seconds = get_prop_by_keys(
             config, "server", "aliveSeconds", default=60
