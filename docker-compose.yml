@@ -12,5 +12,5 @@ services:
   restarter:
     image: docker:cli
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
-    command: ["/bin/sh", "-c", "while true; do sleep 86400; date +"%F %T " |tr -d "\n"; docker restart inkplate10-weather-cal-inkplate-1; done"]
+    command: ["/bin/sh", "-c", "while true; do sleep 86400; date +\"%F %T \" |tr -d \"\n\"; docker restart inkplate10-weather-cal-inkplate-1; done"]
     restart: unless-stopped
