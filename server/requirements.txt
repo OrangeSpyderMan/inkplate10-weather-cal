@@ -1,12 +1,12 @@
-selenium==4.23.1
+selenium==4.24.0
 airium==0.2.6
 packaging==24.1
 PyYAML==6.0.2
 googlemaps==4.10.0
 Flask==3.0.3
 Pillow==10.4.0
-protobuf==5.27.3
+protobuf==5.27.4
 requests==2.32.3
-Werkzeug==3.0.3
+Werkzeug==3.0.4
 paho-mqtt==2.1.0
-numpy==2.0.1
+numpy==2.1.0
