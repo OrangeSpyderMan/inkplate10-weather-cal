@@ -10,6 +10,7 @@ RUN apt-get update && \
     apt-get install -y \
     chromium-driver \
     python3-venv \
+    unattended-upgrades\
     && rm -rf /var/lib/apt/lists/*
 
 # Create the directory that we'll use for the server code
