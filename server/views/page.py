@@ -52,7 +52,7 @@ class Page:
 
     def _get_chromedriver(self):
         opts = Options()
-        opts.add_argument("--headless")
+        opts.add_argument("--headless=old")
         opts.add_argument("--hide-scrollbars")
         opts.add_argument("--window-size={},{}".format(self.image_width, self.image_height))
         opts.add_argument("--force-device-scale-factor=1")
