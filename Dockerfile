@@ -15,30 +15,21 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
 RUN apt-get install -y ./google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Create the directory that we'll use for the server code
-RUN mkdir /srv/inkplate
-RUN mkdir /srv/inkplate/server
-
-# Copy across the directories for the server 
-COPY ./server /srv/inkplate/server
-
-# Change this if you want a different username
 ARG USERNAME=inkplate
+RUN useradd -m $USERNAME -d /srv/inkplate
 
-# Create a user to avoid running as root, then have that user own the directory the server will run in
-RUN useradd -m $USERNAME 
-RUN chown -R $USERNAME:$USERNAME /srv/inkplate
 
 # Switch to the new unprivileged user, in the server directory
 USER $USERNAME
 WORKDIR /srv/inkplate
+RUN mkdir /srv/inkplate/server
 
-# Create a python venv to install the additional python modules we need
-#ENV VIRTUAL_ENV=/srv/inkplate/inkplate_venv
-#RUN python3 -m venv $VIRTUAL_ENV
-#ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+COPY --chown=$USERNAME:$USERNAME ./server /srv/inkplate/server
+
+ENV PATH="/srv/inkplate/.local/bin:$PATH"
 
 # Then install the modules we need from the requirements files we copied earlier
+
 RUN pip install -U pip setuptools wheel
 RUN pip install -r /srv/inkplate/server/requirements.txt
 
