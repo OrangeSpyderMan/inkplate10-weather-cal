@@ -1,5 +1,5 @@
 # Uses the python slim Debian Boookworm Image
-FROM debian:trixie-slim
+FROM python:3.13-rc-slim
 
 # Set up the debconfig to be non-interactive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -9,7 +9,6 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
     wget \
-    python3-venv \
     unattended-upgrades 
 
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
@@ -35,13 +34,13 @@ USER $USERNAME
 WORKDIR /srv/inkplate
 
 # Create a python venv to install the additional python modules we need
-ENV VIRTUAL_ENV=/srv/inkplate/inkplate_venv
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+#ENV VIRTUAL_ENV=/srv/inkplate/inkplate_venv
+#RUN python3 -m venv $VIRTUAL_ENV
+#ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Then install the modules we need from the requirements files we copied earlier
-RUN ./inkplate_venv/bin/pip install -U pip setuptools wheel
-RUN ./inkplate_venv/bin/pip install -r /srv/inkplate/server/requirements.txt
+RUN pip install -U pip setuptools wheel
+RUN pip install -r /srv/inkplate/server/requirements.txt
 
 EXPOSE 8080
 # EXPOSE 1883
