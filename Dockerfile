@@ -8,9 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
-    chromium-driver \
+    wget \
     python3-venv \
-    unattended-upgrades\
+    unattended-upgrades 
+
+RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+RUN apt-get install -y ./google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
 # Create the directory that we'll use for the server code
@@ -44,4 +47,4 @@ EXPOSE 8080
 # EXPOSE 1883
 
 # Start the server code
-CMD ["python", "server/server.py"]
+CMD ["python3", "server/server.py"]
