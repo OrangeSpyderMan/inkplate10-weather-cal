@@ -30,6 +30,7 @@ def main():
 
     config_file = open(os.path.join(cwd, "config.yaml"))
     config = yaml.safe_load(config_file)
+    config_file.close()
 
     debug = get_prop(config, "debug", default=False)
     # Create and configure logger
@@ -296,7 +297,7 @@ def serve_cal_png():
 
     f = open(path, "rb")
     stream = io.BytesIO(f.read())
-
+    f.close()
     log.info(f"Served the image")
 
     return send_file(
@@ -305,7 +306,7 @@ def serve_cal_png():
         as_attachment=True,
         download_name=os.path.basename(path),
     )
-
+    
 
 if __name__ == "__main__":
     main()
