@@ -16,17 +16,18 @@ RUN apt-get install -y ./google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
 ARG USERNAME=inkplate
-RUN useradd -m $USERNAME -d /srv/inkplate
+ARG HOMEDIR=/srv/inkplate
+RUN useradd -m ${USERNAME} -d ${HOMEDIR}
 
 
 # Switch to the new unprivileged user, in the server directory
-USER $USERNAME
-WORKDIR /srv/inkplate
-RUN mkdir /srv/inkplate/server
+USER ${USERNAME}
+WORKDIR ${HOMEDIR}
+RUN mkdir ${HOMEDIR}/server
 
-COPY --chown=$USERNAME:$USERNAME ./server /srv/inkplate/server
+COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
 
-ENV PATH="/srv/inkplate/.local/bin:$PATH"
+ENV PATH="${HOMEDIR}/.local/bin:$PATH"
 
 # Then install the modules we need from the requirements files we copied earlier
 
