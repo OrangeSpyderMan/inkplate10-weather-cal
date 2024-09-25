@@ -9,8 +9,8 @@ services:
 #    volumes:
 #      - ./server:/srv/inkplate/server
     restart: always
-  restarter:
-    image: docker:cli
-    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
-    command: ["/bin/sh", "-c", "while true; do sleep `shuf -i 40000-60000 -n1`; date +\"%F %T \" |tr -d \"\n\"; docker restart inkplate10-weather-cal-inkplate-1; done"]
-    restart: unless-stopped
+#  restarter:
+#    image: docker:cli
+#    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+#    command: ["/bin/sh", "-c", "while true; do sleep `shuf -i 40000-60000 -n1`; date +\"%F %T \" |tr -d \"\n\"; docker restart inkplate10-weather-cal-inkplate-1; done"]
+#    restart: unless-stopped
