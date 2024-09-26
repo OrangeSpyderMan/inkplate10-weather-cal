@@ -21,6 +21,8 @@ Example 1                  | Example 2                 | Example 3
 
 ### Accuweather API
 
+This is the least tested API
+ 
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
 2. Create an app in [https://developer.accuweather.com/user/me/apps](https://developer.accuweather.com/user/me/apps).
@@ -32,13 +34,15 @@ Make sure you update the config `weather.apikey` with your generated api key and
 ### OpenWeatherMap API
 
 [DEPRECATED]
-This provider is no longer supported in this version.  Please consider using [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+This provider is no longer supported in this version.  Please use [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
 
 ### OpenWeatherMapv3 API
 
+This it the API that has had the most testing.
+
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine no only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
+This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine not only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
 
 ### Google StaticMaps API
 
@@ -55,7 +59,7 @@ In order to generate a static map of your area you will need to sign up to [Goog
 This will give us access to the Static Maps API service. In order to re-create the static map in the picture above, we first need to create a map style:
 
 1. In Google Maps Platform → `Map styles` → `Create style`
-2. In order to replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. This should replicate the map style I use.  /!\ This may currently not work on the new version of the Maps API.  Checking...
+2. In order to replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. This should replicate the map style I use.  /!\ This may currently not work on the new version of the Maps API.  
 3. Click `Save` and assign a name to the map style.
 
 You can now use the map style to create a map ID that we can reference in our server:
@@ -70,12 +74,12 @@ You can now use the map style to create a map ID that we can reference in our se
 Ensure Python3 is installed on your system
 ```
 python3 --version
-Python 3.9.2
+Python 3.11.2
 ```
 
 Download project and install dependencies
 ```
-git clone https://github.com/chrisjtwomey/inkplate10-weather-cal.git
+git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
 python3 -m pip install -r requirements.txt
 ```
