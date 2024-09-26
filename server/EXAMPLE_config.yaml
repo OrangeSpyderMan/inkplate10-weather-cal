@@ -6,12 +6,12 @@ server:
   maxServes: 1
 weather:
   service: accuweather
-  apikey: XXXX
+  apikey: XXXX # CHANGE THIS TO YOUR OWN API KEY
   num_hourly_forecasts: 6
   metric: true
 google:
-  apikey: XXXX
-  staticmaps_mapid: XXXX
+  apikey: XXXX # CHANGE THIS TO YOU OWN API KEY
+  staticmaps_mapid: XXXX # CHANGE THIS TO YOUR OWN MAPID
 location: Landry, FR
 image:
   width: 825
