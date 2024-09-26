@@ -123,7 +123,7 @@ See the [server](/server) for info on server setup.
 
 ### Building with Arduino IDE
 
-The firmware can be compiled correctly on the Arduino IDE.
+The firmware can be compiled correctly on the Arduino IDE.  There is a compiled firmware copy that is shared in [Compiled Firmware](compiled_firmware).  You may be able to use this to program your board directly, but I would recommend setting up an Arduino IDE with the latest library versions and compiling a version locally. 
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition).   The documentation for that is available here :
 
