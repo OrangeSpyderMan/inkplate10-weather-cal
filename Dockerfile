@@ -1,5 +1,5 @@
-# Uses the python slim Debian Boookworm Image
-FROM python:3.13-rc-slim
+# Uses the python slim image
+FROM python:slim
 
 # Set up the debconfig to be non-interactive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -32,9 +32,10 @@ ENV PATH="${HOMEDIR}/.local/bin:$PATH"
 # Then install the modules we need from the requirements files we copied earlier
 
 RUN pip install -U pip setuptools wheel
-RUN pip install -r /srv/inkplate/server/requirements.txt
+RUN pip install -r ${HOMEDIR}/server/requirements.txt
 
 EXPOSE 8080
+# Uncomment the below if using the MQTT logging
 # EXPOSE 1883
 
 # Start the server code

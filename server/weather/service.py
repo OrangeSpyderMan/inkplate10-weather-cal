@@ -22,6 +22,7 @@ class WeatherService:
         icon_map = None
         with open(mapfile_path) as f:
             icon_map = json.load(f)
+            f.close()
 
         if icon_key not in icon_map:
             return ""
