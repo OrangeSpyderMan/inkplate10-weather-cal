@@ -77,7 +77,7 @@ python3 --version
 Python 3.11.2
 ```
 
-Download project and install dependencies
+Download project and install dependencies.  The default main branch is the latest stable branch.  The next branch contains changes planned for the next release - it should be OK to use.  But might not be.
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
