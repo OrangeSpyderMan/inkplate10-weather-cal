@@ -6,7 +6,7 @@ from airium import Airium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
-
+from selenium.webdriver.chrome.service import Service
 
 class Page:
     def __init__(
@@ -63,7 +63,8 @@ class Page:
 
         driver = None
         try:
-             driver = webdriver.Chrome(options=opts)
+             chrome_path = Service(executable_path = r"/usr/bin/chromedriver")
+             driver = webdriver.Chrome(service=chrome_path , options=opts)
         except WebDriverException as wde:
              raise wde 
 
