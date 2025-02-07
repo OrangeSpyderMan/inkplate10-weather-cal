@@ -40,20 +40,14 @@ class Page:
 
         driver = self._get_chromedriver()
         driver.get("file://" + html_fp)
-        sleep(1)
         driver.get_screenshot_as_file(png_fp)
         driver.quit()
-
-        img = Image.open(png_fp)
-        img = img.convert("P", palette=Image.ADAPTIVE, colors=256)
-        img.save(png_fp, format="png", optimize=True, quality=25)
-        img.close()
 
         self.log.info("Screenshot captured and saved to file.")
 
     def _get_chromedriver(self):
         opts = Options()
-        opts.add_argument("--headless=old")
+        opts.add_argument("--headless")
         opts.add_argument("--hide-scrollbars")
         opts.add_argument("--window-size={},{}".format(self.image_width, self.image_height))
         opts.add_argument("--force-device-scale-factor=1")
