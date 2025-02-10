@@ -9,10 +9,14 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
     --no-install-recommends \
-    wget \
+    firefox-esr \
+    gpg \
+    curl \
     unattended-upgrades \
-    chromium-driver \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -L https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux-aarch64.tar.gz | tar xz -C /usr/local/bin \
+    && apt-get purge -y ca-certificates curl
+
 
 ARG USERNAME=inkplate
 ARG HOMEDIR=/srv/inkplate
