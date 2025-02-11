@@ -48,15 +48,15 @@ class Page:
         self.log.info("Screenshot captured and saved to file.")
 
     def _get_webdriver(self):
-        geckopath = Service(executable_path=r'/usr/local/bin/geckodriver')
+        geckpath = Service(executable_path=r'/usr/local/bin/geckodriver')
         opts = Options()
         opts.add_argument("-headless")
         
         try:
-            driver = webdriver.Firefox(service = geckopath , options=opts)
+            driver = webdriver.Firefox(service = geckpath , options=opts)
         except WebDriverException as wde:
             raise wde 
 
-        #driver.set_window_rect(width=self.image_width, height=self.image_height)
+        driver.set_window_rect(width=self.image_width, height=self.image_height)
 
         return driver
