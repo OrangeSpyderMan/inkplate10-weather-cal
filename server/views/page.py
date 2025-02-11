@@ -42,7 +42,7 @@ class Page:
             '--screenshot=' + png_fp,  
             '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
             '--url=file://' + html_fp
-        ] , check=True)
+        ] , check=True , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL )
         if browser.stderr != None:
             browsererror=repr(browser.stderr)
             self.log.error("Screenshot failed to capture.")
