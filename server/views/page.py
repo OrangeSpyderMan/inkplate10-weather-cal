@@ -1,14 +1,10 @@
 import os
 import logging
+import subprocess
+
 from time import sleep
 from PIL import Image
 from airium import Airium
-from selenium.common.exceptions import WebDriverException
-
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
-
 
 class Page:
     def __init__(
@@ -39,24 +35,18 @@ class Page:
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
             f.close()
-
-        driver = self._get_webdriver()
-        driver.get("file://" + html_fp)
-        driver.save_screenshot(png_fp)
-        driver.quit()
-
-        self.log.info("Screenshot captured and saved to file.")
-
-    def _get_webdriver(self):
-        geckpath = Service(executable_path=r'/usr/local/bin/geckodriver')
-        opts = Options()
-        opts.add_argument("-headless")
-        
-        try:
-            driver = webdriver.Firefox(service = geckpath , options=opts)
-        except WebDriverException as wde:
-            raise wde 
-
-        driver.set_window_rect(width=self.image_width, height=self.image_height)
-
-        return driver
+        browser=subprocess.run([
+            '/usr/bin/firefox',
+            '--headless', 
+            '--quiet',
+            '--screenshot=' + png_fp,  
+            '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
+            '--url=file://' + html_fp
+        ] , check=True)
+        if browser.stderr != None:
+            browsererror=repr(browser.stderr)
+            self.log.error("Screenshot failed to capture.")
+            self.log.error("The following error occurred :")
+            self.log.error(browsererror)
+        else:
+            self.log.info("Screenshot captured and saved to file.")
