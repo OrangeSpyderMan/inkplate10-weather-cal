@@ -1,12 +1,10 @@
 import os
 import logging
+import subprocess
+
 from time import sleep
 from PIL import Image
 from airium import Airium
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.service import Service
 
 class Page:
     def __init__(
@@ -37,31 +35,18 @@ class Page:
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
             f.close()
-
-        driver = self._get_chromedriver()
-        driver.get("file://" + html_fp)
-        driver.get_screenshot_as_file(png_fp)
-        driver.quit()
-
-        self.log.info("Screenshot captured and saved to file.")
-
-    def _get_chromedriver(self):
-        opts = Options()
-        opts.add_argument("--headless")
-        opts.add_argument("--hide-scrollbars")
-        opts.add_argument("--window-size={},{}".format(self.image_width, self.image_height))
-        opts.add_argument("--force-device-scale-factor=1")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--disable-extensions")
-        opts.add_argument("--no-sandbox")
-
-        driver = None
-        try:
-             chrome_path = Service(executable_path = r"/usr/bin/chromedriver")
-             driver = webdriver.Chrome(service=chrome_path , options=opts)
-        except WebDriverException as wde:
-             raise wde 
-
-        driver.set_window_rect(width=self.image_width, height=self.image_height)
-
-        return driver
+        browser=subprocess.run([
+            '/usr/bin/firefox',
+            '--headless', 
+            '--quiet',
+            '--screenshot=' + png_fp,  
+            '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
+            '--url=file://' + html_fp
+        ] , check=True)
+        if browser.stderr != None:
+            browsererror=repr(browser.stderr)
+            self.log.error("Screenshot failed to capture.")
+            self.log.error("The following error occurred :")
+            self.log.error(browsererror)
+        else:
+            self.log.info("Screenshot captured and saved to file.")
