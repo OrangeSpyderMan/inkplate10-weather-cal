@@ -38,11 +38,11 @@ class Page:
         browser_screenshot=subprocess.run([
             '/usr/bin/firefox',
             '--headless',
-            '--new-instance',
+            '--no-remote',
             '--purgecaches',
             '--screenshot=' + png_fp,  
             '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
-            '--url=file://' + html_fp
+            '--kiosk=file://' + html_fp
         ] , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL , check=True )
         if browser_screenshot.returncode != 0:
             #TODO : Improve error handling of subprocess...
