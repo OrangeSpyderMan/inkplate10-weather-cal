@@ -35,7 +35,7 @@ class Page:
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
             f.close()
-        browser=subprocess.run([
+        browser_screenshot=subprocess.run([
             '/usr/bin/firefox',
             '--headless',
             '--new-instance',
@@ -44,10 +44,8 @@ class Page:
             '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
             '--url=file://' + html_fp
         ] , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL , check=True )
-        if browser.returncode != 0:
-            browsererror=repr(browser.stderr)
-            self.log.error("Screenshot failed to capture.")
-            self.log.error("The following error occurred :")
-            self.log.error(browsererror)
+        if browser_screenshot.returncode != 0:
+            #TODO : Improve error handling of subprocess...
+            self.log.error("Screenshot failed to capture.  Return code was " + str(browser_screenshot.returncode))
         else:
             self.log.info("Screenshot captured and saved to file.")

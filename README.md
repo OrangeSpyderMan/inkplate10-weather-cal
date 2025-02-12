@@ -48,7 +48,7 @@ Both a server and client and required. The main workload is in the server which 
 ### Server (Raspberry Pi)
 1. Gets any relevant new data (ie. weather, maps).
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
-3. [Chromedriver](https://chromedriver.chromium.org/downloads) is then used to turn that generated HTML file into PNG image that fits the dimensions of e-ink resolution.
+3. [Firefox](https://www.mozilla.org/firefox/) is then used to turn that generated HTML file into PNG image that fits the dimensions of e-ink resolution.
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
 5. (Optional) The server listens for client logs by subscribing to a MQTT topic using [Mosquitto](https://mosquitto.org/).
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
