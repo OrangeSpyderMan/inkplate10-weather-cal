@@ -37,13 +37,14 @@ class Page:
             f.close()
         browser=subprocess.run([
             '/usr/bin/firefox',
-            '--headless', 
-            '--quiet',
+            '--headless',
+            '--new-instance',
+            '--purgecaches',
             '--screenshot=' + png_fp,  
             '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
             '--url=file://' + html_fp
-        ] , check=True , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL )
-        if browser.stderr != None:
+        ] , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL , check=True )
+        if browser.returncode != 0:
             browsererror=repr(browser.stderr)
             self.log.error("Screenshot failed to capture.")
             self.log.error("The following error occurred :")
