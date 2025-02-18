@@ -54,7 +54,6 @@ class CalendarPage(Page):
                 a.script(type="text/javascript", src="https://unpkg.com/roughjs@3.1.0/dist/rough.js")
                 a.script(type="text/javascript", src="https://unpkg.com/chartjs-plugin-datalabels@1.0.0")
                 a.script(type="text/javascript", src="https://unpkg.com/chartjs-plugin-rough@latest/dist/chartjs-plugin-rough.min.js")
-
             with a.body():
                 with a.div(klass="bg-container"):
                     with a.div(id="top-banner", klass="container"):

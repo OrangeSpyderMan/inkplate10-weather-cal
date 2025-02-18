@@ -5,6 +5,10 @@ import subprocess
 from time import sleep
 from PIL import Image
 from airium import Airium
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
+
 
 class Page:
     def __init__(
@@ -35,17 +39,19 @@ class Page:
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
             f.close()
-        browser_screenshot=subprocess.run([
-            '/usr/bin/firefox',
-            '--headless',
-            '--no-remote',
-            '--purgecaches',
-            '--screenshot=' + png_fp,  
-            '--window-size=' + str(self.image_width) + ',' + str(self.image_height),
-            '--kiosk=file://' + html_fp
-        ] , stdout=subprocess.DEVNULL , stderr=subprocess.DEVNULL , check=True )
-        if browser_screenshot.returncode != 0:
-            #TODO : Improve error handling of subprocess...
-            self.log.error("Screenshot failed to capture.  Return code was " + str(browser_screenshot.returncode))
-        else:
+
+        options = Options()
+        service=Service(r"/usr/local/bin/geckodriver")
+        options.add_argument("-headless")
+        driver = webdriver.Firefox(service=service , options=options)
+
+        try:
+            driver.set_window_size(self.image_width, self.image_height)
+            driver.get("file://" + html_fp)
+            sleep(2)  # Wait for the page to load completely
+            driver.save_full_page_screenshot(png_fp)
             self.log.info("Screenshot captured and saved to file.")
+        except Exception as e:
+            self.log.error("Screenshot failed to capture. Error: " + str(e))
+        finally:
+            driver.quit()
