@@ -14,7 +14,7 @@ Example 1                  | Example 2                 | Example 3
 
 - Uses [Accuweather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
-- Uses [Airium](https://pypi.org/project/airium/) and [Firefox](https://www.mozilla.org/firefox/) to generate HTML and PNG files for image serving.
+- Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
 - Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
 
 ## Setup 
