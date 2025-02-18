@@ -105,6 +105,7 @@ h4.numcircle, #icon-container.numcircle {
   overflow: hidden;
   height: 400px;
   z-index: -1;
+  width: 100%;  /* Add width to ensure container spans full width */
 }
 
 #map {
@@ -112,6 +113,7 @@ h4.numcircle, #icon-container.numcircle {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  width: 100%;  /* Add width to ensure map fills container */
 }
 
 .fc-icon-stat {

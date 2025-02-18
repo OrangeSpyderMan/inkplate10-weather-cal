@@ -8,10 +8,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
-    wget \
+    --no-install-recommends \
+    firefox-esr \
+    curl \
     unattended-upgrades \
-    chromium-driver \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -L https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux-aarch64.tar.gz | tar xz -C /usr/local/bin \
+    && apt-get purge -y curl
 
 ARG USERNAME=inkplate
 ARG HOMEDIR=/srv/inkplate
@@ -25,7 +28,7 @@ RUN mkdir ${HOMEDIR}/server
 
 COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
 
-ENV PATH="${HOMEDIR}/.local/bin:$PATH"
+ENV PATH="${HOMEDIR}/.local/bin:/usr/local/bin:$PATH"
 
 # Then install the modules we need from the requirements files we copied earlier
 
