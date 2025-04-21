@@ -10,11 +10,23 @@ RUN apt-get update && \
     apt-get install -y \
     --no-install-recommends \
     firefox-esr \
-    curl \
-    unattended-upgrades \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -L https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux-aarch64.tar.gz | tar xz -C /usr/local/bin \
-    && apt-get purge -y curl
+    curl 
+
+# GECKOVERSION should be adjusted to use the latest release of geckodriver, or at least a compatible release for the version of
+# firefox that is being installed.
+# See : https://github.com/mozilla/geckodriver/releases/
+
+# GECKOARCH should be set to 
+# linux64 for x86_64 systems 
+# OR 
+# linux-aarch64 for linux on ARM64
+
+ARG GECKOVERSION=v0.36.0
+ARG GECKOARCH=linux-aarch64
+
+RUN curl -L https://github.com/mozilla/geckodriver/releases/download/${GECKOVERSION}/geckodriver-${GECKOVERSION}-${GECKOARCH}.tar.gz | tar xz -C /usr/local/bin \
+    && apt-get purge -y curl \
+    && rm -rf /var/lib/apt/lists/*
 
 ARG USERNAME=inkplate
 ARG HOMEDIR=/srv/inkplate
