@@ -103,5 +103,10 @@ workspace.code-workspace
 .bashrc
 .bash_history
 .profile
+.mozilla
+.config
+.gitconfig
+.lesshst
+.wget-hsts
 server/REAL_config.yaml
 server/config.yaml
