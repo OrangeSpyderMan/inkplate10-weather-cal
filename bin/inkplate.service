@@ -1,0 +1,7 @@
+[Service]
+ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/server.py
+User=inkplate
+Group=inkplate
+WorkingDirectory=/srv/inkplate/
+[Install]
+WantedBy=multi-user.target
