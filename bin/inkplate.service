@@ -1,3 +1,7 @@
+[Unit]
+Description=Service to provide the page server of the inkplate weather station
+After=network-online.target
+Wants=network-online.target
 [Service]
 ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/server.py
 User=inkplate
