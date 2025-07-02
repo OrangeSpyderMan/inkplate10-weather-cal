@@ -4,7 +4,7 @@ packaging==25.0
 PyYAML==6.0.2
 googlemaps==4.10.0
 Flask==3.1.1
-Pillow==11.2.1
+Pillow==11.3.0
 protobuf==6.31.1
 requests==2.32.4
 Werkzeug==3.1.3
