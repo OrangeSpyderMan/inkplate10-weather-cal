@@ -1,11 +1,34 @@
 [Unit]
-Description=Service to provide the page server of the inkplate weather station
+Description=Inkplate weather station page server
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
 [Service]
-ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/server.py
+Type=simple
 User=inkplate
 Group=inkplate
-WorkingDirectory=/srv/inkplate/
+WorkingDirectory=/srv/inkplate
+ExecStartPre=/usr/bin/test -x /srv/inkplate/inkplate_venv/bin/python3
+ExecStartPre=/usr/bin/test -d /srv/inkplate
+ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/server.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening - adjust if your service needs broader access
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+
+# Resource limits (tweak as needed)
+LimitNOFILE=4096
+LimitNPROC=512
+
 [Install]
 WantedBy=multi-user.target
