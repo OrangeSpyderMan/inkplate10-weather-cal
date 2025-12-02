@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# install_service - install, enable and start the inkplate systemd service
+# Usage: ./bin/install_service [--unit-file PATH] [--no-start]
+
+SERVICE_SRC="bin/inkplate.service"
+SERVICE_NAME="inkplate"
+DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+
+NO_START=0
+
+while [[ ${#} -gt 0 ]]; do
+  case "$1" in
+    --unit-file)
+      shift
+      SERVICE_SRC="$1"
+      ;;
+    --no-start)
+      NO_START=1
+      ;;
+    -h|--help)
+      cat <<EOF
+Usage: $0 [--unit-file PATH] [--no-start]
+
+Installs ${SERVICE_SRC} to ${DEST}, reloads systemd, enables and starts the service.
+Options:
+  --unit-file PATH   Use PATH (relative to repo root) as the unit source
+  --no-start         Do not start/restart the service after installing
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown arg: $1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [ ! -f "$SERVICE_SRC" ]; then
+  echo "Unit file '$SERVICE_SRC' not found. Run from repo root or provide --unit-file." >&2
+  exit 1
+fi
+
+# extract python exec from ExecStart= line
+python_exec=$(grep -m1 '^ExecStart=' "$SERVICE_SRC" | sed -E 's/^ExecStart=//; s/ .*//') || true
+workdir=$(grep -m1 '^WorkingDirectory=' "$SERVICE_SRC" | sed -E 's/^WorkingDirectory=//') || true
+
+if [ -n "$python_exec" ]; then
+  if [ ! -x "$python_exec" ]; then
+    echo "Warning: python executable '$python_exec' does not exist or is not executable." >&2
+    echo "Please ensure the virtualenv exists and paths are correct before enabling the service." >&2
+  else
+    echo "Found python executable: $python_exec"
+  fi
+fi
+
+if [ -n "$workdir" ]; then
+  if [ ! -d "$workdir" ]; then
+    echo "Warning: Working directory '$workdir' does not exist." >&2
+  else
+    echo "Found working directory: $workdir"
+  fi
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO=sudo
+else
+  SUDO=
+fi
+
+echo "Installing ${SERVICE_SRC} -> ${DEST}"
+$SUDO cp --preserve=mode,timestamps "$SERVICE_SRC" "$DEST"
+$SUDO chmod 644 "$DEST"
+
+echo "Reloading systemd daemon"
+$SUDO systemctl daemon-reload
+
+echo "Enabling ${SERVICE_NAME}"
+$SUDO systemctl enable "$SERVICE_NAME"
+
+if [ "$NO_START" -eq 0 ]; then
+  echo "Starting/restarting ${SERVICE_NAME}"
+  $SUDO systemctl restart "$SERVICE_NAME" || true
+  echo "Service status:"
+  $SUDO systemctl status "$SERVICE_NAME" --no-pager -l
+  echo "Last 200 journal lines for ${SERVICE_NAME}:"
+  $SUDO journalctl -u "$SERVICE_NAME" -n 200 --no-pager
+else
+  echo "Skipping start/restart as requested (--no-start). Run: sudo systemctl start ${SERVICE_NAME}"
+fi
+
+echo "Done. If there are permission or startup errors, check 'sudo journalctl -u ${SERVICE_NAME}'."

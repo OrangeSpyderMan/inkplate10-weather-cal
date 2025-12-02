@@ -12,21 +12,51 @@ RUN apt-get update && \
     firefox-esr \
     curl 
 
-# GECKOVERSION should be adjusted to use the latest release of geckodriver, or at least a compatible release for the version of
-# firefox that is being installed.
-# See : https://github.com/mozilla/geckodriver/releases/
+# GECKOVERSION can be set to a specific tag (eg. "v0.36.0") to pin a release.
+# If unset or empty, the Dockerfile will fetch the latest GitHub release via
+# the releases/latest/download redirect and pick the correct asset for the
+# build platform.
+ARG GECKOVERSION=
 
-# GECKOARCH should be set to 
-# linux64 for x86_64 systems 
-# OR 
-# linux-aarch64 for linux on ARM64
+# When building with buildx the build system exposes TARGETPLATFORM (eg
+# linux/amd64, linux/arm64). Fall back to uname -m if TARGETPLATFORM is not
+# available.
+ARG TARGETPLATFORM
 
-ARG GECKOVERSION=v0.36.0
-ARG GECKOARCH=linux-aarch64
-
-RUN curl -L https://github.com/mozilla/geckodriver/releases/download/${GECKOVERSION}/geckodriver-${GECKOVERSION}-${GECKOARCH}.tar.gz | tar xz -C /usr/local/bin \
-    && apt-get purge -y curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+        arch_from_uname="$(uname -m)"; \
+        case "${TARGETPLATFORM:-""}" in \
+            "" ) target="${arch_from_uname}" ;; \
+            * ) target="${TARGETPLATFORM#*/}" ;; \
+        esac; \
+        case "$target" in \
+            amd64|x86_64) gecko_arch=linux64 ;; \
+            arm64|aarch64) gecko_arch=linux-aarch64 ;; \
+            *) echo "Unsupported target architecture: $target" >&2; exit 1 ;; \
+        esac; \
+        if [ -n "${GECKOVERSION}" ]; then \
+            tag="${GECKOVERSION}"; \
+        else \
+            # Query GitHub API for the latest release tag_name
+            tag=$(curl -fsSL https://api.github.com/repos/mozilla/geckodriver/releases/latest \
+                | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'); \
+            if [ -z "$tag" ]; then echo "Failed to determine latest geckodriver tag" >&2; exit 1; fi; \
+        fi; \
+        url="https://github.com/mozilla/geckodriver/releases/download/${tag}/geckodriver-${tag}-${gecko_arch}.tar.gz"; \
+        echo "Downloading geckodriver from: $url"; \
+        curl -fsSL "$url" | tar xz -C /usr/local/bin; \
+        # Ensure binary is executable and verify installation
+        chmod +x /usr/local/bin/geckodriver || true; \
+        if /usr/local/bin/geckodriver --version >/dev/null 2>&1; then \
+            echo "geckodriver installed:"; \
+            /usr/local/bin/geckodriver --version; \
+        else \
+            echo "ERROR: geckodriver did not install or is not runnable" >&2; \
+            ls -l /usr/local/bin || true; \
+            exit 1; \
+        fi; \
+        apt-get purge -y curl; \
+        rm -rf /var/lib/apt/lists/*
 
 ARG USERNAME=inkplate
 ARG HOMEDIR=/srv/inkplate
