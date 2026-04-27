@@ -1,6 +1,6 @@
 selenium==4.43.0
 airium==0.2.7
-packaging==26.1
+packaging==26.2
 PyYAML==6.0.3
 googlemaps==4.10.0
 Flask==3.1.3
