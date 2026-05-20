@@ -110,3 +110,4 @@ workspace.code-workspace
 .wget-hsts
 server/REAL_config.yaml
 server/config.yaml
+server/netatmo-token.json

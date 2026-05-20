@@ -44,6 +44,37 @@ In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [g
 
 This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine not only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
 
+### Current temperature source
+
+By default the current temperature shown on the display comes from the configured weather provider:
+
+```yaml
+current_temperature:
+  source: weather
+```
+
+You can optionally use a Netatmo Weather Station for only the current temperature while keeping the configured weather provider for the icon, min/max temperature, hourly forecast, and rain chart:
+
+```yaml
+current_temperature:
+  source: netatmo
+  netatmo:
+    client_id: ${NETATMO_CLIENT_ID:-}
+    client_secret: ${NETATMO_CLIENT_SECRET:-}
+    refresh_token: ${NETATMO_REFRESH_TOKEN:-}
+    token_file: netatmo-token.json
+    device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
+    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
+```
+
+The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
+
+### Secrets
+
+Config values can reference environment variables with `${VARIABLE_NAME}`. Use `${VARIABLE_NAME:-default}` when the value is optional or when a provider is configured but not currently selected.
+
+This lets you keep committed YAML files free of secrets and inject sensitive values from the runtime environment. In GitHub Actions, store those values as repository or environment secrets and pass them to the relevant step with `env:`. For local Docker runs, use an ignored `.env` file or shell environment variables.
+
 ### Google StaticMaps API
 
 <img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />

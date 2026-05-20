@@ -6,12 +6,21 @@ server:
   maxServes: 1
 weather:
   service: accuweather
-  apikey: XXXX # CHANGE THIS TO YOUR OWN API KEY
+  apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
   metric: true
+current_temperature:
+  source: weather # weather or netatmo
+  netatmo:
+    client_id: ${NETATMO_CLIENT_ID:-}
+    client_secret: ${NETATMO_CLIENT_SECRET:-}
+    refresh_token: ${NETATMO_REFRESH_TOKEN:-}
+    token_file: netatmo-token.json
+    device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
+    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
 google:
-  apikey: XXXX # CHANGE THIS TO YOU OWN API KEY
-  staticmaps_mapid: XXXX # CHANGE THIS TO YOUR OWN MAPID
+  apikey: ${GOOGLE_API_KEY}
+  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}
 location: Landry, FR
 image:
   width: 825
