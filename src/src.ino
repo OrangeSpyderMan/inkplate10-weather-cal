@@ -161,7 +161,7 @@ void setup()
 
     // Read battery voltage.
     float bvolt = board.readBattery();
-    logf(LOG_INFO, "battery voltage: %sv", String(bvolt, 2));
+    logf(LOG_INFO, "battery voltage: %sv", String(bvolt, 2).c_str());
 
     if (bvolt > 0.0)
     {

@@ -51,7 +51,7 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
         return ESP_ERR_TIMEOUT;
     }
     // Print the IP address
-    logf(LOG_INFO, "IP address: %s", WiFi.localIP().toString());
+    logf(LOG_INFO, "IP address: %s", WiFi.localIP().toString().c_str());
 
     return ESP_OK;
 }

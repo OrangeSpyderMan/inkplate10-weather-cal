@@ -2,6 +2,8 @@ LOCAL_ARDUINO_CLI := .tools/arduino-cli
 ARDUINO_CLI ?= $(if $(wildcard $(LOCAL_ARDUINO_CLI)),$(LOCAL_ARDUINO_CLI),arduino-cli)
 FIRMWARE_SKETCH ?= src
 FIRMWARE_BUILD_DIR ?= build/arduino
+FIRMWARE_SKETCHBOOK_DIR ?= build/sketchbook
+export ARDUINO_DIRECTORIES_USER := $(CURDIR)/$(FIRMWARE_SKETCHBOOK_DIR)
 FIRMWARE_FQBN ?= Inkplate_Boards:esp32:Inkplate10V2
 FIRMWARE_CORE ?= Inkplate_Boards:esp32@8.1.0
 FIRMWARE_BOARD_URL ?= https://github.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
@@ -38,7 +40,7 @@ endif
 		$(FIRMWARE_SKETCH)
 
 firmware-clean:
-	rm -rf $(FIRMWARE_BUILD_DIR)
+	rm -rf $(FIRMWARE_BUILD_DIR) $(FIRMWARE_SKETCHBOOK_DIR)
 
 firmware-board-list:
 	$(ARDUINO_CLI) board list
