@@ -58,6 +58,69 @@ h4.numcircle, #icon-container.numcircle {
   border-radius: 7vw;
 }
 
+#top-banner #temp.live-temp {
+  color: #000;
+  background: #fff;
+  border: 0.7vw solid #000;
+  border-radius: 1.4vw;
+  box-sizing: border-box;
+  height: 10vh;
+  width: 18vw;
+  margin: 1rem;
+  padding: 0.8vh 1vw;
+}
+
+.live-temp-value {
+  font-size: 5.1vh;
+  font-weight: 700;
+  line-height: 5.6vh;
+}
+
+.live-temp-status {
+  align-items: center;
+  display: flex;
+  font-family: sans-serif;
+  font-size: 1.55vh;
+  font-weight: 700;
+  gap: 0.55vw;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 2vh;
+}
+
+.live-temp-dot {
+  background: #000;
+  border-radius: 50%;
+  display: inline-block;
+  height: 1vw;
+  width: 1vw;
+}
+
+.live-temp-signal {
+  align-items: end;
+  display: inline-flex;
+  gap: 0.22vw;
+  height: 1.35vw;
+}
+
+.live-temp-signal span {
+  background: #000;
+  display: inline-block;
+  width: 0.35vw;
+}
+
+.live-temp-signal span:nth-child(1) {
+  height: 0.45vw;
+}
+
+.live-temp-signal span:nth-child(2) {
+  height: 0.9vw;
+}
+
+.live-temp-signal span:nth-child(3) {
+  height: 1.35vw;
+}
+
 #icon-container.numcircle img {
   width: 90%;
   position: absolute;

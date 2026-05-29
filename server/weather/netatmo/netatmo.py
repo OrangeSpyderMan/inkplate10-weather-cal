@@ -32,6 +32,8 @@ class NetatmoCurrentTemperatureService:
         value = temperature_c if self.metric else (temperature_c * 9 / 5) + 32
 
         return {
+            "source": "netatmo",
+            "live": True,
             "unit": "\N{DEGREE SIGN}C" if self.metric else "\N{DEGREE SIGN}F",
             "value": round(value),
         }

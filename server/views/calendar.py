@@ -39,6 +39,11 @@ class CalendarPage(Page):
         now = dt.datetime.now()
         self.log.info("Time synchronised to %s", now)
         now_date = now.date()
+        current_temperature = daily_summary["temperature"]
+        current_temperature_text = (
+            str(current_temperature["value"]) + current_temperature["unit"]
+        )
+        current_temperature_is_live = current_temperature.get("live", False)
 
         a("<!DOCTYPE html>")
         with a.html(lang="en"):
@@ -70,12 +75,24 @@ class CalendarPage(Page):
                                 _t=now_date.strftime("%B"),
                             )
 
-                        a.h4(
-                            id="temp",
-                            klass="numcircle text-center",
-                            _t=str(daily_summary["temperature"]["value"])
-                            + daily_summary["temperature"]["unit"],
-                        )
+                        if current_temperature_is_live:
+                            with a.div(id="temp", klass="live-temp text-center"):
+                                with a.div(klass="live-temp-value"):
+                                    a(current_temperature_text)
+                                with a.div(klass="live-temp-status"):
+                                    with a.span(klass="live-temp-dot"):
+                                        pass
+                                    a.span(_t="LIVE")
+                                    with a.span(klass="live-temp-signal"):
+                                        a.span()
+                                        a.span()
+                                        a.span()
+                        else:
+                            a.h4(
+                                id="temp",
+                                klass="numcircle text-center",
+                                _t=current_temperature_text,
+                            )
 
                         with a.div(id="icon-container", klass="numcircle"):
                             a.img(src=daily_summary["icon"])
