@@ -49,51 +49,53 @@ h3.numcircle {
   border-radius: 12vw;
 }
 
-h4.numcircle, #icon-container.numcircle {
+h4.numcircle, #icon-container.numcircle, #top-banner #temp.live-temp {
   font-size: 5vw;
   font-weight: 600;
-  line-height: 10vh;
-  height: 10vh;
+  line-height: 12vw;
+  height: 12vw;
   width: 12vw;
-  border-radius: 7vw;
+  border-radius: 50%;
 }
 
 #top-banner #temp.live-temp {
-  color: #000;
-  background: #fff;
-  border: 0.7vw solid #000;
-  border-radius: 1.4vw;
+  align-items: center;
+  color: white;
+  background: #000000;
   box-sizing: border-box;
-  height: 10vh;
-  width: 18vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1;
   margin: 1rem;
-  padding: 0.8vh 1vw;
+  padding: 0;
+  vertical-align: middle;
 }
 
 .live-temp-value {
-  font-size: 5.1vh;
+  font-size: 4vw;
   font-weight: 700;
-  line-height: 5.6vh;
+  line-height: 4.8vw;
 }
 
 .live-temp-status {
   align-items: center;
   display: flex;
   font-family: sans-serif;
-  font-size: 1.55vh;
+  font-size: 1.35vw;
   font-weight: 700;
-  gap: 0.55vw;
+  gap: 0.35vw;
   justify-content: center;
   letter-spacing: 0;
-  line-height: 2vh;
+  line-height: 1.5vw;
 }
 
 .live-temp-dot {
-  background: #000;
+  background: #fff;
   border-radius: 50%;
   display: inline-block;
-  height: 1vw;
-  width: 1vw;
+  height: 0.75vw;
+  width: 0.75vw;
 }
 
 .live-temp-signal {
@@ -104,7 +106,7 @@ h4.numcircle, #icon-container.numcircle {
 }
 
 .live-temp-signal span {
-  background: #000;
+  background: #fff;
   display: inline-block;
   width: 0.35vw;
 }
