@@ -49,13 +49,78 @@ h3.numcircle {
   border-radius: 12vw;
 }
 
-h4.numcircle, #icon-container.numcircle {
+h4.numcircle, #icon-container.numcircle, #top-banner #temp.live-temp {
   font-size: 5vw;
   font-weight: 600;
-  line-height: 10vh;
-  height: 10vh;
+  line-height: 12vw;
+  height: 12vw;
   width: 12vw;
-  border-radius: 7vw;
+  border-radius: 50%;
+}
+
+#top-banner #temp.live-temp {
+  align-items: center;
+  color: white;
+  background: #000000;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1;
+  margin: 1rem;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.live-temp-value {
+  font-size: 4vw;
+  font-weight: 700;
+  line-height: 4.8vw;
+}
+
+.live-temp-status {
+  align-items: center;
+  display: flex;
+  font-family: sans-serif;
+  font-size: 1.35vw;
+  font-weight: 700;
+  gap: 0.35vw;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1.5vw;
+}
+
+.live-temp-dot {
+  background: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  height: 0.75vw;
+  width: 0.75vw;
+}
+
+.live-temp-signal {
+  align-items: end;
+  display: inline-flex;
+  gap: 0.22vw;
+  height: 1.35vw;
+}
+
+.live-temp-signal span {
+  background: #fff;
+  display: inline-block;
+  width: 0.35vw;
+}
+
+.live-temp-signal span:nth-child(1) {
+  height: 0.45vw;
+}
+
+.live-temp-signal span:nth-child(2) {
+  height: 0.9vw;
+}
+
+.live-temp-signal span:nth-child(3) {
+  height: 1.35vw;
 }
 
 #icon-container.numcircle img {

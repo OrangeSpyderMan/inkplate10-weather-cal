@@ -10,7 +10,7 @@ import threading
 import datetime as dt
 import logging.config
 import paho.mqtt.client as mqtt
-from utils import get_prop, get_prop_by_keys
+from utils import expand_env_vars, get_prop, get_prop_by_keys
 from views.calendar import CalendarPage
 from google.api import GoogleAPIService
 from werkzeug.serving import make_server
@@ -29,7 +29,7 @@ def main():
     global log, server_max_serves
 
     config_file = open(os.path.join(cwd, "config.yaml"))
-    config = yaml.safe_load(config_file)
+    config = expand_env_vars(yaml.safe_load(config_file))
     config_file.close()
 
     debug = get_prop(config, "debug", default=False)
@@ -115,6 +115,10 @@ def main():
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
 
+    current_temperature_svc = build_current_temperature_service(
+        config, weather_metric
+    )
+
     # bail early if http server is not enabled
     if not server_enabled:
         sys.exit(0)
@@ -134,6 +138,9 @@ def main():
             try:
                 daily_summary = weather_svc.get_daily_summary()
                 hourly_forecasts = weather_svc.get_hourly_forecast()
+                apply_current_temperature_override(
+                    daily_summary, current_temperature_svc
+                )
             except Exception as e:
                 error_string = repr(e)
                 log.error(f"An error occurred whilst getting weather data!")
@@ -172,6 +179,9 @@ def main():
         try:
             daily_summary = weather_svc.get_daily_summary()
             hourly_forecasts = weather_svc.get_hourly_forecast()
+            apply_current_temperature_override(
+                daily_summary, current_temperature_svc
+            )
         except Exception as e:
             error_string = repr(e)
             log.error(f"An error occurred whilst getting weather data!")
@@ -224,6 +234,76 @@ def main():
 
         log.info(f"Exiting")
         sys.exit(0)
+
+
+def build_current_temperature_service(config, metric):
+    current_temperature_config = get_prop(
+        config, "current_temperature", default={}, required=False
+    )
+    if current_temperature_config is None:
+        current_temperature_config = {}
+
+    source = str(current_temperature_config.get("source", "weather")).lower()
+    if source == "weather":
+        return None
+
+    if source != "netatmo":
+        log.error(f"not a supported current temperature source {source}")
+        sys.exit(1)
+
+    netatmo_config = current_temperature_config.get(
+        "netatmo", current_temperature_config
+    )
+    token_file = netatmo_config.get("token_file", "netatmo-token.json")
+    if not os.path.isabs(token_file):
+        token_file = os.path.join(cwd, token_file)
+
+    from weather.netatmo.netatmo import NetatmoCurrentTemperatureService
+
+    return NetatmoCurrentTemperatureService(
+        client_id=get_required_current_temperature_config(
+            netatmo_config, "client_id"
+        ),
+        client_secret=get_required_current_temperature_config(
+            netatmo_config, "client_secret"
+        ),
+        refresh_token=get_required_current_temperature_config(
+            netatmo_config, "refresh_token"
+        ),
+        token_file=token_file,
+        device_id=get_optional_current_temperature_config(
+            netatmo_config, "device_id"
+        ),
+        module_id=get_optional_current_temperature_config(
+            netatmo_config, "module_id"
+        ),
+        metric=metric,
+    )
+
+
+def get_required_current_temperature_config(config, key):
+    if key not in config or config[key] is None or config[key] == "":
+        log.error(f"current_temperature.netatmo.{key} is required")
+        sys.exit(1)
+
+    return config[key]
+
+
+def get_optional_current_temperature_config(config, key):
+    value = config.get(key)
+    if value == "":
+        return None
+
+    return value
+
+
+def apply_current_temperature_override(daily_summary, current_temperature_svc):
+    if current_temperature_svc is None:
+        return
+
+    daily_summary["temperature"].update(
+        current_temperature_svc.get_current_temperature()
+    )
 
 
 def get_client_mqtt_logging(host, port, topic):
