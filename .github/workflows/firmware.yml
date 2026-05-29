@@ -1,0 +1,32 @@
+name: Firmware CI
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'Makefile'
+      - '.github/workflows/firmware.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'Makefile'
+      - '.github/workflows/firmware.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install platforms and libraries
+        run: |
+          make firmware-setup
+
+      - name: Compile firmware
+        run: |
+          make firmware-compile

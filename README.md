@@ -172,7 +172,7 @@ The installer downloads a pinned Arduino CLI release for your OS/architecture.
 The `.tools/` directory is ignored by git so the binary is not committed. If you
 already have `arduino-cli` installed on your `PATH`, you can skip this step.
 
-Then install the Inkplate board package and required libraries:
+Then install the Inkplate board package and required libraries (these libraries are installed locally under `build/sketchbook/` to avoid polluting your global Arduino library directory):
 
 ```bash
 make firmware-setup
@@ -182,6 +182,12 @@ Compile the firmware:
 
 ```bash
 make firmware-compile
+```
+
+To clean build artifacts and local libraries:
+
+```bash
+make firmware-clean
 ```
 
 Upload to a connected Inkplate 10:
