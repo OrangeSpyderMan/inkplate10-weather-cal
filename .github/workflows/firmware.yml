@@ -30,3 +30,27 @@ jobs:
       - name: Compile firmware
         run: |
           make firmware-compile
+      - name: Commit and Push Firmware to Repo
+        run: |
+          # 1. Create the target directory if it doesn't already exist
+          mkdir -p firmware_binaries
+
+          # 2. Copy the Arduino binaries from the build directory
+          # (Adjust the source path if your GitHub runner outputs to a slightly different path)
+          cp build/arduino/src.ino.bin firmware_binaries/inkplate10-firmware.bin
+          cp build/arduino/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
+
+          # 3. Configure a temporary Git identity for the runner
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 4. Stage, commit, and push
+          git add firmware_binaries/
+          
+          # Check if there are changes to commit to avoid failing the action if nothing changed
+          if ! git diff-index --quiet HEAD; then
+              git commit -m "chore: update compiled Arduino firmware [skip ci]"
+              git push
+          else
+              echo "No changes to the firmware binaries detected."
+          fi
