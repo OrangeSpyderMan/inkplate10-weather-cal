@@ -10,13 +10,15 @@
 
 #include "MqttLogger.h"
 
-#define CalendarYrToTm(Y) ((Y)-1970)
+#define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
 #define DEEP_SLEEP_FALLBACK_SECONDS 120
 // set the log verbosity
 #define LOG_LEVEL LOG_DEBUG
 // log message entry history size
 #define LOG_QUEUE_MAX_ENTRIES 10
+// log message maximum length
+#define LOG_MSG_MAX_LEN 128
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
 // Fallback time to refresh.
@@ -24,14 +26,14 @@
 // The path on SD card where calendar images are downloaded to and read from.
 #define CALENDAR_RW_PATH "/calendar.png"
 // Guestimate file size for PNG image @ 1200x825
-#define CALENDAR_IMAGE_SIZE E_INK_WIDTH* E_INK_HEIGHT * 4 + 100
+#define CALENDAR_IMAGE_SIZE E_INK_WIDTH * E_INK_HEIGHT * 4 + 100
 
 // Enum of errors that might be encountered.
 #define ESP_ERR_ERRNO_BASE (0)
-#define ESP_ERR_EDL (1 + ESP_ERR_ERRNO_BASE)     // Download error
-#define ESP_ERR_EDRAW (2 + ESP_ERR_ERRNO_BASE)   // Draw error
-#define ESP_ERR_EFILEW (3 + ESP_ERR_ERRNO_BASE)  // File write error
-#define ESP_ERR_ENTP (4 + ESP_ERR_ERRNO_BASE)    // NTP error
+#define ESP_ERR_EDL (1 + ESP_ERR_ERRNO_BASE)    // Download error
+#define ESP_ERR_EDRAW (2 + ESP_ERR_ERRNO_BASE)  // Draw error
+#define ESP_ERR_EFILEW (3 + ESP_ERR_ERRNO_BASE) // File write error
+#define ESP_ERR_ENTP (4 + ESP_ERR_ERRNO_BASE)   // NTP error
 
 // Enum of log verbosity levels.
 #define LOG_CRIT 0
@@ -74,7 +76,7 @@ extern Timezone myTz;
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t configureWiFi(const char* ssid, const char* pass, int retries);
+esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
 
 /**
   Download a file at a given URL. Store the file on disk at a given path.
@@ -87,7 +89,7 @@ esp_err_t configureWiFi(const char* ssid, const char* pass, int retries);
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t downloadFile(const char* url, int32_t size, const char* filePath);
+esp_err_t downloadFile(const char *url, int32_t size, const char *filePath);
 
 /**
   Draw an image to the display.
@@ -99,7 +101,7 @@ esp_err_t downloadFile(const char* url, int32_t size, const char* filePath);
   - ESP_ERR_EDL if download file fails.
   - ESP_ERR_EFILEW if writing file to filePath fails.
 */
-esp_err_t displayImage(const char* filePath);
+esp_err_t displayImage(const char *filePath);
 
 /**
   Draw an message to the display. The error message is drawn in the top-left
@@ -108,7 +110,7 @@ esp_err_t displayImage(const char* filePath);
   @param msg the message to display.
   error.
 */
-void displayMessage(const char* msg);
+void displayMessage(const char *msg);
 
 /**
   Connect to an NTP server and synchronize the on-board real-time clock.
@@ -120,7 +122,7 @@ void displayMessage(const char* msg);
   - ESP_OK if successful.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
-esp_err_t configureTime(const char* ntpHost, const char* timezoneName);
+esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 
 /**
   Get the next scheduled time to wake from deep sleep.
@@ -131,7 +133,7 @@ esp_err_t configureTime(const char* ntpHost, const char* timezoneName);
   If the real-time clock is not configured, it will return the last configured
   RTC epoch time + DEEP_SLEEP_FALLBACK_SECONDS.
 */
-time_t getWakeTime(const char* refreshTime);
+time_t getWakeTime(const char *refreshTime);
 
 /**
   Enter deep sleep.
@@ -154,8 +156,8 @@ void sleep(const int sleepHours);
   - ESP_OK if successful.
   - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
 */
-esp_err_t configureMQTT(const char* broker, int port, const char* topic,
-                        const char* clientID, int max_retries);
+esp_err_t configureMQTT(const char *broker, int port, const char *topic,
+                        const char *clientID, int max_retries);
 
 /**
   Log a message.
@@ -163,7 +165,7 @@ esp_err_t configureMQTT(const char* broker, int port, const char* topic,
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @param msg the message to log.
 */
-void log(uint16_t pri, const char* msg);
+void log(uint16_t pri, const char *msg);
 
 /**
   Log a message with formatting.
@@ -171,7 +173,7 @@ void log(uint16_t pri, const char* msg);
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @param fmt the format of the log message
 */
-void logf(uint16_t pri, const char* fmt, ...);
+void logf(uint16_t pri, const char *fmt, ...);
 
 /**
   Converts a priority into a log level prefix.
@@ -179,14 +181,14 @@ void logf(uint16_t pri, const char* fmt, ...);
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @returns the string value of the priority.
 */
-const char* msgPrefix(uint16_t pri);
+String msgPrefix(uint16_t pri);
 
 /**
   Ensure log queue is populated/emptied based on MQTT connection.
 
   @param msg the log message
 */
-void ensureQueue(char* msg);
+void ensureQueue(const char *msg);
 
 /**
   Gets a reading of the battery voltage by a calibrated ADC.

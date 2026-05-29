@@ -87,6 +87,7 @@ workspace.code-workspace
 **/*.png
 **/*.bmp
 **/*/samples
+.tools/
 
 # mac junk
 .DS_Store

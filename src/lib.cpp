@@ -14,7 +14,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 MqttLogger mqttLogger(client, "", MqttLoggerMode::SerialOnly);
 // queue to store messages to publish once mqtt connection is established.
-cppQueue logQ(sizeof(char) * 100, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
+cppQueue logQ(LOG_MSG_MAX_LEN, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
 // inkplate10 board driver
 Inkplate board(INKPLATE_3BIT);
 // timezone store
@@ -79,7 +79,7 @@ esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
     }
 
     logf(LOG_INFO, "writing file to path %s", filePath);
-    SdFat sd = board.getSdFat();
+    SdFat &sd = board.getSdFat();
 
     // Write image buffer to SD card
     if (sd.exists(filePath))
@@ -95,6 +95,7 @@ esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
 
     sdfile.write(buf, size);
     sdfile.close();
+    free(buf);
 
     return ESP_OK;
 }
@@ -114,7 +115,7 @@ esp_err_t displayImage(const char *filePath)
     logf(LOG_INFO, "drawing image from path: %s", filePath);
 
     board.clearDisplay();
-    if (!board.drawImage(filePath, 0, 0, false, true))
+    if (!board.image.draw(filePath, 0, 0, false, true))
     {
         return ESP_ERR_EDRAW;
     }
@@ -187,9 +188,9 @@ esp_err_t configureMQTT(const char *broker, int port, const char *topic,
   @param pri the log level / priority of the message, see LOG_LEVEL.
   @returns the string value of the priority.
 */
-const char *msgPrefix(uint16_t pri)
+String msgPrefix(uint16_t pri)
 {
-    char *priority;
+    const char *priority;
 
     switch (pri)
     {
@@ -216,9 +217,10 @@ const char *msgPrefix(uint16_t pri)
         break;
     }
 
-    char *prefix = new char[35];
-    sprintf(prefix, "%s - %s - ", myTz.dateTime(RFC3339).c_str(), priority);
-    return prefix;
+    char prefix[64];
+    snprintf(prefix, sizeof(prefix), "%s - %s - ",
+             myTz.dateTime(RFC3339).c_str(), priority);
+    return String(prefix);
 }
 
 /**
@@ -232,12 +234,10 @@ void log(uint16_t pri, const char *msg)
     if (pri > LOG_LEVEL)
         return;
 
-    const char *prefix = msgPrefix(pri);
-    size_t prefixLen = strlen(prefix);
-    size_t msgLen = strlen(msg);
-    char buf[prefixLen + msgLen + 1];
-    strcpy(buf, prefix);
-    strcat(buf, msg);
+    String prefix = msgPrefix(pri);
+    char buf[LOG_MSG_MAX_LEN];
+    snprintf(buf, sizeof(buf), "%s%s", prefix.c_str(), msg);
+
     ensureQueue(buf);
 }
 
@@ -252,20 +252,18 @@ void logf(uint16_t pri, const char *fmt, ...)
     if (pri > LOG_LEVEL)
         return;
 
-    const char *prefix = msgPrefix(pri);
-    size_t prefixLen = strlen(prefix);
-    size_t msgLen = strlen(fmt);
-    char a[prefixLen + msgLen + 1];
-    strcpy(a, prefix);
-    strcat(a, fmt);
+    String prefix = msgPrefix(pri);
+    char buf[LOG_MSG_MAX_LEN];
+    int prefixLen = snprintf(buf, sizeof(buf), "%s", prefix.c_str());
+    if (prefixLen >= (int)sizeof(buf))
+        prefixLen = sizeof(buf) - 1;
 
     va_list args;
     va_start(args, fmt);
-    size_t size = snprintf(NULL, 0, a, args);
-    char b[size + 1];
-    vsprintf(b, a, args);
-    ensureQueue(b);
+    vsnprintf(buf + prefixLen, sizeof(buf) - prefixLen, fmt, args);
     va_end(args);
+
+    ensureQueue(buf);
 }
 
 /**
@@ -273,7 +271,7 @@ void logf(uint16_t pri, const char *fmt, ...)
 
   @param msg the log message.
 */
-void ensureQueue(char *logMsg)
+void ensureQueue(const char *logMsg)
 {
     if (!client.connected())
     {
@@ -285,11 +283,14 @@ void ensureQueue(char *logMsg)
         // send queued logs once we are connected.
         if (logQ.getCount() > 0)
         {
+            char tempBuf[LOG_MSG_MAX_LEN];
             mqttLogger.setMode(MqttLoggerMode::MqttOnly);
             while (!logQ.isEmpty())
             {
-                logQ.pop(logMsg);
-                mqttLogger.println(logMsg);
+                if (logQ.pop(tempBuf))
+                {
+                    mqttLogger.println(tempBuf);
+                }
             }
             mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
         }
@@ -297,8 +298,6 @@ void ensureQueue(char *logMsg)
     // print/send the current log
     mqttLogger.println(logMsg);
 }
-
-
 
 /**
   Connect to an NTP server and synchronize the on-board real-time clock.
@@ -326,7 +325,7 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
     // Sync RTC with NTP time
     // time_t nowTime = now();
     time_t nowTime = myTz.now();
-    board.rtcSetEpoch(nowTime);
+    board.rtc.setEpoch(nowTime);
     logf(LOG_INFO, "RTC synced to %s", dateTime(nowTime, RFC3339).c_str());
 
     return ESP_OK;
@@ -341,7 +340,7 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
 void sleep(const int sleepHours)
 {
     log(LOG_NOTICE, "deep sleep initiated");
-    time_t rtcTime = board.rtcGetEpoch();
+    time_t rtcTime = board.rtc.getEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
     logf(LOG_INFO, "waking in %d hours", sleepHours);

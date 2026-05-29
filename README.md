@@ -9,6 +9,7 @@ Display today's date, weather forecast and a stylised map of your city using an 
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
 - [Firmware](#firmware)
+  - [Building with Arduino CLI](#building-with-arduino-cli)
   - [Building with Arduino IDE](#building-with-arduino-ide)
 - [License](#license)
 
@@ -154,6 +155,55 @@ sudo chown -R inkplate:inkplate /srv/inkplate
 If you'd like to manage secrets outside the repo, consider keeping them on the host and updating the unit manually — the default unit shipped here does not load an environment file.
 
 ## Firmware
+
+### Building with Arduino CLI
+
+The firmware still uses the Arduino framework and Inkplate Arduino libraries, but
+it can be built without opening the Arduino IDE. This is the preferred workflow
+for repeatable local builds.
+
+Install the Arduino CLI into `.tools/`:
+
+```bash
+make firmware-install-cli
+```
+
+The installer downloads a pinned Arduino CLI release for your OS/architecture.
+The `.tools/` directory is ignored by git so the binary is not committed. If you
+already have `arduino-cli` installed on your `PATH`, you can skip this step.
+
+Then install the Inkplate board package and required libraries:
+
+```bash
+make firmware-setup
+```
+
+Compile the firmware:
+
+```bash
+make firmware-compile
+```
+
+Upload to a connected Inkplate 10:
+
+```bash
+make firmware-upload PORT=/dev/ttyUSB0
+```
+
+On macOS the port is usually under `/dev/cu.*`; on Windows it is usually a
+`COMx` port. You can list connected boards with:
+
+```bash
+make firmware-board-list
+```
+
+The default CLI build target is `Inkplate_Boards:esp32:Inkplate10V2`, using the
+Inkplate board package version `8.1.0`. These defaults can be overridden, for
+example:
+
+```bash
+make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
+```
 
 ### Building with Arduino IDE
 
