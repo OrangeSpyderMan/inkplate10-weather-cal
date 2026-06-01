@@ -4,10 +4,6 @@
 RTC_DATA_ATTR time_t lastBootTime = 0;
 // RTC epoch of the last time deep sleep was initiated.
 RTC_DATA_ATTR time_t lastSleepTime = 0;
-// RTC epoch of the time in the future when we want to end deep sleep.
-RTC_DATA_ATTR time_t targetWakeTime = 0;
-// The number of seconds between RTC epoch and NTP epoch.
-RTC_DATA_ATTR unsigned long driftSecs = 0;
 
 // remote mqtt logger
 WiFiClient espClient;
@@ -90,12 +86,17 @@ esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
     File sdfile = sd.open(filePath, FILE_WRITE);
     if (!sdfile)
     {
+        free(buf);
         return ESP_ERR_EFILEW;
     }
 
-    sdfile.write(buf, size);
+    size_t written = sdfile.write(buf, size);
     sdfile.close();
     free(buf);
+    if (written != (size_t)size)
+    {
+        return ESP_ERR_EFILEW;
+    }
 
     return ESP_OK;
 }
@@ -195,25 +196,25 @@ String msgPrefix(uint16_t pri)
     switch (pri)
     {
     case LOG_CRIT:
-        priority = (char *)"CRITICAL";
+        priority = "CRITICAL";
         break;
     case LOG_ERROR:
-        priority = (char *)"ERROR";
+        priority = "ERROR";
         break;
     case LOG_WARNING:
-        priority = (char *)"WARNING";
+        priority = "WARNING";
         break;
     case LOG_NOTICE:
-        priority = (char *)"NOTICE";
+        priority = "NOTICE";
         break;
     case LOG_INFO:
-        priority = (char *)"INFO";
+        priority = "INFO";
         break;
     case LOG_DEBUG:
-        priority = (char *)"DEBUG";
+        priority = "DEBUG";
         break;
     default:
-        priority = (char *)"INFO";
+        priority = "INFO";
         break;
     }
 
@@ -339,11 +340,17 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
 */
 void sleep(const int sleepHours)
 {
+    int boundedSleepHours = sleepHours;
+    if (boundedSleepHours <= 0)
+    {
+        boundedSleepHours = CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
+    }
+
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtc.getEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
-    logf(LOG_INFO, "waking in %d hours", sleepHours);
+    logf(LOG_INFO, "waking in %d hours", boundedSleepHours);
     log(LOG_NOTICE, "deep sleeping in 5 seconds");
     delay(5000);
 
@@ -357,7 +364,7 @@ void sleep(const int sleepHours)
     log(LOG_DEBUG, "Sleep SDCard...");
     board.sdCardSleep();
 
-    const uint64_t sleepMicroseconds = ((uint64_t)sleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
+    const uint64_t sleepMicroseconds = ((uint64_t)boundedSleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
     logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);
     esp_sleep_enable_timer_wakeup(sleepMicroseconds);
     log(LOG_NOTICE, "Sleeping...");

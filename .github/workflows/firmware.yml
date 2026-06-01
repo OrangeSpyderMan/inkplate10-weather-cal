@@ -5,12 +5,17 @@ on:
     paths:
       - 'src/**'
       - 'Makefile'
+      - 'bin/install_arduino_cli.sh'
       - '.github/workflows/firmware.yml'
   pull_request:
     paths:
       - 'src/**'
       - 'Makefile'
+      - 'bin/install_arduino_cli.sh'
       - '.github/workflows/firmware.yml'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -23,6 +28,16 @@ jobs:
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
+      - name: Cache Arduino packages and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            build/sketchbook
+          key: arduino-${{ runner.os }}-${{ hashFiles('Makefile', 'bin/install_arduino_cli.sh') }}
+          restore-keys: |
+            arduino-${{ runner.os }}-
+
       - name: Install platforms and libraries
         run: |
           make firmware-setup
@@ -30,27 +45,31 @@ jobs:
       - name: Compile firmware
         run: |
           make firmware-compile
-      - name: Commit and Push Firmware to Repo
+
+      - name: Collect firmware binaries
         run: |
-          # 1. Create the target directory if it doesn't already exist
           mkdir -p firmware_binaries
 
-          # 2. Copy the Arduino binaries from the build directory
-          # (Adjust the source path if your GitHub runner outputs to a slightly different path)
           cp build/arduino/src.ino.bin firmware_binaries/inkplate10-firmware.bin
           cp build/arduino/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
 
-          # 3. Configure a temporary Git identity for the runner
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkplate10-firmware
+          path: firmware_binaries/*
+
+      - name: Commit and push firmware binaries
+        if: github.event_name == 'push'
+        run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 4. Stage, commit, and push
           git add firmware_binaries/
-          
-          # Check if there are changes to commit to avoid failing the action if nothing changed
+
           if ! git diff-index --quiet HEAD; then
-              git commit -m "chore: update compiled Arduino firmware [skip ci]"
-              git push
+            git commit -m "chore: update compiled Arduino firmware [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           else
-              echo "No changes to the firmware binaries detected."
+            echo "No changes to the firmware binaries detected."
           fi

@@ -13,7 +13,7 @@ FIRMWARE_UPLOAD_SPEED ?= 115200
 .PHONY: firmware-install-cli firmware-setup firmware-compile firmware-upload firmware-clean firmware-board-list
 
 firmware-install-cli:
-	bin/install_arduino_cli.sh
+	bash bin/install_arduino_cli.sh
 
 firmware-setup:
 	$(ARDUINO_CLI) core update-index --additional-urls $(FIRMWARE_BOARD_URL)

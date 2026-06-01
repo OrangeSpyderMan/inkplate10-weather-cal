@@ -52,10 +52,6 @@
 extern RTC_DATA_ATTR time_t lastBootTime;
 // RTC epoch of the last time deep sleep was initiated.
 extern RTC_DATA_ATTR time_t lastSleepTime;
-// RTC epoch of the time in the future when we want to end deep sleep.
-extern RTC_DATA_ATTR time_t targetWakeTime;
-// The number of seconds between RTC epoch and NTP epoch.
-extern RTC_DATA_ATTR unsigned long driftSecs;
 // The remote logging instance.
 extern MqttLogger mqttLogger;
 // The log message queue.
@@ -125,17 +121,6 @@ void displayMessage(const char *msg);
 esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 
 /**
-  Get the next scheduled time to wake from deep sleep.
-
-  @param refreshTime the time of the day to wake in HH::MM:SS format (eg.
-  09:00:00). error.
-  @returns the epoch time of when to wake.
-  If the real-time clock is not configured, it will return the last configured
-  RTC epoch time + DEEP_SLEEP_FALLBACK_SECONDS.
-*/
-time_t getWakeTime(const char *refreshTime);
-
-/**
   Enter deep sleep.
 
   @param sleepHours the number of hours we should sleep for
@@ -189,12 +174,5 @@ String msgPrefix(uint16_t pri);
   @param msg the log message
 */
 void ensureQueue(const char *msg);
-
-/**
-  Gets a reading of the battery voltage by a calibrated ADC.
-
-  @returns a float of the battery voltage.
-*/
-float getCalibratedBatteryVoltage();
 
 #endif

@@ -4,6 +4,22 @@
 
 #include "lib.h"
 
+bool isMissingConfigValue(const char *value)
+{
+    return value == nullptr || value[0] == '\0';
+}
+
+void failConfig(const char *msg)
+{
+    log(LOG_ERROR, msg);
+    displayMessage(msg);
+    sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
+    while (true)
+    {
+        delay(1000);
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -82,14 +98,15 @@ void setup()
     // Assign config values.
     JsonObject calendarCfg = doc["calendar"];
     const char *calendarUrl = calendarCfg["url"];
-    int calendarRetries = calendarCfg["retries"];
-    const int calendarRefreshInterval = calendarCfg["refresh_interval"];
+    int calendarRetries = calendarCfg["retries"] | 3;
+    const int calendarRefreshInterval =
+        calendarCfg["refresh_interval"] | CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
 
     // Wifi config.
     JsonObject wifiCfg = doc["wifi"];
     const char *wifiSSID = wifiCfg["ssid"];
-    const char *wifiPass = wifiCfg["pass"];
-    int wifiRetries = wifiCfg["retries"];
+    const char *wifiPass = wifiCfg["pass"] | "";
+    int wifiRetries = wifiCfg["retries"] | 6;
 
     // NTP config.
     const char *ntpHost = doc["ntp"]["host"];
@@ -97,12 +114,64 @@ void setup()
 
     // Remote logging config.
     JsonObject mqttLoggerCfg = doc["mqtt_logger"];
-    bool mqttLoggerEnabled = mqttLoggerCfg["enabled"];
+    bool mqttLoggerEnabled = mqttLoggerCfg["enabled"] | false;
     const char *mqttLoggerBroker = mqttLoggerCfg["broker"];
-    int mqttLoggerPort = mqttLoggerCfg["port"];
+    int mqttLoggerPort = mqttLoggerCfg["port"] | 1883;
     const char *mqttLoggerClientID = mqttLoggerCfg["clientId"];
     const char *mqttLoggerTopic = mqttLoggerCfg["topic"];
-    int mqttLoggerRetries = mqttLoggerCfg["retries"];
+    int mqttLoggerRetries = mqttLoggerCfg["retries"] | 3;
+
+    if (isMissingConfigValue(calendarUrl))
+    {
+        failConfig("Missing calendar.url");
+    }
+    if (calendarRefreshInterval <= 0)
+    {
+        failConfig("Invalid calendar.refresh_interval");
+    }
+    if (calendarRetries < 0)
+    {
+        failConfig("Invalid calendar.retries");
+    }
+    if (isMissingConfigValue(wifiSSID))
+    {
+        failConfig("Missing wifi.ssid");
+    }
+    if (wifiRetries < 0)
+    {
+        failConfig("Invalid wifi.retries");
+    }
+    if (isMissingConfigValue(ntpHost))
+    {
+        failConfig("Missing ntp.host");
+    }
+    if (isMissingConfigValue(ntpTimezone))
+    {
+        failConfig("Missing ntp.timezone");
+    }
+    if (mqttLoggerEnabled)
+    {
+        if (isMissingConfigValue(mqttLoggerBroker))
+        {
+            failConfig("Missing mqtt_logger.broker");
+        }
+        if (mqttLoggerPort <= 0)
+        {
+            failConfig("Invalid mqtt_logger.port");
+        }
+        if (isMissingConfigValue(mqttLoggerClientID))
+        {
+            failConfig("Missing mqtt_logger.clientId");
+        }
+        if (isMissingConfigValue(mqttLoggerTopic))
+        {
+            failConfig("Missing mqtt_logger.topic");
+        }
+        if (mqttLoggerRetries < 0)
+        {
+            failConfig("Invalid mqtt_logger.retries");
+        }
+    }
 
     // Attempt to connect to WiFi.
     err = configureWiFi(wifiSSID, wifiPass, wifiRetries);
@@ -145,18 +214,6 @@ void setup()
     {
         logf(LOG_INFO, "last sleep time: %s",
              dateTime(lastSleepTime, RFC3339).c_str());
-    }
-
-    if (targetWakeTime > 0)
-    {
-        logf(LOG_INFO, "expected wake time: %s",
-             dateTime(targetWakeTime, RFC3339).c_str());
-        driftSecs = targetWakeTime - bootTime;
-    }
-
-    if (driftSecs > 0)
-    {
-        logf(LOG_DEBUG, "time drift: %d seconds", driftSecs);
     }
 
     // Read battery voltage.
