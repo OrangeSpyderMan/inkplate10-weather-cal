@@ -137,7 +137,7 @@ class CalendarPage(Page):
                                                 ):
                                                     a.img(src=forecast["icon"])
 
-                        a.canvas(id="rain-temp-chart", height="180")
+                        a.canvas(id="rain-temp-chart", height="280")
 
                 with a.script():
                     a("""
@@ -214,7 +214,7 @@ class CalendarPage(Page):
                                     maintainAspectRatio: false,
                                     layout: {{
                                         padding: {{
-                                            bottom: 42
+                                            bottom: 48
                                         }}
                                     }},
                                     scales: {{
@@ -226,7 +226,7 @@ class CalendarPage(Page):
                                             ticks: {{
                                                 display: true,
                                                 fontFamily: 'Merienda-Regular',
-                                                fontSize: 24,
+                                                fontSize: 26,
                                                 fontColor: '#000',
                                                 padding: 4,
                                                 callback: function(value, index, values) {{
