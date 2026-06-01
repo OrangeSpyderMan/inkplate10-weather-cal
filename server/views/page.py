@@ -49,7 +49,7 @@ class Page:
             driver.set_window_size(self.image_width, self.image_height)
             driver.get("file://" + html_fp)
             sleep(2)  # Wait for the page to load completely
-            driver.save_full_page_screenshot(png_fp)
+            driver.save_screenshot(png_fp)
             self.log.info("Screenshot captured and saved to file.")
         except Exception as e:
             self.log.error("Screenshot failed to capture. Error: " + str(e))

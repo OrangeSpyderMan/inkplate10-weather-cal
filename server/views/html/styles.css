@@ -267,3 +267,8 @@ h4.numcircle, #icon-container.numcircle {
   width: 80%;
   margin: 0 auto !important;
 }
+
+#rain-temp-chart {
+  height: 180px !important;
+  width: 100% !important;
+}

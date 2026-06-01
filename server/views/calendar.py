@@ -210,9 +210,11 @@ class CalendarPage(Page):
                                     }}]
                                 }},
                                 options: {{
+                                    responsive: true,
+                                    maintainAspectRatio: false,
                                     layout: {{
                                         padding: {{
-                                            bottom: 18
+                                            bottom: 42
                                         }}
                                     }},
                                     scales: {{
@@ -224,9 +226,9 @@ class CalendarPage(Page):
                                             ticks: {{
                                                 display: true,
                                                 fontFamily: 'Merienda-Regular',
-                                                fontSize: 28,
+                                                fontSize: 24,
                                                 fontColor: '#000',
-                                                padding: 8,
+                                                padding: 4,
                                                 callback: function(value, index, values) {{
                                                     var rain = {1}[index];
                                                     return rain > 0 ? rain + "%" : "";
