@@ -23,6 +23,9 @@ google:
   staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}
 location: Landry, FR
 image:
+  # The renderer is tuned for Inkplate 10 portrait output. These values set the
+  # screenshot target, but arbitrary dimensions are not currently guaranteed to
+  # scale the full layout correctly.
   width: 825
   height: 1200
 mqtt:

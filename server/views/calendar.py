@@ -53,6 +53,8 @@ class CalendarPage(Page):
             temperature_axis_min = 5
             temperature_axis_max = 104
         rain_axis_max = 220
+        chart_width = int(self.image_width * 0.95)
+        chart_height = 280
 
         a("<!DOCTYPE html>")
         with a.html(lang="en"):
@@ -137,7 +139,11 @@ class CalendarPage(Page):
                                                 ):
                                                     a.img(src=forecast["icon"])
 
-                        a.canvas(id="rain-temp-chart", height="280")
+                        a.canvas(
+                            id="rain-temp-chart",
+                            width=chart_width,
+                            height=chart_height,
+                        )
 
                 with a.script():
                     a("""
@@ -210,8 +216,8 @@ class CalendarPage(Page):
                                     }}]
                                 }},
                                 options: {{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
+                                    responsive: false,
+                                    devicePixelRatio: 1,
                                     layout: {{
                                         padding: {{
                                             bottom: 48
