@@ -15,3 +15,21 @@ updates:
       patterns:
         - "*"
   target-branch: "next"
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: weekly
+    day: monday
+    time: "09:00"
+  target-branch: "next"
+- package-ecosystem: github-actions
+  directory: "/"
+  schedule:
+    interval: weekly
+    day: monday
+    time: "09:00"
+  groups:
+    github-actions:
+      patterns:
+        - "*"
+  target-branch: "next"

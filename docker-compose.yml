@@ -1,10 +1,39 @@
 services:
   inkplate:
     init: true
+    build:
+      context: .
+      args:
+        GECKOVERSION: v0.36.0
+    restart: unless-stopped
     ports:
       - "8080:8080"
-      # If you use the MQTT logging, you'll need to uncomment the port below (and change it, if you don't use the same port)
-      # - "1883:1883"
-    build: 
-      context: .
-    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      WEATHER_API_KEY: ${WEATHER_API_KEY:?set WEATHER_API_KEY in .env or the shell}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?set GOOGLE_API_KEY in .env or the shell}
+      GOOGLE_STATICMAPS_MAPID: ${GOOGLE_STATICMAPS_MAPID:?set GOOGLE_STATICMAPS_MAPID in .env or the shell}
+      NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}
+      NETATMO_CLIENT_SECRET: ${NETATMO_CLIENT_SECRET:-}
+      NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
+      NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
+      NETATMO_MODULE_ID: ${NETATMO_MODULE_ID:-}
+    volumes:
+      - ./server/config.yaml:/srv/inkplate/server/config.yaml:ro
+      - inkplate-data:/srv/inkplate/server/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/calendar.png', timeout=5)",
+        ]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+
+volumes:
+  inkplate-data:

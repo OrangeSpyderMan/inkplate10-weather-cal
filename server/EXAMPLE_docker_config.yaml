@@ -1,0 +1,32 @@
+---
+server:
+  enabled: true
+  port: 8080
+  alwayson: true
+  refreshhours: 3
+weather:
+  service: openweathermapv3
+  apikey: ${WEATHER_API_KEY}
+  num_hourly_forecasts: 6
+  metric: true
+current_temperature:
+  source: weather # weather or netatmo
+  netatmo:
+    client_id: ${NETATMO_CLIENT_ID:-}
+    client_secret: ${NETATMO_CLIENT_SECRET:-}
+    refresh_token: ${NETATMO_REFRESH_TOKEN:-}
+    token_file: data/netatmo-token.json
+    device_id: ${NETATMO_DEVICE_ID:-}
+    module_id: ${NETATMO_MODULE_ID:-}
+google:
+  apikey: ${GOOGLE_API_KEY}
+  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}
+location: Landry, FR
+image:
+  width: 825
+  height: 1200
+mqtt:
+  enabled: false
+  host: host.docker.internal
+  port: 1883
+  topic: mqtt/eink-cal-client
