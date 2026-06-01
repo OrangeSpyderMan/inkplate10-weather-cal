@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # install_service - install, enable and start the inkplate systemd service
-# Usage: ./bin/install_service [--unit-file PATH] [--no-start]
+# Usage: ./bin/install_service [--unit-file PATH] [--service-name NAME] [--dest PATH] [--no-start]
 
 SERVICE_SRC="bin/inkplate.service"
 SERVICE_NAME="inkplate"
@@ -16,16 +16,27 @@ while [[ ${#} -gt 0 ]]; do
       shift
       SERVICE_SRC="$1"
       ;;
+    --service-name)
+      shift
+      SERVICE_NAME="$1"
+      DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+      ;;
+    --dest)
+      shift
+      DEST="$1"
+      ;;
     --no-start)
       NO_START=1
       ;;
     -h|--help)
       cat <<EOF
-Usage: $0 [--unit-file PATH] [--no-start]
+Usage: $0 [--unit-file PATH] [--service-name NAME] [--dest PATH] [--no-start]
 
 Installs ${SERVICE_SRC} to ${DEST}, reloads systemd, enables and starts the service.
 Options:
   --unit-file PATH   Use PATH (relative to repo root) as the unit source
+  --service-name     Service name to enable/start (default: inkplate)
+  --dest PATH        Destination unit path (default: /etc/systemd/system/<name>.service)
   --no-start         Do not start/restart the service after installing
 EOF
       exit 0

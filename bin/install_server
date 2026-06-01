@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Inkplate Weather Calendar server installer
+
+This helper starts the interactive installer for the server component. It can
+configure either:
+
+  - Docker Compose from this checkout
+  - a native systemd service under /srv/inkplate
+
+Usage:
+  ./bin/install_server [--dry-run] [--mode docker|systemd]
+
+Useful first run:
+  ./bin/install_server --dry-run
+
+Run this command from the repository root.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [ ! -f "server/server.py" ] || [ ! -f "docker-compose.yml" ]; then
+  echo "ERROR: this does not look like the repository root." >&2
+  echo >&2
+  echo "Change into the cloned inkplate10-weather-cal directory, then run:" >&2
+  echo "  ./bin/install_server" >&2
+  exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 is required to run the installer, but it was not found." >&2
+  echo >&2
+  echo "On Debian/Ubuntu, install it with:" >&2
+  echo "  sudo apt-get install python3" >&2
+  exit 1
+fi
+
+echo "Starting the Inkplate Weather Calendar server installer."
+echo "Tip: use './bin/install_server --dry-run' to preview actions first."
+echo
+
+exec python3 bin/install_server.py "$@"

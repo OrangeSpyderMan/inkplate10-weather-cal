@@ -17,7 +17,46 @@ Example 1                  | Example 2                 | Example 3
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
 - Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
 
-## Setup 
+## Setup
+
+### Recommended interactive install
+
+From the repository root, run:
+
+```bash
+./bin/install_server
+```
+
+The installer walks through Docker Compose or native systemd installation. It
+uses the same defaults as the server code and example config: OpenWeatherMap v3,
+port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
+images, and MQTT disabled.
+
+It prompts for the location, weather API key, Google Static Maps API key, Google
+Static Maps Map ID, optional Netatmo credentials, optional MQTT logging, and
+whether to start the service or container. Secrets are written outside committed
+YAML:
+
+- Docker: `.env` plus `server/config.yaml`
+- systemd: `/etc/inkplate/env`, `/srv/inkplate/server/config.yaml`, and
+  `/srv/inkplate/inkplate_venv`
+
+Use dry-run mode to preview actions:
+
+```bash
+./bin/install_server --dry-run
+```
+
+Re-run the installer to update an existing install. It will detect existing
+Docker or systemd files and offer to update the application while preserving
+config/secrets, reconfigure config/secrets, or abort.
+
+Logs:
+
+```bash
+docker compose logs -f
+sudo journalctl -u inkplate -f
+```
 
 ### AccuWeather API
 
@@ -102,7 +141,7 @@ You can now use the map style to create a map ID that we can reference in our se
 
 At startup the server fetches this static map, converts it to a dithered grayscale PNG under `server/views/html/map.png`, and then uses that local image in the rendered calendar page. The generated HTML does not embed your Google API key.
 
-### Server setup
+### Manual native server setup
 
 Ensure Python3 is installed on your system
 ```
@@ -110,7 +149,9 @@ python3 --version
 Python 3.11.2
 ```
 
-Download project and install dependencies.  The default main branch is the latest stable branch.  The next branch contains changes planned for the next release - it should be OK to use.  But might not be.
+Download project and install dependencies. The default main branch is the latest
+stable branch. The next branch contains changes planned for the next release -
+it should be OK to use, but may be less tested.
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
@@ -134,6 +175,9 @@ Add this line:
 0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
 `/path/to/inkplate10-weather-cal` should be updated to the absolute path of your checkout.
+
+For a managed native service, prefer `./bin/install_server` unless you need to
+repair individual systemd pieces manually.
 
 ## Running in Docker
 

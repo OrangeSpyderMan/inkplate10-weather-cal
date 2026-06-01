@@ -2,10 +2,10 @@
 server:
   enabled: true
   port: 8080
-  aliveSeconds: 60
-  maxServes: 1
+  alwayson: true
+  refreshhours: 3
 weather:
-  service: accuweather
+  service: openweathermapv3
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
   metric: true
@@ -26,7 +26,7 @@ image:
   width: 825
   height: 1200
 mqtt:
-  enabled: true
+  enabled: false
   host: localhost
   port: 1883
   topic: mqtt/eink-cal-client

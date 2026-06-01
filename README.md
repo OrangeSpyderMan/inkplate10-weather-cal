@@ -8,7 +8,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 - [How it Works](#how-it-works)
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
-- [Service Installation (systemd)](#service-installation-systemd)
+- [Server Installation](#server-installation)
 - [Firmware](#firmware)
   - [Building with Arduino CLI](#building-with-arduino-cli)
   - [Building with Arduino IDE](#building-with-arduino-ide)
@@ -123,37 +123,46 @@ Likely parameters you'll need to change are:
 
 See the [server](/server) for info on server setup.
 
-## Service Installation (systemd)
+## Server Installation
 
-To install the server as a systemd service on your host, use the provided unit and installer.
+The recommended server setup is the interactive installer. It can configure
+either Docker Compose from this checkout or a native systemd service under
+`/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
 
-- Copy the unit and enable the service using the helper script (run from the repo root):
-
-```bash
-sudo ./bin/install_service
-```
-
-(No environment file is required by the unit by default.)
-
-- The systemd unit includes `ExecStartPre` checks for the venv and working directory. If startup fails, inspect logs:
+Run it from the repository root:
 
 ```bash
-sudo systemctl status inkplate.service
-sudo journalctl -u inkplate.service -n 200 --no-pager
+./bin/install_server
 ```
 
-- Post-install checklist:
-  - Ensure the `inkplate` user exists and owns `/srv/inkplate` and the virtualenv:
+The installer prompts for the weather provider, API keys, Google Static Maps
+Map ID, location, optional Netatmo details, optional MQTT logging, and whether
+to start the service/container. It keeps secrets out of committed YAML files:
+
+- Docker installs write secrets to `.env` and config to `server/config.yaml`.
+- systemd installs write secrets to `/etc/inkplate/env`, config to
+  `/srv/inkplate/server/config.yaml`, and dependencies to
+  `/srv/inkplate/inkplate_venv`.
+
+You can preview actions without writing files:
 
 ```bash
-sudo useradd --system --home /srv/inkplate inkplate || true
-sudo chown -R inkplate:inkplate /srv/inkplate
+./bin/install_server --dry-run
 ```
 
-- Ensure the virtualenv python path in the unit (`/srv/inkplate/inkplate_venv/bin/python3`) is correct and executable.
-- Confirm that any writable data (generated images, logs) is under `/srv/inkplate` so `ProtectSystem=full` in the unit does not block writes.
+Re-run the installer later to update an existing install. It will detect
+existing Docker or systemd files and offer to update the application while
+preserving config/secrets, reconfigure config/secrets, or abort.
 
-If you'd like to manage secrets outside the repo, consider keeping them on the host and updating the unit manually — the default unit shipped here does not load an environment file.
+For troubleshooting:
+
+```bash
+docker compose logs -f
+sudo journalctl -u inkplate -f
+```
+
+The lower-level helpers `bin/install_service` and `bin/refresh_deps` remain
+available for manual repair or advanced installs.
 
 ## Firmware
 
