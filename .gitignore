@@ -111,3 +111,4 @@ workspace.code-workspace
 server/REAL_config.yaml
 server/config.yaml
 server/netatmo-token.json
+.tools/arduino-cli
