@@ -80,7 +80,7 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need to something that can run Python 3 and chromedriver. The server itself is lightweight with the only real work involved is chromedriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. A board such as the Raspberry Pi Zero W is perfect for its low power-consumption but any computer you're happy with running 24/7 is suitable.
+  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The server itself is lightweight with the only real work involved being Geckodriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. A board such as the Raspberry Pi Zero W is perfect for its low power-consumption but any computer you're happy with running 24/7 is suitable.
 
 - **Black photo frame 8"x10" ~€10**
 

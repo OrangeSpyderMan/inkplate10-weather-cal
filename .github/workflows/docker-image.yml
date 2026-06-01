@@ -6,20 +6,40 @@ permissions:
 on:
   push:
     paths:
-    - 'server/**'
-    - 'Dockerfile'
+      - 'server/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.dockerignore'
   pull_request:
     paths:
-    - 'server/**'
-    - 'Dockerfile'
+      - 'server/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.dockerignore'
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag inkplate10-weather-cal:$(date +%s)
+      - uses: actions/checkout@v5
+
+      - name: Validate Docker Compose config
+        env:
+          WEATHER_API_KEY: dummy-weather-key
+          GOOGLE_API_KEY: dummy-google-key
+          GOOGLE_STATICMAPS_MAPID: dummy-map-id
+        run: docker compose config
+
+      - name: Build the Docker image
+        run: docker build . --file Dockerfile --tag inkplate10-weather-cal:ci
+
+      - name: Smoke test Docker image
+        run: |
+          docker run --rm inkplate10-weather-cal:ci geckodriver --version
+          docker run --rm inkplate10-weather-cal:ci firefox --version
+          docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
+            server/server.py \
+            server/utils.py \
+            server/views/page.py \
+            server/views/calendar.py

@@ -132,23 +132,74 @@ Add this line:
 
 ## Running in Docker
 
-In the server directory there is a docker-compose.yml and a Dockerfile that should allow the container to be created automagically.  
+The repository root contains the Dockerfile and `docker-compose.yml`. The image
+installs Firefox, Geckodriver, and the required Python modules, then runs the
+server as an unprivileged `inkplate` user.
 
+### Configure
+
+Create a Docker server config from the example:
+
+```bash
+cp server/EXAMPLE_docker_config.yaml server/config.yaml
+```
+
+For Docker, keep `server.alwayson: true`. The compose file uses
+`restart: unless-stopped`; one-shot server mode exits after serving or timing
+out and would otherwise restart repeatedly.
+
+Create a local `.env` file in the repository root. Docker Compose reads this
+file and passes the values into the container:
+
+```bash
+WEATHER_API_KEY=...
+GOOGLE_API_KEY=...
+GOOGLE_STATICMAPS_MAPID=...
+
+# Optional, only when current_temperature.source is netatmo
+NETATMO_CLIENT_ID=
+NETATMO_CLIENT_SECRET=
+NETATMO_REFRESH_TOKEN=
+NETATMO_DEVICE_ID=
+NETATMO_MODULE_ID=
+```
+
+The compose file mounts `server/config.yaml` read-only and stores mutable
+runtime data in the named `inkplate-data` volume. The Docker example sets the
+Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
+container replacement.
+
+Docker dependency updates are split across two mechanisms. Dependabot updates
+the Python packages, GitHub Actions, and Docker base image on the `next` branch.
+Geckodriver is pinned with the `GECKOVERSION` build argument, so a scheduled
+GitHub Actions workflow checks Mozilla's latest release and opens a pull request
+when that pin needs updating.
 
 ### Starting the container
 
-This should be as simple as running the following command from the root of your cloned repository :
+Run from the root of your cloned repository:
 
-```
-docker compose up
-```
-or if you don't want to attach to the running container :
-
-```
-docker compose up -d 
+```bash
+docker compose up --build
 ```
 
+Or detach it:
 
-It will download the base image, install chrome and the required python modules.  It can be made to run permanently with the option `alwayson: true`in the config.yaml file (defaults to `false`).  It will then refresh the calendar image every `refreshhours` as specified also in the `server:` section of config.yaml (defaults to every 3 hours if no value provided)
+```bash
+docker compose up --build -d
+```
 
-There is a sample crontab called [docker-errorlog](docker-errorlog) that can be used to check the docker logs for any ERROR messages.  By default that runs every hour, on the hour but may need some local tweaking.
+The server listens on port `8080` and serves the generated image from:
+
+```text
+http://localhost:8080/calendar.png
+```
+
+If MQTT logging is enabled, set `mqtt.host` in `server/config.yaml` to a host
+that is reachable from inside the container. On Docker Desktop,
+`host.docker.internal` usually points to the host. On Linux, you may prefer to
+run the MQTT broker as another Compose service or use the host's LAN IP.
+
+There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
+used to check the Docker logs for ERROR messages. By default that runs every
+hour, on the hour, but may need local tweaking.

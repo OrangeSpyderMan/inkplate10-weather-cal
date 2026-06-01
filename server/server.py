@@ -378,6 +378,7 @@ def serve_cal_png():
     f = open(path, "rb")
     stream = io.BytesIO(f.read())
     f.close()
+    server_num_serves += 1
     log.info(f"Served the image")
 
     return send_file(
