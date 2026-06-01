@@ -52,6 +52,7 @@ class CalendarPage(Page):
         if temperature_unit == "\N{DEGREE SIGN}F":
             temperature_axis_min = 5
             temperature_axis_max = 104
+        rain_axis_max = 220
 
         a("<!DOCTYPE html>")
         with a.html(lang="en"):
@@ -235,7 +236,7 @@ class CalendarPage(Page):
                                             display: false,
                                             ticks: {{
                                                 min: 0,
-                                                max: 100,
+                                                max: {6},
                                                 beginAtZero: true
                                             }}
                                         }}, {{
@@ -260,4 +261,5 @@ class CalendarPage(Page):
                         temperature_axis_min,
                         temperature_axis_max,
                         temperature_unit,
+                        rain_axis_max,
                     ))

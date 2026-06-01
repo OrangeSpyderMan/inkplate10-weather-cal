@@ -84,7 +84,9 @@ def main():
     )
 
     gapi = GoogleAPIService(google_apikey)
-    map_url = gapi.get_static_map_url(staticmaps_mapid, location)
+    map_file = os.path.join(cwd, "views", "html", "map.png")
+    gapi.save_static_map(staticmaps_mapid, location, map_file)
+    map_url = "map.png"
 
     weather_svc = None
     if weather_service_type == "accuweather":
