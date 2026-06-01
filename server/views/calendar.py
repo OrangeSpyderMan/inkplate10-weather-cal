@@ -41,7 +41,7 @@ class CalendarPage(Page):
         now_date = now.date()
         current_temperature = daily_summary["temperature"]
         current_temperature_text = (
-            str(current_temperature["value"]) + current_temperature["unit"]
+            str(current_temperature["value"]) + "\N{DEGREE SIGN}"
         )
         current_temperature_is_live = current_temperature.get("live", False)
         temperature_unit = current_temperature["unit"]
@@ -137,7 +137,7 @@ class CalendarPage(Page):
                                                 ):
                                                     a.img(src=forecast["icon"])
 
-                        a.canvas(id="rain-temp-chart", height="100")
+                        a.canvas(id="rain-temp-chart", height="180")
 
                 with a.script():
                     a("""
@@ -182,8 +182,12 @@ class CalendarPage(Page):
                                         borderColor: 'rgb(0, 0, 0)',
                                         datalabels: {{
                                             display: 'auto',
-                                            align: 'top',
-                                            anchor: 'start',
+                                            align: function(context) {{
+                                                var midpoint = ({3} + {4}) / 2;
+                                                var value = context.dataset.data[context.dataIndex];
+                                                return value >= midpoint ? 'bottom' : 'top';
+                                            }},
+                                            anchor: 'center',
                                             offset: 12,
                                             backgroundColor: "#FFF",
                                             borderRadius: 4,
@@ -192,7 +196,7 @@ class CalendarPage(Page):
                                                 size: 32
                                             }},
                                             formatter: function(value, context) {{
-                                                return value + "{5}";
+                                                return value + "\N{DEGREE SIGN}";
                                             }}
                                         }},
                                         rough: {{
@@ -236,7 +240,7 @@ class CalendarPage(Page):
                                             display: false,
                                             ticks: {{
                                                 min: 0,
-                                                max: {6},
+                                                max: {5},
                                                 beginAtZero: true
                                             }}
                                         }}, {{
@@ -260,6 +264,5 @@ class CalendarPage(Page):
                         temps,
                         temperature_axis_min,
                         temperature_axis_max,
-                        temperature_unit,
                         rain_axis_max,
                     ))
