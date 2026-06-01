@@ -9,6 +9,7 @@ Display today's date, weather forecast and a stylised map of your city using an 
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
 - [Firmware](#firmware)
+  - [Building with Arduino CLI](#building-with-arduino-cli)
   - [Building with Arduino IDE](#building-with-arduino-ide)
 - [License](#license)
 
@@ -30,7 +31,7 @@ Both a server and client and required. The main workload is in the server which 
 4. Attempt to download the PNG image that the server is hosting.
 5. Write the downloaded PNG image to SD card.
 6. Read the PNG image back from SD card and write to the e-ink display.
-7. Returns to deep sleep until the next scheduled wake time (eg. 24 hours).
+7. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
 
@@ -38,7 +39,7 @@ Both a server and client and required. The main workload is in the server which 
   - approx 21µA in deep sleep
   - approx 240mA awake
   - approx 30 seconds awake time daily
-- Real-time clock for precise sleep/wake times.
+- Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
 - Can publish to a MQTT topic for remote-logging.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
@@ -53,7 +54,7 @@ Both a server and client and required. The main workload is in the server which 
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
 5. (Optional) The server listens for client logs by subscribing to a MQTT topic using [Mosquitto](https://mosquitto.org/).
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
-7. A cronjob ensures the server is started at the next scheduled wake time of the client.
+7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
 
 #### Features:
 
@@ -155,9 +156,64 @@ If you'd like to manage secrets outside the repo, consider keeping them on the h
 
 ## Firmware
 
+### Building with Arduino CLI
+
+The firmware still uses the Arduino framework and Inkplate Arduino libraries, but
+it can be built without opening the Arduino IDE. This is the preferred workflow
+for repeatable local builds.
+
+Install the Arduino CLI into `.tools/`:
+
+```bash
+make firmware-install-cli
+```
+
+The installer downloads a pinned Arduino CLI release for your OS/architecture.
+The `.tools/` directory is ignored by git so the binary is not committed. If you
+already have `arduino-cli` installed on your `PATH`, you can skip this step.
+
+Then install the Inkplate board package and required libraries (these libraries are installed locally under `build/sketchbook/` to avoid polluting your global Arduino library directory):
+
+```bash
+make firmware-setup
+```
+
+Compile the firmware:
+
+```bash
+make firmware-compile
+```
+
+To clean build artifacts and local libraries:
+
+```bash
+make firmware-clean
+```
+
+Upload to a connected Inkplate 10:
+
+```bash
+make firmware-upload PORT=/dev/ttyUSB0
+```
+
+On macOS the port is usually under `/dev/cu.*`; on Windows it is usually a
+`COMx` port. You can list connected boards with:
+
+```bash
+make firmware-board-list
+```
+
+The default CLI build target is `Inkplate_Boards:esp32:Inkplate10V2`, using the
+Inkplate board package version `8.1.0`. These defaults can be overridden, for
+example:
+
+```bash
+make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
+```
+
 ### Building with Arduino IDE
 
-The firmware can be compiled correctly on the Arduino IDE. There is a compiled firmware copy that is shared in [Compiled Firmware](compiled_firmware). You may be able to use this to program your board directly, but I would recommend setting up an Arduino IDE with the latest library versions and compiling a version locally.
+The firmware can be compiled correctly on the Arduino IDE. There is a compiled firmware copy that is shared in [Firmware Binaries](firmware_binaries). You may be able to use this to program your board directly, but I would recommend setting up an Arduino IDE with the latest library versions and compiling a version locally.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition). The documentation for that is available here :
 

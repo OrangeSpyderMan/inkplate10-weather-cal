@@ -1,0 +1,75 @@
+name: Firmware CI
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'Makefile'
+      - 'bin/install_arduino_cli.sh'
+      - '.github/workflows/firmware.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'Makefile'
+      - 'bin/install_arduino_cli.sh'
+      - '.github/workflows/firmware.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Cache Arduino packages and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            build/sketchbook
+          key: arduino-${{ runner.os }}-${{ hashFiles('Makefile', 'bin/install_arduino_cli.sh') }}
+          restore-keys: |
+            arduino-${{ runner.os }}-
+
+      - name: Install platforms and libraries
+        run: |
+          make firmware-setup
+
+      - name: Compile firmware
+        run: |
+          make firmware-compile
+
+      - name: Collect firmware binaries
+        run: |
+          mkdir -p firmware_binaries
+
+          cp build/arduino/src.ino.bin firmware_binaries/inkplate10-firmware.bin
+          cp build/arduino/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkplate10-firmware
+          path: firmware_binaries/*
+
+      - name: Commit and push firmware binaries
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add firmware_binaries/
+
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "chore: update compiled Arduino firmware [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "No changes to the firmware binaries detected."
+          fi
