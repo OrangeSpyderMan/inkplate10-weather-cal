@@ -1,5 +1,18 @@
 FROM python:3.13-slim-bookworm
 
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+LABEL org.opencontainers.image.title="Inkplate 10 Weather Calendar" \
+    org.opencontainers.image.description="Server renderer for the Inkplate 10 weather calendar" \
+    org.opencontainers.image.url="https://github.com/OrangeSpyderMan/inkplate10-weather-cal" \
+    org.opencontainers.image.source="https://github.com/OrangeSpyderMan/inkplate10-weather-cal" \
+    org.opencontainers.image.licenses="MIT" \
+    org.opencontainers.image.created="${BUILD_DATE}" \
+    org.opencontainers.image.revision="${VCS_REF}" \
+    org.opencontainers.image.version="${VERSION}"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1

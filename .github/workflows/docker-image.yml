@@ -10,12 +10,16 @@ on:
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
+      - '.env.example'
+      - '.github/workflows/docker-image.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
+      - '.env.example'
+      - '.github/workflows/docker-image.yml'
 
 jobs:
   build:

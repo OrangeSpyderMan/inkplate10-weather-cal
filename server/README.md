@@ -230,6 +230,12 @@ Create a local `.env` file in the repository root. Docker Compose reads this
 file and passes the values into the container:
 
 ```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```bash
 WEATHER_API_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_STATICMAPS_MAPID=...
@@ -246,6 +252,16 @@ The compose file mounts `server/config.yaml` read-only and stores mutable
 runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement.
+
+The published OCI images are:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+ghcr.io/orangespyderman/inkplate10-weather-cal:next
+```
+
+Use `:main` for stable deployments. Use `:next` to test changes before they are
+promoted to `main`.
 
 Do not commit `server/config.yaml` or `.env`; keep API keys and refresh tokens
 in local files or runtime environment variables.
@@ -270,6 +286,13 @@ Or detach it:
 docker compose up --build -d
 ```
 
+To use the published image instead of building locally, replace the Compose
+service `build:` block with:
+
+```yaml
+image: ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
 The server listens on port `8080` and serves the generated image from:
 
 ```text
@@ -287,3 +310,60 @@ run the MQTT broker as another Compose service or use the host's LAN IP.
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
 used to check the Docker logs for ERROR messages. By default that runs every
 hour, on the hour, but may need local tweaking.
+
+## Running from a Published OCI Image
+
+The image is a normal OCI image and can be run by Docker, Podman, or platforms
+that consume OCI images directly.
+
+Example Podman/Docker run:
+
+```bash
+podman run -d \
+  --name inkplate-weather-cal \
+  --env-file .env \
+  -p 8080:8080 \
+  -v ./server/config.yaml:/srv/inkplate/server/config.yaml:ro \
+  -v inkplate-data:/srv/inkplate/server/data \
+  ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
+Use `docker run` with the same arguments if you prefer Docker.
+
+### Proxmox VE 9.1 OCI LXC
+
+Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
+usable as an OCI source, but treat this as newer and less tested than Docker
+Compose until it has been exercised on your Proxmox host.
+
+Recommended image:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
+Use the `:next` tag only when you want to test upcoming changes.
+
+If the Proxmox host pulls directly from GHCR without registry credentials, make
+the GitHub package public. Otherwise, configure registry credentials in Proxmox
+before creating the container.
+
+Configure the container with:
+
+- environment variables from `.env.example`
+- port `8080` exposed to your LAN
+- a read-only config mount at `/srv/inkplate/server/config.yaml`
+- persistent storage mounted at `/srv/inkplate/server/data`
+
+The generated PNG is served from:
+
+```text
+http://<container-ip-or-hostname>:8080/calendar.png
+```
+
+Known caveats:
+
+- Proxmox OCI support is newer than standard Docker/Podman workflows.
+- Proxmox mount and environment-variable management is not the same as Compose.
+- Firefox/Geckodriver should be tested on the target Proxmox host.
+- The renderer is tuned for Inkplate 10 portrait output at `825x1200`.
