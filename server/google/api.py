@@ -77,7 +77,7 @@ class GoogleAPIService:
                 palette_values += [value, value, value]
             palette_values += [0] * (768 - len(palette_values))
             palette.putpalette(palette_values)
-            dithered = gray.quantize(
+            dithered = gray.convert("RGB").quantize(
                 colors=4,
                 palette=palette,
                 dither=Image.Dither.FLOYDSTEINBERG,
