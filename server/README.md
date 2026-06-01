@@ -135,6 +135,14 @@ Config values can reference environment variables with `${VARIABLE_NAME}`. Use `
 
 This lets you keep committed YAML files free of secrets and inject sensitive values from the runtime environment. In GitHub Actions, store those values as repository or environment secrets and pass them to the relevant step with `env:`. For local Docker runs, use an ignored `.env` file or shell environment variables.
 
+### Image dimensions
+
+The `image.width` and `image.height` config values set the browser capture
+target for the generated PNG. The current HTML/CSS layout is tuned for Inkplate
+10 portrait output at `825x1200`; those options are not a general layout scaling
+system. Changing them may produce cropped, stretched, or poorly spaced output
+unless the layout is also retuned.
+
 ### Google StaticMaps API
 
 <img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />
