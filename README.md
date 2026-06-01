@@ -1,6 +1,6 @@
 # Inkplate 10 Weather Calendar
 
-Display today's date, weather forecast and a stylised map of your city using an Inkplate 10 that can last for months on a single battery.
+Display today's date, weather forecast and a stylised map of your area using an Inkplate 10 and a small server.
 
 <img src=https://user-images.githubusercontent.com/5797356/223708925-131d7ecc-5e95-453a-b687-427b75d959dd.jpg width=800 />
 
@@ -8,6 +8,7 @@ Display today's date, weather forecast and a stylised map of your city using an 
 - [How it Works](#how-it-works)
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
+- [Service Installation (systemd)](#service-installation-systemd)
 - [Firmware](#firmware)
   - [Building with Arduino CLI](#building-with-arduino-cli)
   - [Building with Arduino IDE](#building-with-arduino-ide)
@@ -15,11 +16,11 @@ Display today's date, weather forecast and a stylised map of your city using an 
 
 ## Background
 
-I was looking for a weather station for my home. I googled a few projects, and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This is a fork of that project, as I wanted to make some changes, and particularly I wasn't too bothered about having long battery life, and wanted to run the server side as a docker container on a small SBC type system that would run all the time to allow more frequent updates. I made a few other tweaks, but it's broadly Chris' work.
+I was looking for a weather station for my home and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This is a fork of that project. The main differences are a stronger focus on Docker-based server deployment, more frequent updates, and a few display and firmware tweaks, but the original concept is Chris' work.
 
 ## How it Works
 
-Both a server and client and required. The main workload is in the server which allows the client to save power by not generating the image itself. The client can also be placed where it has access to your WiFi network.
+Both a server and client are required. The main workload is on the server, which allows the client to save power by not generating the image itself. The client only needs WiFi access to the server-hosted PNG.
 
 <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/ff903fe3-4576-41d1-92b5-3a374242759a width=800 />
 
@@ -27,8 +28,8 @@ Both a server and client and required. The main workload is in the server which 
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
 2. Attempts to get current network time and update real-time clock.
-3. (Optional) Attempts to connect a MQTT topic to publish logs. This allows us to see what the ESP32 controller is doing without needing to monitor the serial connection.
-4. Attempt to download the PNG image that the server is hosting.
+3. (Optional) Attempts to connect to an MQTT topic to publish logs. This allows us to see what the ESP32 controller is doing without needing to monitor the serial connection.
+4. Attempts to download the PNG image that the server is hosting.
 5. Write the downloaded PNG image to SD card.
 6. Read the PNG image back from SD card and write to the e-ink display.
 7. Returns to deep sleep for the configured refresh interval.
@@ -41,7 +42,7 @@ Both a server and client and required. The main workload is in the server which 
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
-- Can publish to a MQTT topic for remote-logging.
+- Can publish to an MQTT topic for remote logging.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
 - Stores calendar images on SD card.
 - Reconfigure client by updating YAML file on SD card and reboot - easy!
@@ -52,7 +53,7 @@ Both a server and client and required. The main workload is in the server which 
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
-5. (Optional) The server listens for client logs by subscribing to a MQTT topic using [Mosquitto](https://mosquitto.org/).
+5. (Optional) The server listens for client logs by subscribing to an MQTT topic using [Mosquitto](https://mosquitto.org/).
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
 7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
 
@@ -80,7 +81,7 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The server itself is lightweight with the only real work involved being Geckodriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. A board such as the Raspberry Pi Zero W is perfect for its low power-consumption but any computer you're happy with running 24/7 is suitable.
+  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The server itself is lightweight with the only real work involved being Geckodriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -92,7 +93,7 @@ Place `config.yaml` in the root directory of an SD card and connect it to your I
 
 ```
 calendar:
-  url: http://localhost:8080/calendar.png
+  url: http://<server-host>:8080/calendar.png
   refresh_interval: 3
   retries: 3
 wifi:
@@ -111,11 +112,11 @@ mqtt_logger:
   retries: 3
 ```
 
-Likely parameters you'll need to change is
+Likely parameters you'll need to change are:
 
-- `wifi.ssid` - the SSID if your WiFi network.
+- `wifi.ssid` - the SSID of your WiFi network.
 - `wifi.pass` - the WiFi password.
-- `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from.
+- `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
 - `mqtt_logger.broker` - the hostname or IP address of your server (likely the same server as the image host).
@@ -222,7 +223,7 @@ The below assumes you already have a working Arduino environment, configure for 
 The following libraries should be installed in your Arduino IDE. They are available in the IDE's Library Manager :
 
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
-- [Arduinojson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
+- [ArduinoJson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
 - [MQTTLogger](https://github.com/androbi-com/MqttLogger)
 - [Queue](https://github.com/SMFSW/Queue)
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)

@@ -12,16 +12,16 @@ Example 1                  | Example 2                 | Example 3
 
 
 
-- Uses [Accuweather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
+- Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
 - Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
 
 ## Setup 
 
-### Accuweather API
+### AccuWeather API
 
-This is the least tested API
+This is the least tested API.
  
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
@@ -38,11 +38,11 @@ This provider is no longer supported in this version.  Please use [OpenWeatherMa
 
 ### OpenWeatherMapv3 API
 
-This it the API that has had the most testing.
+This is the API that has had the most testing.
 
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine not only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
+The server currently samples the hourly forecast at three-hour intervals. The number of forecast slots is configured with `weather.num_hourly_forecasts`; the example config uses 6. Larger values may need layout tuning so the forecast row remains readable on the Inkplate display.
 
 ### Current temperature source
 
@@ -90,7 +90,7 @@ In order to generate a static map of your area you will need to sign up to [Goog
 This will give us access to the Static Maps API service. In order to re-create the static map in the picture above, we first need to create a map style:
 
 1. In Google Maps Platform → `Map styles` → `Create style`
-2. In order to replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. This should replicate the map style I use.  /!\ This may currently not work on the new version of the Maps API.  
+2. To replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. Google has changed this UI over time, so treat this file as a starting point if the import flow has moved or the rendered style differs.
 3. Click `Save` and assign a name to the map style.
 
 You can now use the map style to create a map ID that we can reference in our server:
@@ -98,7 +98,9 @@ You can now use the map style to create a map ID that we can reference in our se
 1. In Google Maps Platform → `Map management` → `Create Map ID`.
 2. Give the Map ID a name and make sure `map type` is set to `static`, then click `Save`.
 3. Update the `associated map style` to the name of the map style created in the steps earlier.
-4. Copy the `Map ID` and update the `google.staticmaps_id` field in `config.yaml`.
+4. Copy the `Map ID` and update the `google.staticmaps_mapid` field in `config.yaml`.
+
+At startup the server fetches this static map, converts it to a dithered grayscale PNG under `server/views/html/map.png`, and then uses that local image in the rendered calendar page. The generated HTML does not embed your Google API key.
 
 ### Server setup
 
@@ -112,12 +114,15 @@ Download project and install dependencies.  The default main branch is the lates
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
-python3 -m pip install -r requirements.txt
+cp server/EXAMPLE_config.yaml server/config.yaml
+python3 -m pip install -r server/requirements.txt
 ```
+
+Edit `server/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
 
 Run the server manually:
 ```
-python3 server.py
+python3 server/server.py
 ```
 
 Run the server 9am each day:
@@ -126,9 +131,9 @@ crontab -e
 ```
 Add this line:
 ```
-0 9 * * * /usr/bin/python3 /path/to/server.py
+0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
-`/path/to/server.py` should be updated to whatever the absolute path is to where `server.py` is on your filesystem.
+`/path/to/inkplate10-weather-cal` should be updated to the absolute path of your checkout.
 
 ## Running in Docker
 
@@ -169,6 +174,9 @@ runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement.
 
+Do not commit `server/config.yaml` or `.env`; keep API keys and refresh tokens
+in local files or runtime environment variables.
+
 Docker dependency updates are split across two mechanisms. Dependabot updates
 the Python packages, GitHub Actions, and Docker base image on the `next` branch.
 Geckodriver is pinned with the `GECKOVERSION` build argument, so a scheduled
@@ -194,6 +202,9 @@ The server listens on port `8080` and serves the generated image from:
 ```text
 http://localhost:8080/calendar.png
 ```
+
+`localhost` is correct when testing from the Docker host. The Inkplate firmware
+must use the host's LAN hostname or IP address in `calendar.url`.
 
 If MQTT logging is enabled, set `mqtt.host` in `server/config.yaml` to a host
 that is reachable from inside the container. On Docker Desktop,
