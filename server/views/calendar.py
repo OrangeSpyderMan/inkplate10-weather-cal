@@ -83,23 +83,20 @@ class CalendarPage(Page):
                                 _t=now_date.strftime("%B"),
                             )
 
-                        a.h4(
-                            id="temp",
-                            klass="numcircle text-center",
-                            _t=current_temperature_text,
-                        )
-
-                        icon_container_class = "numcircle"
+                        temp_class = "numcircle text-center"
                         if current_temperature_is_live:
-                            icon_container_class += " live-icon"
+                            temp_class += " live-icon"
 
-                        with a.div(id="icon-container", klass=icon_container_class):
+                        with a.h4(id="temp", klass=temp_class):
                             if current_temperature_is_live:
                                 with a.div(klass="live-radio"):
                                     a.span(klass="live-radio-mast")
                                     with a.span(klass="live-radio-waves"):
                                         a.span()
                                         a.span()
+                            a(current_temperature_text)
+
+                        with a.div(id="icon-container", klass="numcircle"):
                             a.img(src=daily_summary["icon"])
 
                 with a.div(id="map-container"):

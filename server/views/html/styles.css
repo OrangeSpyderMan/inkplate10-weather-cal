@@ -93,7 +93,7 @@ h4.numcircle, #icon-container.numcircle {
   right: 2vw;
 }
 
-#icon-container.live-icon {
+.numcircle.live-icon {
   overflow: visible;
 }
 
