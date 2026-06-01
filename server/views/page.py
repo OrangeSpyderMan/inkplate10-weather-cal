@@ -43,12 +43,15 @@ class Page:
         )
         service = Service(geckodriver_path)
         options.add_argument("-headless")
+        options.add_argument(f"--width={self.image_width}")
+        options.add_argument(f"--height={self.image_height}")
         driver = webdriver.Firefox(service=service, options=options)
 
         try:
-            driver.set_window_size(self.image_width, self.image_height)
             driver.get("file://" + html_fp)
+            self._resize_viewport(driver)
             sleep(2)  # Wait for the page to load completely
+            self._resize_viewport(driver)
             driver.save_screenshot(png_fp)
             self.log.info("Screenshot captured and saved to file.")
         except Exception as e:
@@ -56,3 +59,18 @@ class Page:
             raise
         finally:
             driver.quit()
+
+    def _resize_viewport(self, driver):
+        viewport = driver.execute_script(
+            "return {width: window.innerWidth, height: window.innerHeight};"
+        )
+        width_delta = self.image_width - int(viewport["width"])
+        height_delta = self.image_height - int(viewport["height"])
+        if width_delta == 0 and height_delta == 0:
+            return
+
+        window_size = driver.get_window_size()
+        driver.set_window_size(
+            window_size["width"] + width_delta,
+            window_size["height"] + height_delta,
+        )
