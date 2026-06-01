@@ -54,7 +54,7 @@ class CalendarPage(Page):
             temperature_axis_max = 104
         rain_axis_max = 220
         chart_width = int(self.image_width * 0.95)
-        chart_height = 280
+        chart_height = 400
 
         a("<!DOCTYPE html>")
         with a.html(lang="en"):
