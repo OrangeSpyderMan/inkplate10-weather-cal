@@ -1,0 +1,19 @@
+{
+  "mode": "docker",
+  "existing_action": "reconfigure",
+  "start_now": false,
+  "port": 8080,
+  "refresh_hours": 3,
+  "location": "Landry, FR",
+  "weather_service": "openweathermapv3",
+  "weather_api_key": "replace-with-weather-api-key",
+  "google_api_key": "replace-with-google-api-key",
+  "google_staticmaps_mapid": "replace-with-google-staticmaps-map-id",
+  "num_hourly_forecasts": 6,
+  "metric": true,
+  "netatmo_enabled": false,
+  "mqtt_enabled": false,
+  "mqtt_host": "host.docker.internal",
+  "mqtt_port": 1883,
+  "mqtt_topic": "mqtt/eink-cal-client"
+}

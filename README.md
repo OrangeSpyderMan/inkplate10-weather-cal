@@ -140,14 +140,24 @@ Map ID, location, optional Netatmo details, optional MQTT logging, and whether
 to start the service/container. It keeps secrets out of committed YAML files:
 
 - Docker installs write secrets to `.env` and config to `server/config.yaml`.
-- systemd installs write secrets to `/etc/inkplate/env`, config to
+- systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config.yaml`, and dependencies to
   `/srv/inkplate/inkplate_venv`.
+
+For native systemd installs, run as root or as a user that can elevate with
+`sudo`, `doas`, or `run0`. The installer checks this before making system
+changes and exits cleanly if it cannot get the required privileges.
 
 You can preview actions without writing files:
 
 ```bash
 ./bin/install_server --dry-run
+```
+
+For CI or repeatable testing, use a JSON answers file:
+
+```bash
+./bin/install_server --dry-run --non-interactive --answers bin/install_server.answers.example.json
 ```
 
 Re-run the installer later to update an existing install. It will detect
@@ -160,6 +170,9 @@ For troubleshooting:
 docker compose logs -f
 sudo journalctl -u inkplate -f
 ```
+
+If Docker reports socket permission errors after adding a user to the `docker`
+group, start a new login session or run `newgrp docker` before retrying.
 
 The lower-level helpers `bin/install_service` and `bin/refresh_deps` remain
 available for manual repair or advanced installs.
