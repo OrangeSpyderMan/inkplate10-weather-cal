@@ -38,14 +38,32 @@ whether to start the service or container. Secrets are written outside committed
 YAML:
 
 - Docker: `.env` plus `server/config.yaml`
-- systemd: `/etc/inkplate/env`, `/srv/inkplate/server/config.yaml`, and
+- systemd: `/etc/inkplate/weather.env`, `/srv/inkplate/server/config.yaml`, and
   `/srv/inkplate/inkplate_venv`
+
+Docker mode runs as the current user and expects that user to be able to run
+`docker compose`. Native systemd mode needs root privileges for package
+installation, `/srv/inkplate`, `/etc/inkplate/weather.env`, Geckodriver, and
+systemd service management. Run it as root or as a user that can elevate with
+`sudo`, `doas`, or `run0`; the installer checks this before making system
+changes. Docker mode checks that `docker compose` is available and that the
+current user can talk to the Docker daemon before starting the container.
 
 Use dry-run mode to preview actions:
 
 ```bash
 ./bin/install_server --dry-run
 ```
+
+For CI or repeatable testing, use the example JSON answers file:
+
+```bash
+./bin/install_server --dry-run --non-interactive --answers bin/install_server.answers.example.json
+```
+
+The example answers file contains placeholder secrets and is intended for
+dry-run testing. Copy it and replace those values before using it for a real
+non-interactive install.
 
 Re-run the installer to update an existing install. It will detect existing
 Docker or systemd files and offer to update the application while preserving
@@ -57,6 +75,9 @@ Logs:
 docker compose logs -f
 sudo journalctl -u inkplate -f
 ```
+
+If Docker reports socket permission errors after adding a user to the `docker`
+group, start a new login session or run `newgrp docker` before retrying.
 
 ### AccuWeather API
 

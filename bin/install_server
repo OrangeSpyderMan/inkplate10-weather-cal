@@ -11,8 +11,12 @@ configure either:
   - Docker Compose from this checkout
   - a native systemd service under /srv/inkplate
 
+Native systemd installs must run as root or from a user that can elevate with
+sudo, doas, or run0. The installer checks this before making system changes.
+
 Usage:
   ./bin/install_server [--dry-run] [--mode docker|systemd]
+  ./bin/install_server --dry-run --non-interactive --answers bin/install_server.answers.example.json
 
 Useful first run:
   ./bin/install_server --dry-run
