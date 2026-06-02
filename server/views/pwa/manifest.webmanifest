@@ -4,7 +4,7 @@
   "description": "A mobile viewer for the rendered Inkplate weather calendar.",
   "start_url": "/app",
   "scope": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#f7f5ec",
   "theme_color": "#f7f5ec",
   "orientation": "any",
