@@ -16,7 +16,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 
 ## Background
 
-I was looking for a weather station for my home and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This is a fork of that project. The main differences are a stronger focus on Docker-based server deployment, more frequent updates, and a few display and firmware tweaks, but the original concept is Chris' work.
+I was looking for a weather station for my home and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This project began as a fork of that work, but has since diverged into a separately maintained project with a stronger focus on Docker-based server deployment, repeatable firmware builds, published container images, installer tooling, and display/server tweaks. The original concept remains Chris' work, and the repository history and license attribution preserve that origin.
 
 ## How it Works
 
