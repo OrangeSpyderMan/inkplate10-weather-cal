@@ -2,22 +2,34 @@
 server:
   enabled: true
   port: 8080
-  aliveSeconds: 60
-  maxServes: 1
+  alwayson: true
+  refreshhours: 3
 weather:
-  service: accuweather
-  apikey: XXXX # CHANGE THIS TO YOUR OWN API KEY
+  service: openweathermapv3
+  apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
   metric: true
+current_temperature:
+  source: weather # weather or netatmo
+  netatmo:
+    client_id: ${NETATMO_CLIENT_ID:-}
+    client_secret: ${NETATMO_CLIENT_SECRET:-}
+    refresh_token: ${NETATMO_REFRESH_TOKEN:-}
+    token_file: netatmo-token.json
+    device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
+    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
 google:
-  apikey: XXXX # CHANGE THIS TO YOU OWN API KEY
-  staticmaps_mapid: XXXX # CHANGE THIS TO YOUR OWN MAPID
+  apikey: ${GOOGLE_API_KEY}
+  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}
 location: Landry, FR
 image:
+  # The renderer is tuned for Inkplate 10 portrait output. These values set the
+  # screenshot target, but arbitrary dimensions are not currently guaranteed to
+  # scale the full layout correctly.
   width: 825
   height: 1200
 mqtt:
-  enabled: true
+  enabled: false
   host: localhost
   port: 1883
   topic: mqtt/eink-cal-client

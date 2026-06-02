@@ -12,16 +12,76 @@ Example 1                  | Example 2                 | Example 3
 
 
 
-- Uses [Accuweather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
+- Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
 - Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
 
-## Setup 
+## Setup
 
-### Accuweather API
+### Recommended interactive install
 
-This is the least tested API
+From the repository root, run:
+
+```bash
+./bin/install_server
+```
+
+The installer walks through Docker Compose or native systemd installation. It
+uses the same defaults as the server code and example config: OpenWeatherMap v3,
+port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
+images, and MQTT disabled.
+
+It prompts for the location, weather API key, Google Static Maps API key, Google
+Static Maps Map ID, optional Netatmo credentials, optional MQTT logging, and
+whether to start the service or container. Secrets are written outside committed
+YAML:
+
+- Docker: `.env` plus `server/config.yaml`
+- systemd: `/etc/inkplate/weather.env`, `/srv/inkplate/server/config.yaml`, and
+  `/srv/inkplate/inkplate_venv`
+
+Docker mode runs as the current user and expects that user to be able to run
+`docker compose`. Native systemd mode needs root privileges for package
+installation, `/srv/inkplate`, `/etc/inkplate/weather.env`, Geckodriver, and
+systemd service management. Run it as root or as a user that can elevate with
+`sudo`, `doas`, or `run0`; the installer checks this before making system
+changes. Docker mode checks that `docker compose` is available and that the
+current user can talk to the Docker daemon before starting the container.
+
+Use dry-run mode to preview actions:
+
+```bash
+./bin/install_server --dry-run
+```
+
+For CI or repeatable testing, use the example JSON answers file:
+
+```bash
+./bin/install_server --dry-run --non-interactive --answers bin/install_server.answers.example.json
+```
+
+The example answers file contains placeholder secrets and is intended for
+dry-run testing. Copy it and replace those values before using it for a real
+non-interactive install.
+
+Re-run the installer to update an existing install. It will detect existing
+Docker or systemd files and offer to update the application while preserving
+config/secrets, reconfigure config/secrets, or abort.
+
+Logs:
+
+```bash
+docker compose logs -f
+sudo journalctl -u inkplate -f
+```
+
+If Docker reports socket permission errors after adding a user to the `docker`
+group, start a new login session or run `newgrp docker` before retrying.
+
+### AccuWeather API
+
+This is the least tested API.
  
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
@@ -38,11 +98,50 @@ This provider is no longer supported in this version.  Please use [OpenWeatherMa
 
 ### OpenWeatherMapv3 API
 
-This it the API that has had the most testing.
+This is the API that has had the most testing.
 
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-This provides a lot more data than is displayed, but is set to display only three-hourly forecasts.  It can do hourly, but will need display format changes to work properly [TODO - portrait mode display?].  [TODO - add configuration options to determine not only the number of forecasts but also the hourly interval to use.  Currently is hardcoded to 6]
+The server currently samples the hourly forecast at three-hour intervals. The number of forecast slots is configured with `weather.num_hourly_forecasts`; the example config uses 6. Larger values may need layout tuning so the forecast row remains readable on the Inkplate display.
+
+### Current temperature source
+
+By default the current temperature shown on the display comes from the configured weather provider:
+
+```yaml
+current_temperature:
+  source: weather
+```
+
+You can optionally use a Netatmo Weather Station for only the current temperature while keeping the configured weather provider for the icon, min/max temperature, hourly forecast, and rain chart:
+
+```yaml
+current_temperature:
+  source: netatmo
+  netatmo:
+    client_id: ${NETATMO_CLIENT_ID:-}
+    client_secret: ${NETATMO_CLIENT_SECRET:-}
+    refresh_token: ${NETATMO_REFRESH_TOKEN:-}
+    token_file: netatmo-token.json
+    device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
+    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
+```
+
+The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
+
+### Secrets
+
+Config values can reference environment variables with `${VARIABLE_NAME}`. Use `${VARIABLE_NAME:-default}` when the value is optional or when a provider is configured but not currently selected.
+
+This lets you keep committed YAML files free of secrets and inject sensitive values from the runtime environment. In GitHub Actions, store those values as repository or environment secrets and pass them to the relevant step with `env:`. For local Docker runs, use an ignored `.env` file or shell environment variables.
+
+### Image dimensions
+
+The `image.width` and `image.height` config values set the browser capture
+target for the generated PNG. The current HTML/CSS layout is tuned for Inkplate
+10 portrait output at `825x1200`; those options are not a general layout scaling
+system. Changing them may produce cropped, stretched, or poorly spaced output
+unless the layout is also retuned.
 
 ### Google StaticMaps API
 
@@ -59,7 +158,7 @@ In order to generate a static map of your area you will need to sign up to [Goog
 This will give us access to the Static Maps API service. In order to re-create the static map in the picture above, we first need to create a map style:
 
 1. In Google Maps Platform → `Map styles` → `Create style`
-2. In order to replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. This should replicate the map style I use.  /!\ This may currently not work on the new version of the Maps API.  
+2. To replicate the style used above, select `Import JSON` and paste the contents of [map-style.json](google/staticmaps/map-style.json.DEFAULT) into the text field. Google has changed this UI over time, so treat this file as a starting point if the import flow has moved or the rendered style differs.
 3. Click `Save` and assign a name to the map style.
 
 You can now use the map style to create a map ID that we can reference in our server:
@@ -67,9 +166,11 @@ You can now use the map style to create a map ID that we can reference in our se
 1. In Google Maps Platform → `Map management` → `Create Map ID`.
 2. Give the Map ID a name and make sure `map type` is set to `static`, then click `Save`.
 3. Update the `associated map style` to the name of the map style created in the steps earlier.
-4. Copy the `Map ID` and update the `google.staticmaps_id` field in `config.yaml`.
+4. Copy the `Map ID` and update the `google.staticmaps_mapid` field in `config.yaml`.
 
-### Server setup
+At startup the server fetches this static map, converts it to a dithered grayscale PNG under `server/views/html/map.png`, and then uses that local image in the rendered calendar page. The generated HTML does not embed your Google API key.
+
+### Manual native server setup
 
 Ensure Python3 is installed on your system
 ```
@@ -77,16 +178,21 @@ python3 --version
 Python 3.11.2
 ```
 
-Download project and install dependencies.  The default main branch is the latest stable branch.  The next branch contains changes planned for the next release - it should be OK to use.  But might not be.
+Download project and install dependencies. The default main branch is the latest
+stable branch. The next branch contains changes planned for the next release -
+it should be OK to use, but may be less tested.
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
-python3 -m pip install -r requirements.txt
+cp server/EXAMPLE_config.yaml server/config.yaml
+python3 -m pip install -r server/requirements.txt
 ```
+
+Edit `server/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
 
 Run the server manually:
 ```
-python3 server.py
+python3 server/server.py
 ```
 
 Run the server 9am each day:
@@ -95,29 +201,169 @@ crontab -e
 ```
 Add this line:
 ```
-0 9 * * * /usr/bin/python3 /path/to/server.py
+0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
-`/path/to/server.py` should be updated to whatever the absolute path is to where `server.py` is on your filesystem.
+`/path/to/inkplate10-weather-cal` should be updated to the absolute path of your checkout.
+
+For a managed native service, prefer `./bin/install_server` unless you need to
+repair individual systemd pieces manually.
 
 ## Running in Docker
 
-In the server directory there is a docker-compose.yml and a Dockerfile that should allow the container to be created automagically.  
+The repository root contains the Dockerfile and `docker-compose.yml`. The image
+installs Firefox, Geckodriver, and the required Python modules, then runs the
+server as an unprivileged `inkplate` user.
 
+### Configure
+
+Create a Docker server config from the example:
+
+```bash
+cp server/EXAMPLE_docker_config.yaml server/config.yaml
+```
+
+For Docker, keep `server.alwayson: true`. The compose file uses
+`restart: unless-stopped`; one-shot server mode exits after serving or timing
+out and would otherwise restart repeatedly.
+
+Create a local `.env` file in the repository root. Docker Compose reads this
+file and passes the values into the container:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```bash
+WEATHER_API_KEY=...
+GOOGLE_API_KEY=...
+GOOGLE_STATICMAPS_MAPID=...
+
+# Optional, only when current_temperature.source is netatmo
+NETATMO_CLIENT_ID=
+NETATMO_CLIENT_SECRET=
+NETATMO_REFRESH_TOKEN=
+NETATMO_DEVICE_ID=
+NETATMO_MODULE_ID=
+```
+
+The compose file mounts `server/config.yaml` read-only and stores mutable
+runtime data in the named `inkplate-data` volume. The Docker example sets the
+Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
+container replacement.
+
+The published OCI images are:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+ghcr.io/orangespyderman/inkplate10-weather-cal:next
+```
+
+Use `:main` for stable deployments. Use `:next` to test changes before they are
+promoted to `main`.
+
+Do not commit `server/config.yaml` or `.env`; keep API keys and refresh tokens
+in local files or runtime environment variables.
+
+Docker dependency updates are split across two mechanisms. Dependabot updates
+the Python packages, GitHub Actions, and Docker base image on the `next` branch.
+Geckodriver is pinned with the `GECKOVERSION` build argument, so a scheduled
+GitHub Actions workflow checks Mozilla's latest release and opens a pull request
+when that pin needs updating.
 
 ### Starting the container
 
-This should be as simple as running the following command from the root of your cloned repository :
+Run from the root of your cloned repository:
 
-```
-docker compose up
-```
-or if you don't want to attach to the running container :
-
-```
-docker compose up -d 
+```bash
+docker compose up --build
 ```
 
+Or detach it:
 
-It will download the base image, install chrome and the required python modules.  It can be made to run permanently with the option `alwayson: true`in the config.yaml file (defaults to `false`).  It will then refresh the calendar image every `refreshhours` as specified also in the `server:` section of config.yaml (defaults to every 3 hours if no value provided)
+```bash
+docker compose up --build -d
+```
 
-There is a sample crontab called [docker-errorlog](docker-errorlog) that can be used to check the docker logs for any ERROR messages.  By default that runs every hour, on the hour but may need some local tweaking.
+To use the published image instead of building locally, replace the Compose
+service `build:` block with:
+
+```yaml
+image: ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
+The server listens on port `8080` and serves the generated image from:
+
+```text
+http://localhost:8080/calendar.png
+```
+
+`localhost` is correct when testing from the Docker host. The Inkplate firmware
+must use the host's LAN hostname or IP address in `calendar.url`.
+
+If MQTT logging is enabled, set `mqtt.host` in `server/config.yaml` to a host
+that is reachable from inside the container. On Docker Desktop,
+`host.docker.internal` usually points to the host. On Linux, you may prefer to
+run the MQTT broker as another Compose service or use the host's LAN IP.
+
+There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
+used to check the Docker logs for ERROR messages. By default that runs every
+hour, on the hour, but may need local tweaking.
+
+## Running from a Published OCI Image
+
+The image is a normal OCI image and can be run by Docker, Podman, or platforms
+that consume OCI images directly.
+
+Example Podman/Docker run:
+
+```bash
+podman run -d \
+  --name inkplate-weather-cal \
+  --env-file .env \
+  -p 8080:8080 \
+  -v ./server/config.yaml:/srv/inkplate/server/config.yaml:ro \
+  -v inkplate-data:/srv/inkplate/server/data \
+  ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
+Use `docker run` with the same arguments if you prefer Docker.
+
+### Proxmox VE 9.1 OCI LXC
+
+Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
+usable as an OCI source, but treat this as newer and less tested than Docker
+Compose until it has been exercised on your Proxmox host.
+
+Recommended image:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+```
+
+Use the `:next` tag only when you want to test upcoming changes.
+
+If the Proxmox host pulls directly from GHCR without registry credentials, make
+the GitHub package public. Otherwise, configure registry credentials in Proxmox
+before creating the container.
+
+Configure the container with:
+
+- environment variables from `.env.example`
+- port `8080` exposed to your LAN
+- a read-only config mount at `/srv/inkplate/server/config.yaml`
+- persistent storage mounted at `/srv/inkplate/server/data`
+
+The generated PNG is served from:
+
+```text
+http://<container-ip-or-hostname>:8080/calendar.png
+```
+
+Known caveats:
+
+- Proxmox OCI support is newer than standard Docker/Podman workflows.
+- Proxmox mount and environment-variable management is not the same as Compose.
+- Firefox/Geckodriver should be tested on the target Proxmox host.
+- The renderer is tuned for Inkplate 10 portrait output at `825x1200`.

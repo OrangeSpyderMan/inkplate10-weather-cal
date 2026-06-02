@@ -1,9 +1,7 @@
 import os
 import logging
-import subprocess
 
 from time import sleep
-from PIL import Image
 from airium import Airium
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
@@ -22,7 +20,7 @@ class Page:
         self.image_height = height
         self.log = logging.getLogger(self.name)
 
-        self.airium = Airium()     
+        self.airium = Airium()
 
     def template(self, **kwargs):
         raise NotImplementedError(
@@ -38,20 +36,41 @@ class Page:
 
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
-            f.close()
 
         options = Options()
-        service=Service(r"/usr/local/bin/geckodriver")
+        geckodriver_path = os.environ.get(
+            "GECKODRIVER_PATH", "/usr/local/bin/geckodriver"
+        )
+        service = Service(geckodriver_path)
         options.add_argument("-headless")
-        driver = webdriver.Firefox(service=service , options=options)
+        options.add_argument(f"--width={self.image_width}")
+        options.add_argument(f"--height={self.image_height}")
+        driver = webdriver.Firefox(service=service, options=options)
 
         try:
-            driver.set_window_size(self.image_width, self.image_height)
             driver.get("file://" + html_fp)
+            self._resize_viewport(driver)
             sleep(2)  # Wait for the page to load completely
-            driver.save_full_page_screenshot(png_fp)
+            self._resize_viewport(driver)
+            driver.save_screenshot(png_fp)
             self.log.info("Screenshot captured and saved to file.")
         except Exception as e:
             self.log.error("Screenshot failed to capture. Error: " + str(e))
+            raise
         finally:
             driver.quit()
+
+    def _resize_viewport(self, driver):
+        viewport = driver.execute_script(
+            "return {width: window.innerWidth, height: window.innerHeight};"
+        )
+        width_delta = self.image_width - int(viewport["width"])
+        height_delta = self.image_height - int(viewport["height"])
+        if width_delta == 0 and height_delta == 0:
+            return
+
+        window_size = driver.get_window_size()
+        driver.set_window_size(
+            window_size["width"] + width_delta,
+            window_size["height"] + height_delta,
+        )

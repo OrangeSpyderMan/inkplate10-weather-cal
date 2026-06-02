@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Inkplate WeatherCal</title>
+  <desc id="desc">A rounded app icon showing an e-ink weather calendar display with a sun, cloud, and temperature indicator.</desc>
+
+  <rect width="512" height="512" rx="112" fill="#173f46"/>
+
+  <rect x="72" y="62" width="368" height="388" rx="48" fill="#101415"/>
+  <rect x="104" y="96" width="304" height="320" rx="26" fill="#f6f4eb"/>
+
+  <rect x="128" y="124" width="256" height="54" rx="14" fill="#101415"/>
+  <circle cx="162" cy="151" r="9" fill="#f6f4eb"/>
+  <circle cx="208" cy="151" r="9" fill="#f6f4eb"/>
+  <circle cx="254" cy="151" r="9" fill="#f6f4eb"/>
+  <circle cx="300" cy="151" r="9" fill="#f6f4eb"/>
+  <circle cx="346" cy="151" r="9" fill="#f6f4eb"/>
+
+  <g fill="#101415">
+    <rect x="130" y="214" width="44" height="42" rx="10"/>
+    <rect x="194" y="214" width="44" height="42" rx="10"/>
+    <rect x="130" y="276" width="44" height="42" rx="10"/>
+    <rect x="194" y="276" width="44" height="42" rx="10"/>
+  </g>
+
+  <circle cx="318" cy="232" r="31" fill="#e3b03d"/>
+  <path d="M284 276c2-27 24-47 52-47 23 0 43 15 50 37 20 3 36 20 36 42 0 24-19 43-43 43h-90c-23 0-42-19-42-42 0-19 12-34 29-40 3-1 6 1 8 7Z" fill="#101415"/>
+  <path d="M293 290c3-20 20-35 41-35 19 0 35 12 40 30 16 2 29 16 29 33 0 18-15 33-33 33h-74c-18 0-33-15-33-33 0-15 10-28 24-32 3-1 5 0 6 4Z" fill="#f6f4eb"/>
+
+  <rect x="128" y="342" width="122" height="42" rx="21" fill="#101415"/>
+  <circle cx="154" cy="363" r="13" fill="#d24b3f"/>
+  <rect x="170" y="356" width="58" height="14" rx="7" fill="#f6f4eb"/>
+</svg>

@@ -50,12 +50,12 @@ h3.numcircle {
 }
 
 h4.numcircle, #icon-container.numcircle {
-  font-size: 5vw;
+  font-size: 6.5vw;
   font-weight: 600;
-  line-height: 10vh;
-  height: 10vh;
-  width: 12vw;
-  border-radius: 7vw;
+  line-height: 15vw;
+  height: 15vw;
+  width: 15vw;
+  border-radius: 50%;
 }
 
 #icon-container.numcircle img {
@@ -82,6 +82,7 @@ h4.numcircle, #icon-container.numcircle {
 }
 
 #top-banner #temp {
+  font-size: 7.5vw;
   position: absolute;
   top: 20vh;
   right: 2vw;
@@ -89,8 +90,80 @@ h4.numcircle, #icon-container.numcircle {
 
 #top-banner #icon-container {
   position: absolute;
-  top: 32vh;
+  top: 35vh;
   right: 2vw;
+}
+
+.numcircle.live-icon {
+  overflow: visible;
+}
+
+.live-radio {
+  height: 5vw;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: -4.15vw;
+  transform: translateX(-50%);
+  width: 8vw;
+}
+
+.live-radio-mast {
+  background: #000;
+  display: block;
+  height: 3.9vw;
+  left: 50%;
+  position: absolute;
+  top: 2.35vw;
+  transform: translateX(-50%);
+  width: 0.55vw;
+}
+
+.live-radio-mast:before,
+.live-radio-mast:after {
+  background: #000;
+  content: "";
+  display: block;
+  height: 2.65vw;
+  position: absolute;
+  top: -0.55vw;
+  transform-origin: bottom center;
+  width: 0.5vw;
+}
+
+.live-radio-mast:before {
+  left: -0.95vw;
+  transform: rotate(-28deg);
+}
+
+.live-radio-mast:after {
+  right: -0.95vw;
+  transform: rotate(28deg);
+}
+
+.live-radio-waves span {
+  border: 0.5vw solid #000;
+  border-bottom: 0;
+  border-left-color: transparent;
+  border-radius: 50% 50% 0 0;
+  border-right-color: transparent;
+  box-sizing: border-box;
+  display: block;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.live-radio-waves span:nth-child(1) {
+  height: 2.6vw;
+  top: 1.2vw;
+  width: 4vw;
+}
+
+.live-radio-waves span:nth-child(2) {
+  height: 4vw;
+  top: 0;
+  width: 6.7vw;
 }
 
 #top-banner #month {
@@ -193,4 +266,9 @@ h4.numcircle, #icon-container.numcircle {
 .hourly-forecast-icon {
   width: 80%;
   margin: 0 auto !important;
+}
+
+#rain-temp-chart {
+  display: block;
+  margin: 0 auto;
 }

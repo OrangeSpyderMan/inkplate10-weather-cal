@@ -39,6 +39,22 @@ class CalendarPage(Page):
         now = dt.datetime.now()
         self.log.info("Time synchronised to %s", now)
         now_date = now.date()
+        current_temperature = daily_summary["temperature"]
+        current_temperature_text = (
+            str(current_temperature["value"]) + "\N{DEGREE SIGN}"
+        )
+        current_temperature_is_live = current_temperature.get("live", False)
+        temperature_unit = current_temperature["unit"]
+        if hourly_forecasts:
+            temperature_unit = hourly_forecasts[0]["temperature"]["unit"]
+        temperature_axis_min = -15
+        temperature_axis_max = 40
+        if temperature_unit == "\N{DEGREE SIGN}F":
+            temperature_axis_min = 5
+            temperature_axis_max = 104
+        rain_axis_max = 220
+        chart_width = int(self.image_width * 0.95)
+        chart_height = 400
 
         a("<!DOCTYPE html>")
         with a.html(lang="en"):
@@ -70,12 +86,18 @@ class CalendarPage(Page):
                                 _t=now_date.strftime("%B"),
                             )
 
-                        a.h4(
-                            id="temp",
-                            klass="numcircle text-center",
-                            _t=str(daily_summary["temperature"]["value"])
-                            + daily_summary["temperature"]["unit"],
-                        )
+                        temp_class = "numcircle text-center"
+                        if current_temperature_is_live:
+                            temp_class += " live-icon"
+
+                        with a.h4(id="temp", klass=temp_class):
+                            if current_temperature_is_live:
+                                with a.div(klass="live-radio"):
+                                    a.span(klass="live-radio-mast")
+                                    with a.span(klass="live-radio-waves"):
+                                        a.span()
+                                        a.span()
+                            a(current_temperature_text)
 
                         with a.div(id="icon-container", klass="numcircle"):
                             a.img(src=daily_summary["icon"])
@@ -117,7 +139,11 @@ class CalendarPage(Page):
                                                 ):
                                                     a.img(src=forecast["icon"])
 
-                        a.canvas(id="rain-temp-chart", height="100")
+                        a.canvas(
+                            id="rain-temp-chart",
+                            width=chart_width,
+                            height=chart_height,
+                        )
 
                 with a.script():
                     a("""
@@ -138,29 +164,12 @@ class CalendarPage(Page):
                                 data: {{
                                     labels: {0},
                                     datasets: [{{
+                                        yAxisID: 'rain',
                                         data: {1},
                                         backgroundColor: 'rgb(0, 0, 0)',
                                         borderColor: 'rgb(0, 0, 0)',
                                         datalabels: {{
-                                            display: 'auto',
-                                            align: 'top',
-                                            anchor: 'end',
-                                            clamp: 'true',
-                                            backgroundColor: "#FFF",
-                                            borderRadius: 4,
-                                            font: {{
-                                                family: 'Merienda-Regular',
-                                                size: 32
-                                            }},
-                                            display: function(context) {{
-                                                var index = context.dataIndex;
-                                                var value = context.dataset.data[index];
-
-                                                return value > 0;
-                                            }},
-                                            formatter: function(value, context) {{
-                                                return value + "%";
-                                            }}
+                                            display: false
                                         }},
                                         borderWidth: 3,
                                         stack: 'combined',
@@ -173,13 +182,18 @@ class CalendarPage(Page):
                                             hachureGap: 12
                                         }}
                                     }}, {{
+                                        yAxisID: 'temperature',
                                         data: {2},
                                         backgroundColor: 'rgba(0, 0, 0, 0)',
                                         borderColor: 'rgb(0, 0, 0)',
                                         datalabels: {{
                                             display: 'auto',
-                                            align: 'top',
-                                            anchor: 'start',
+                                            align: function(context) {{
+                                                var midpoint = ({3} + {4}) / 2;
+                                                var value = context.dataset.data[context.dataIndex];
+                                                return value >= midpoint ? 'bottom' : 'top';
+                                            }},
+                                            anchor: 'center',
                                             offset: 12,
                                             backgroundColor: "#FFF",
                                             borderRadius: 4,
@@ -188,7 +202,7 @@ class CalendarPage(Page):
                                                 size: 32
                                             }},
                                             formatter: function(value, context) {{
-                                                return value + "°C";
+                                                return value + "\N{DEGREE SIGN}";
                                             }}
                                         }},
                                         rough: {{
@@ -201,7 +215,62 @@ class CalendarPage(Page):
                                         type: 'line'
                                     }}]
                                 }},
+                                options: {{
+                                    responsive: false,
+                                    devicePixelRatio: 1,
+                                    layout: {{
+                                        padding: {{
+                                            bottom: 48
+                                        }}
+                                    }},
+                                    scales: {{
+                                        xAxes: [{{
+                                            gridLines: {{
+                                                display: false,
+                                                drawBorder: true
+                                            }},
+                                            ticks: {{
+                                                display: true,
+                                                fontFamily: 'Merienda-Regular',
+                                                fontSize: 26,
+                                                fontColor: '#000',
+                                                padding: 4,
+                                                callback: function(value, index, values) {{
+                                                    var rain = {1}[index];
+                                                    return rain > 0 ? rain + "%" : "";
+                                                }}
+                                            }}
+                                        }}],
+                                        yAxes: [{{
+                                            id: 'rain',
+                                            type: 'linear',
+                                            position: 'left',
+                                            display: false,
+                                            ticks: {{
+                                                min: 0,
+                                                max: {5},
+                                                beginAtZero: true
+                                            }}
+                                        }}, {{
+                                            id: 'temperature',
+                                            type: 'linear',
+                                            position: 'right',
+                                            display: false,
+                                            ticks: {{
+                                                min: {3},
+                                                max: {4}
+                                            }}
+                                        }}]
+                                    }}
+                                }},
                                 plugins: [ChartDataLabels, ChartRough]
                             }});
                         }});
-                    """.format(hours, precip_percents, temps))
+                    """.format(
+                        hours,
+                        precip_percents,
+                        temps,
+                        temperature_axis_min,
+                        temperature_axis_max,
+                        rain_axis_max,
+                    ))
