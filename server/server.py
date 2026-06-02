@@ -431,6 +431,15 @@ def serve_pwa_icon(filename):
     return send_from_directory(os.path.join(pwa_dir, "icons"), filename)
 
 
+@app.route("/favicon.ico")
+def serve_favicon():
+    return send_from_directory(
+        os.path.join(pwa_dir, "icons"),
+        "weathercal-favicon.ico",
+        mimetype="image/x-icon",
+    )
+
+
 @app.route("/app/calendar.png")
 def serve_pwa_cal_png():
     """

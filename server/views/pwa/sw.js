@@ -1,9 +1,14 @@
-const CACHE_NAME = "weather-calendar-pwa-v1";
+const CACHE_NAME = "weather-calendar-pwa-v2";
 const APP_SHELL = [
   "/app",
   "/app.css",
   "/app.js",
-  "/manifest.webmanifest"
+  "/manifest.webmanifest",
+  "/favicon.ico",
+  "/icons/weathercal-icon-48.png",
+  "/icons/weathercal-icon-192.png",
+  "/icons/weathercal-icon-512.png",
+  "/icons/weathercal-icon.svg"
 ];
 
 self.addEventListener("install", event => {
