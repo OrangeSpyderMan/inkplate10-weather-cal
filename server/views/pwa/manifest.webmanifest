@@ -1,0 +1,31 @@
+{
+  "name": "Inkplate Weather Calendar",
+  "short_name": "WeatherCal",
+  "description": "A mobile viewer for the rendered Inkplate weather calendar.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ec",
+  "theme_color": "#f7f5ec",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/weathercal-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/weathercal-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/weathercal-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

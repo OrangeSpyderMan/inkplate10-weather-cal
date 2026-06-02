@@ -2,6 +2,8 @@
 server:
   enabled: true
   port: 8080
+  # Keep true for Docker and for the browser/PWA viewer at /app.
+  # One-shot mode exits and would be restarted repeatedly by Compose.
   alwayson: true
   refreshhours: 3
 weather:

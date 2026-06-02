@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Inkplate Weather Calendar</title>
+  <desc id="desc">A monochrome e-ink app icon with a large date circle, a white number two, and a weather cloud.</desc>
+
+  <rect width="512" height="512" rx="92" fill="#f7f5ec"/>
+  <rect x="32" y="32" width="448" height="448" rx="72" fill="none" stroke="#101415" stroke-width="12"/>
+
+  <g fill="none" stroke="#101415" stroke-linecap="round" stroke-linejoin="round" opacity="0.42">
+    <polyline points="54,133 96,113 132,126 172,105 214,120 257,101 302,122 344,106 388,126 458,114" stroke-width="7"/>
+    <polyline points="55,363 96,343 139,358 178,331 221,348 262,326 307,346 348,319 391,337 457,323" stroke-width="7"/>
+    <polyline points="122,455 139,404 124,358 151,313 136,264 164,220 148,169 181,58" stroke-width="6"/>
+    <polyline points="364,58 348,111 365,159 341,209 359,258 337,310 353,360 338,454" stroke-width="6"/>
+  </g>
+
+  <circle cx="238" cy="242" r="132" fill="#101415"/>
+  <text x="238" y="326" fill="#f7f5ec" font-family="Georgia, 'Times New Roman', serif" font-size="226" font-weight="700" text-anchor="middle">2</text>
+
+  <g>
+    <rect x="276" y="324" width="178" height="86" rx="43" fill="#101415"/>
+    <circle cx="320" cy="319" r="49" fill="#101415"/>
+    <circle cx="373" cy="287" r="64" fill="#101415"/>
+    <circle cx="430" cy="326" r="56" fill="#101415"/>
+
+    <rect x="302" y="346" width="125" height="38" rx="19" fill="#f7f5ec"/>
+    <circle cx="329" cy="326" r="31" fill="#f7f5ec"/>
+    <circle cx="377" cy="307" r="44" fill="#f7f5ec"/>
+    <circle cx="419" cy="332" r="36" fill="#f7f5ec"/>
+  </g>
+</svg>

@@ -14,9 +14,10 @@ from utils import expand_env_vars, get_prop, get_prop_by_keys
 from views.calendar import CalendarPage
 from google.api import GoogleAPIService
 from werkzeug.serving import make_server
-from flask import Flask, send_file, abort
+from flask import Flask, send_file, abort, send_from_directory
 
 cwd = os.path.dirname(os.path.realpath(__file__))
+pwa_dir = os.path.join(cwd, "views", "pwa")
 log = None
 
 app = Flask(__name__)
@@ -389,7 +390,67 @@ def serve_cal_png():
         as_attachment=True,
         download_name=os.path.basename(path),
     )
-    
+
+
+@app.route("/")
+@app.route("/app")
+def serve_pwa():
+    return send_from_directory(pwa_dir, "index.html")
+
+
+@app.route("/app.css")
+def serve_pwa_css():
+    return send_from_directory(pwa_dir, "app.css")
+
+
+@app.route("/app.js")
+def serve_pwa_js():
+    return send_from_directory(pwa_dir, "app.js")
+
+
+@app.route("/manifest.webmanifest")
+def serve_pwa_manifest():
+    return send_from_directory(
+        pwa_dir,
+        "manifest.webmanifest",
+        mimetype="application/manifest+json",
+    )
+
+
+@app.route("/sw.js")
+def serve_pwa_service_worker():
+    return send_from_directory(
+        pwa_dir,
+        "sw.js",
+        mimetype="application/javascript",
+    )
+
+
+@app.route("/icons/<path:filename>")
+def serve_pwa_icon(filename):
+    return send_from_directory(os.path.join(pwa_dir, "icons"), filename)
+
+
+@app.route("/app/calendar.png")
+def serve_pwa_cal_png():
+    """
+    Returns the calendar image for browsers without affecting the Inkplate
+    download route's serve counter or Content-Disposition behavior.
+    """
+
+    path = os.path.join(cwd, "views/calendar.png")
+
+    if not os.path.exists(path):
+        log.error(f"{path}: no such file exists")
+        abort(404)
+
+    return send_file(
+        path,
+        mimetype="image/png",
+        as_attachment=False,
+        max_age=0,
+    )
+
 
 if __name__ == "__main__":
     main()

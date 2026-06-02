@@ -15,7 +15,8 @@ Example 1                  | Example 2                 | Example 3
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
-- Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
+- Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images and
+  a browser/PWA viewer.
 
 ## Setup
 
@@ -142,6 +143,56 @@ target for the generated PNG. The current HTML/CSS layout is tuned for Inkplate
 10 portrait output at `825x1200`; those options are not a general layout scaling
 system. Changing them may produce cropped, stretched, or poorly spaced output
 unless the layout is also retuned.
+
+### Browser and PWA viewer
+
+The server also exposes a lightweight browser client for phones, tablets, and
+desktop browsers. It does not reimplement the calendar layout; it displays the
+same rendered PNG that the Inkplate uses.
+
+Open the viewer at:
+
+```text
+http://<server-host>:8080/app
+```
+
+The root URL also opens the same viewer:
+
+```text
+http://<server-host>:8080/
+```
+
+The viewer refreshes the image every 15 minutes and whenever the browser tab or
+installed app becomes visible. It fetches the image from:
+
+```text
+http://<server-host>:8080/app/calendar.png
+```
+
+This browser-facing image route is intentionally separate from the Inkplate
+route:
+
+- `/calendar.png` keeps the existing attachment response and increments the
+  Inkplate serve counter used by one-shot server mode.
+- `/app/calendar.png` serves the same file inline for browsers and does not
+  increment the Inkplate serve counter.
+
+For the browser/PWA viewer, keep the server running continuously:
+
+```yaml
+server:
+  alwayson: true
+```
+
+Without `server.alwayson: true`, the server can shut down after the configured
+one-shot lifetime or after the Inkplate has fetched `/calendar.png`. Docker
+Compose and the example Docker config already use `server.alwayson: true`;
+one-shot mode is mainly useful for scheduled Inkplate-only refresh workflows.
+
+To use it like an app, open `/app` on the device and use the browser's install
+or "Add to Home Screen" action. The client is intentionally simple: it caches
+the app shell with a service worker, but always asks the server for the latest
+calendar image.
 
 ### Google StaticMaps API
 
@@ -299,6 +350,12 @@ The server listens on port `8080` and serves the generated image from:
 http://localhost:8080/calendar.png
 ```
 
+The browser/PWA viewer is available from:
+
+```text
+http://localhost:8080/app
+```
+
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
@@ -359,6 +416,12 @@ The generated PNG is served from:
 
 ```text
 http://<container-ip-or-hostname>:8080/calendar.png
+```
+
+The browser/PWA viewer is served from:
+
+```text
+http://<container-ip-or-hostname>:8080/app
 ```
 
 Known caveats:

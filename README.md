@@ -123,6 +123,12 @@ Likely parameters you'll need to change are:
 
 See the [server](/server) for info on server setup.
 
+The server can also expose the rendered calendar as a lightweight browser/PWA
+viewer at `http://<server-host>:8080/app`. Use `server.alwayson: true` for this
+mode so the server keeps refreshing and serving the PNG continuously. The
+browser viewer uses a separate inline image route and does not interfere with
+the Inkplate client's `/calendar.png` download route.
+
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
