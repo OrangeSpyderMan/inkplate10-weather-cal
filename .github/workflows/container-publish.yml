@@ -53,7 +53,6 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=next,enable=${{ github.ref == 'refs/heads/next' }}
             type=ref,event=tag
-            type=sha,prefix=sha-
 
       - name: Generate build date
         id: build-date
