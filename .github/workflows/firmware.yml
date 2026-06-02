@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
@@ -54,7 +54,7 @@ jobs:
           cp build/arduino/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: inkplate10-firmware
           path: firmware_binaries/*
