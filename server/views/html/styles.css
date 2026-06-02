@@ -50,11 +50,11 @@ h3.numcircle {
 }
 
 h4.numcircle, #icon-container.numcircle {
-  font-size: 5vw;
+  font-size: 6.5vw;
   font-weight: 600;
-  line-height: 12vw;
-  height: 12vw;
-  width: 12vw;
+  line-height: 15vw;
+  height: 15vw;
+  width: 15vw;
   border-radius: 50%;
 }
 
@@ -82,7 +82,7 @@ h4.numcircle, #icon-container.numcircle {
 }
 
 #top-banner #temp {
-  font-size: 6vw;
+  font-size: 7.5vw;
   position: absolute;
   top: 20vh;
   right: 2vw;
@@ -90,7 +90,7 @@ h4.numcircle, #icon-container.numcircle {
 
 #top-banner #icon-container {
   position: absolute;
-  top: 32vh;
+  top: 35vh;
   right: 2vw;
 }
 
