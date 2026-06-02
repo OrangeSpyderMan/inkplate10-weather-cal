@@ -394,6 +394,8 @@ def serve_cal_png():
 
 @app.route("/")
 @app.route("/app")
+@app.route("/app/")
+@app.route("/app/index.html")
 def serve_pwa():
     return send_from_directory(pwa_dir, "index.html")
 
@@ -437,6 +439,16 @@ def serve_favicon():
         os.path.join(pwa_dir, "icons"),
         "weathercal-favicon.ico",
         mimetype="image/x-icon",
+    )
+
+
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def serve_apple_touch_icon():
+    return send_from_directory(
+        os.path.join(pwa_dir, "icons"),
+        "weathercal-icon-192.png",
+        mimetype="image/png",
     )
 
 

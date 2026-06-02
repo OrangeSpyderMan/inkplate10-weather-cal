@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f7f5ec">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="WeatherCal">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icons/weathercal-icon-48.png" type="image/png" sizes="48x48">
+    <link rel="icon" href="/icons/weathercal-icon-192.png" type="image/png" sizes="192x192">
+    <link rel="icon" href="/icons/weathercal-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/weathercal-icon-192.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/app.css">
+    <title>Weather Calendar</title>
+  </head>
+  <body>
+    <main class="viewer" aria-live="polite">
+      <img id="calendar" alt="Weather calendar" decoding="async">
+      <p id="status" role="status">Loading calendar...</p>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

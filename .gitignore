@@ -84,8 +84,10 @@ workspace.code-workspace
 **/*.log
 **/*.log.*
 **/*.html
+!server/views/pwa/index.html
 **/*.png
 !server/views/pwa/icons/*.png
+!server/views/pwa/icons/*.ico
 **/*.bmp
 **/*/samples
 .tools/
