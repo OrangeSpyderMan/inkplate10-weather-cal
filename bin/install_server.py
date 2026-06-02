@@ -152,7 +152,7 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
             repo_root / SERVER_CONFIG,
             render_config(answers, mode="docker"),
             dry_run=dry_run,
-            mode=0o644,
+            mode=0o600,
         )
         write_text_atomic(
             repo_root / DOCKER_ENV_FILE,
@@ -198,7 +198,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             INSTALL_DIR / SERVER_CONFIG,
             render_config(answers, mode="systemd"),
             dry_run=dry_run,
-            mode=0o640,
+            mode=0o600,
             sudo=True,
         )
         write_text_atomic(
