@@ -351,6 +351,36 @@ runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement.
 
+### Docker MQTT broker
+
+If MQTT weather publishing is enabled, the server needs a reachable MQTT broker.
+You can use an existing broker by setting `mqtt.host` in
+`server/config/config.yaml` to that broker's hostname or IP address.
+
+For a simple local Docker broker, this repository includes an optional Compose
+override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mqtt.yml up -d
+```
+
+Use this server config when running the broker from the override:
+
+```yaml
+mqtt:
+  enabled: true
+  host: mqtt
+  port: 1883
+  base_topic: inkplate/weather-calendar
+  retain: true
+  qos: 0
+```
+
+The included Mosquitto config listens on port `1883`, allows anonymous access,
+and persists retained messages in the `mqtt-data` volume. That is convenient for
+a trusted LAN or lab setup; use an authenticated broker configuration before
+exposing MQTT beyond your local network.
+
 The published OCI images are:
 
 ```text
