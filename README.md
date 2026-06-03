@@ -28,11 +28,10 @@ Both a server and client are required. The main workload is on the server, which
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
 2. Attempts to get current network time and update real-time clock.
-3. (Optional) Attempts to connect to an MQTT topic to publish logs. This allows us to see what the ESP32 controller is doing without needing to monitor the serial connection.
-4. Attempts to download the PNG image that the server is hosting.
-5. Write the downloaded PNG image to SD card.
-6. Read the PNG image back from SD card and write to the e-ink display.
-7. Returns to deep sleep for the configured refresh interval.
+3. Attempts to download the PNG image that the server is hosting.
+4. Write the downloaded PNG image to SD card.
+5. Read the PNG image back from SD card and write to the e-ink display.
+6. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
 
@@ -42,7 +41,6 @@ Both a server and client are required. The main workload is on the server, which
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
-- Can publish to an MQTT topic for remote logging.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
 - Stores calendar images on SD card.
 - Reconfigure client by updating YAML file on SD card and reboot - easy!
@@ -53,7 +51,7 @@ Both a server and client are required. The main workload is on the server, which
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
-5. (Optional) The server listens for client logs by subscribing to an MQTT topic using [Mosquitto](https://mosquitto.org/).
+5. (Optional) The server publishes the normalized weather snapshot to MQTT for other local clients.
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
 7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
 
@@ -103,13 +101,6 @@ wifi:
 ntp:
   host: pool.ntp.org
   timezone: Europe/Dublin
-mqtt_logger:
-  enabled: false
-  broker: localhost
-  port: 1883
-  clientId: inkplate10-weather-cal
-  topic: mqtt/weather-cal
-  retries: 3
 ```
 
 Likely parameters you'll need to change are:
@@ -119,7 +110,6 @@ Likely parameters you'll need to change are:
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
-- `mqtt_logger.broker` - the hostname or IP address of your server (likely the same server as the image host).
 
 See the [server](/server) for info on server setup.
 
@@ -142,8 +132,9 @@ Run it from the repository root:
 ```
 
 The installer prompts for the weather provider, API keys, Google Static Maps
-Map ID, location, optional Netatmo details, optional MQTT logging, and whether
-to start the service/container. It keeps secrets out of committed YAML files:
+Map ID, location, optional Netatmo details, optional MQTT weather publishing,
+and whether to start the service/container. It keeps secrets out of committed
+YAML files:
 
 - Docker installs write secrets to `.env` and config to
   `server/config/config.yaml`.
@@ -257,8 +248,6 @@ The following libraries should be installed in your Arduino IDE. They are availa
 
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [ArduinoJson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
-- [MQTTLogger](https://github.com/androbi-com/MqttLogger)
-- [Queue](https://github.com/SMFSW/Queue)
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)
 - [ezTime](https://github.com/ropg/ezTime)

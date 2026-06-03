@@ -31,7 +31,10 @@ image:
   width: 825
   height: 1200
 mqtt:
+  # Optional weather data publisher for other local clients.
   enabled: false
   host: localhost
   port: 1883
-  topic: mqtt/eink-cal-client
+  base_topic: inkplate/weather-calendar
+  retain: true
+  qos: 0

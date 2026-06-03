@@ -341,7 +341,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         answers["netatmo_module_id"] = env.get("NETATMO_MODULE_ID", "")
 
     answers["mqtt_enabled"] = prompt_yes_no(
-        "Enable MQTT client logging?",
+        "Publish weather data to MQTT?",
         default=parse_bool(config.get("mqtt.enabled", "false")),
         key="mqtt_enabled",
     )
@@ -359,11 +359,11 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         maximum=65535,
         key="mqtt_port",
     )
-    answers["mqtt_topic"] = prompt_text(
-        "MQTT topic",
-        default=config.get("mqtt.topic", "mqtt/eink-cal-client"),
+    answers["mqtt_base_topic"] = prompt_text(
+        "MQTT base topic",
+        default=config.get("mqtt.base_topic", "inkplate/weather-calendar"),
         required=False,
-        key="mqtt_topic",
+        key="mqtt_base_topic",
     )
     return answers
 
@@ -404,7 +404,9 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"  enabled: {yaml_bool(bool(answers['mqtt_enabled']))}",
         f"  host: {mqtt_host}",
         f"  port: {answers['mqtt_port']}",
-        f"  topic: {answers['mqtt_topic'] or 'mqtt/eink-cal-client'}",
+        f"  base_topic: {answers['mqtt_base_topic'] or 'inkplate/weather-calendar'}",
+        "  retain: true",
+        "  qos: 0",
         "",
     ]
     return "\n".join(lines)

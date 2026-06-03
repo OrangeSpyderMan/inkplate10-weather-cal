@@ -3,20 +3,15 @@
 #include <Inkplate.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <cppQueue.h>
 #include <driver/rtc_io.h>
 #include <ezTime.h>
 #include <rom/rtc.h>
-
-#include "MqttLogger.h"
 
 #define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
 #define DEEP_SLEEP_FALLBACK_SECONDS 120
 // set the log verbosity
 #define LOG_LEVEL LOG_DEBUG
-// log message entry history size
-#define LOG_QUEUE_MAX_ENTRIES 10
 // log message maximum length
 #define LOG_MSG_MAX_LEN 128
 // The file path on SD card to load config.
@@ -52,10 +47,6 @@
 extern RTC_DATA_ATTR time_t lastBootTime;
 // RTC epoch of the last time deep sleep was initiated.
 extern RTC_DATA_ATTR time_t lastSleepTime;
-// The remote logging instance.
-extern MqttLogger mqttLogger;
-// The log message queue.
-extern cppQueue logQ;
 // The Inkplate board driver instance.
 extern Inkplate board;
 // The timezone object to store localised time
@@ -129,22 +120,6 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 void sleep(const int sleepHours);
 
 /**
-  Connect to a MQTT broker for remote logging.
-
-  @param broker the hostname of the MQTT broker.
-  @param port the port of the MQTT broker.
-  @param topic the topic to publish logs to.
-  @param clientID the name of the logger client to appear as.
-  @param max_retries the number of connection attempts to make before fallback
-  to serial-only logging.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
-*/
-esp_err_t configureMQTT(const char *broker, int port, const char *topic,
-                        const char *clientID, int max_retries);
-
-/**
   Log a message.
 
   @param pri the log level / priority of the message, see LOG_LEVEL.
@@ -167,12 +142,5 @@ void logf(uint16_t pri, const char *fmt, ...);
   @returns the string value of the priority.
 */
 String msgPrefix(uint16_t pri);
-
-/**
-  Ensure log queue is populated/emptied based on MQTT connection.
-
-  @param msg the log message
-*/
-void ensureQueue(const char *msg);
 
 #endif

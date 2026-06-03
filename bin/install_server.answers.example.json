@@ -15,5 +15,5 @@
   "mqtt_enabled": false,
   "mqtt_host": "host.docker.internal",
   "mqtt_port": 1883,
-  "mqtt_topic": "mqtt/eink-cal-client"
+  "mqtt_base_topic": "inkplate/weather-calendar"
 }
