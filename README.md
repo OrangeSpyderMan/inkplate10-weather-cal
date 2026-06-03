@@ -145,10 +145,15 @@ The installer prompts for the weather provider, API keys, Google Static Maps
 Map ID, location, optional Netatmo details, optional MQTT logging, and whether
 to start the service/container. It keeps secrets out of committed YAML files:
 
-- Docker installs write secrets to `.env` and config to `server/config.yaml`.
+- Docker installs write secrets to `.env` and config to
+  `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
-  `/srv/inkplate/server/config.yaml`, and dependencies to
+  `/srv/inkplate/server/config/config.yaml`, and dependencies to
   `/srv/inkplate/inkplate_venv`.
+
+The old server config path, `server/config.yaml`, is deprecated and will be
+removed in a future release. Move existing installs to
+`server/config/config.yaml` as soon as practical.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system

@@ -53,7 +53,7 @@ RUN pip install --upgrade pip setuptools wheel \
     && rm /tmp/requirements.txt
 
 COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
-RUN mkdir -p ${HOMEDIR}/server/data \
+RUN mkdir -p ${HOMEDIR}/server/config ${HOMEDIR}/server/data \
     && chown -R ${USERNAME}:${USERNAME} ${HOMEDIR}/server
 
 USER ${USERNAME}

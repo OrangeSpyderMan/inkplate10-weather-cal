@@ -18,6 +18,8 @@ from flask import Flask, send_file, abort, send_from_directory
 
 cwd = os.path.dirname(os.path.realpath(__file__))
 pwa_dir = os.path.join(cwd, "views", "pwa")
+default_config_path = os.path.join(cwd, "config.yaml")
+default_config_dir_path = os.path.join(cwd, "config", "config.yaml")
 log = None
 
 app = Flask(__name__)
@@ -29,9 +31,9 @@ server_max_serves = 1
 def main():
     global log, server_max_serves
 
-    config_file = open(os.path.join(cwd, "config.yaml"))
-    config = expand_env_vars(yaml.safe_load(config_file))
-    config_file.close()
+    config_path = resolve_config_path()
+    with open(config_path) as config_file:
+        config = expand_env_vars(yaml.safe_load(config_file))
 
     debug = get_prop(config, "debug", default=False)
     # Create and configure logger
@@ -40,6 +42,7 @@ def main():
         logging.config.fileConfig(os.path.join(cwd, "logging.dev.ini"))
     logging.config.fileConfig(log_ini_path)
     log = logging.getLogger("server")
+    log.info(f"Loaded config from {config_path}")
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
@@ -237,6 +240,32 @@ def main():
 
         log.info(f"Exiting")
         sys.exit(0)
+
+
+def resolve_config_path():
+    env_config_path = os.environ.get("INKPLATE_CONFIG_FILE")
+    if env_config_path:
+        if os.path.isfile(env_config_path):
+            return env_config_path
+
+        print(
+            f"INKPLATE_CONFIG_FILE points to a missing config file: {env_config_path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if os.path.isfile(default_config_dir_path):
+        return default_config_dir_path
+
+    if os.path.isfile(default_config_path):
+        return default_config_path
+
+    print(
+        "No config file found. Checked "
+        f"{default_config_dir_path} and {default_config_path}.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def build_current_temperature_service(config, metric):

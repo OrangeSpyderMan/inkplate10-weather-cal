@@ -38,9 +38,9 @@ Static Maps Map ID, optional Netatmo credentials, optional MQTT logging, and
 whether to start the service or container. Secrets are written outside committed
 YAML:
 
-- Docker: `.env` plus `server/config.yaml`
-- systemd: `/etc/inkplate/weather.env`, `/srv/inkplate/server/config.yaml`, and
-  `/srv/inkplate/inkplate_venv`
+- Docker: `.env` plus `server/config/config.yaml`
+- systemd: `/etc/inkplate/weather.env`,
+  `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
 Docker mode runs as the current user and expects that user to be able to run
 `docker compose`. Native systemd mode needs root privileges for package
@@ -235,11 +235,28 @@ it should be OK to use, but may be less tested.
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
-cp server/EXAMPLE_config.yaml server/config.yaml
+cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 python3 -m pip install -r server/requirements.txt
 ```
 
-Edit `server/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
+Edit `server/config/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
+
+By default the server looks for config in:
+
+1. the file named by `INKPLATE_CONFIG_FILE`, when set
+2. `server/config/config.yaml`
+3. `server/config.yaml`
+
+The `server/config/config.yaml` path is the preferred layout for new installs
+because it can be mounted as a config directory without hiding application code.
+The legacy `server/config.yaml` path remains supported for existing installs
+for now, but it is deprecated and will be removed in a future release. Move
+existing configs to `server/config/config.yaml` as soon as practical:
+
+```bash
+mkdir -p server/config
+mv server/config.yaml server/config/config.yaml
+```
 
 Run the server manually:
 ```
@@ -270,7 +287,7 @@ server as an unprivileged `inkplate` user.
 Create a Docker server config from the example:
 
 ```bash
-cp server/EXAMPLE_docker_config.yaml server/config.yaml
+cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 ```
 
 For Docker, keep `server.alwayson: true`. The compose file uses
@@ -299,7 +316,7 @@ NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
 ```
 
-The compose file mounts `server/config.yaml` read-only and stores mutable
+The compose file mounts `server/config` read-only and stores mutable
 runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement.
@@ -314,8 +331,9 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:next
 Use `:main` for stable deployments. Use `:next` to test changes before they are
 promoted to `main`.
 
-Do not commit `server/config.yaml` or `.env`; keep API keys and refresh tokens
-in local files or runtime environment variables.
+Do not commit `server/config/config.yaml`, deprecated legacy
+`server/config.yaml`, or `.env`; keep API keys and refresh tokens in local
+files or runtime environment variables.
 
 Docker dependency updates are split across two mechanisms. Dependabot updates
 the Python packages, GitHub Actions, and Docker base image on the `next` branch.
@@ -359,8 +377,8 @@ http://localhost:8080/app
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
-If MQTT logging is enabled, set `mqtt.host` in `server/config.yaml` to a host
-that is reachable from inside the container. On Docker Desktop,
+If MQTT logging is enabled, set `mqtt.host` in `server/config/config.yaml` to a
+host that is reachable from inside the container. On Docker Desktop,
 `host.docker.internal` usually points to the host. On Linux, you may prefer to
 run the MQTT broker as another Compose service or use the host's LAN IP.
 
@@ -380,7 +398,7 @@ podman run -d \
   --name inkplate-weather-cal \
   --env-file .env \
   -p 8080:8080 \
-  -v ./server/config.yaml:/srv/inkplate/server/config.yaml:ro \
+  -v ./server/config:/srv/inkplate/server/config:ro \
   -v inkplate-data:/srv/inkplate/server/data \
   ghcr.io/orangespyderman/inkplate10-weather-cal:main
 ```
@@ -409,8 +427,18 @@ Configure the container with:
 
 - environment variables from `.env.example`
 - port `8080` exposed to your LAN
-- a read-only config mount at `/srv/inkplate/server/config.yaml`
+- a read-only config directory mounted at `/srv/inkplate/server/config`, with
+  the file available as `/srv/inkplate/server/config/config.yaml`
 - persistent storage mounted at `/srv/inkplate/server/data`
+
+Do not mount a directory over `/srv/inkplate/server`; that path contains the
+application code copied into the image. Mount only the config directory and data
+directory.
+
+The repository includes [config/EXAMPLE_config.yaml](config/EXAMPLE_config.yaml)
+as a starting point for this directory-mount layout. Put the edited file on the
+Proxmox host as `config.yaml`, then mount the containing directory read-only to
+`/srv/inkplate/server/config`.
 
 The generated PNG is served from:
 
