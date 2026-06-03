@@ -427,6 +427,8 @@ Configure the container with:
 
 - environment variables from `.env.example`
 - port `8080` exposed to your LAN
+- network configured with `ip=dhcp` or a static IPv4 address if the container
+  should be reachable over IPv4
 - a read-only config directory mounted at `/srv/inkplate/server/config`, with
   the file available as `/srv/inkplate/server/config/config.yaml`
 - persistent storage mounted at `/srv/inkplate/server/data`
@@ -434,6 +436,12 @@ Configure the container with:
 Do not mount a directory over `/srv/inkplate/server`; that path contains the
 application code copied into the image. Mount only the config directory and data
 directory.
+
+When using Proxmox host-managed DHCP, Proxmox starts the container and runs a
+DHCP client inside the container namespace. The image includes Debian's
+`isc-dhcp-client` package for this path. If the container still starts without a
+usable IPv4 address, check the Proxmox network line includes `ip=dhcp`; a config
+with only `ip6=dhcp` requests IPv6 DHCP but does not request an IPv4 lease.
 
 The repository includes [config/EXAMPLE_config.yaml](config/EXAMPLE_config.yaml)
 as a starting point for this directory-mount layout. Put the edited file on the

@@ -24,7 +24,7 @@ ARG HOMEDIR=/srv/inkplate
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl firefox-esr; \
+    apt-get install -y --no-install-recommends ca-certificates curl firefox-esr isc-dhcp-client; \
     arch_from_uname="$(uname -m)"; \
     case "${TARGETPLATFORM:-}" in \
         "") target="${arch_from_uname}" ;; \
