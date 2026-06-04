@@ -196,7 +196,7 @@ class CalendarPage(Page):
                                             anchor: 'center',
                                             offset: 12,
                                             textStrokeColor: "#FFF",
-                                            textStrokeWidth: 6,
+                                            textStrokeWidth: 9,
                                             font: {{
                                                 family: 'Merienda-Regular',
                                                 size: 32
