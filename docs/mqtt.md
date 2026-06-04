@@ -1,0 +1,209 @@
+# MQTT Weather Publishing
+
+The weather server can publish the normalized weather data it already uses for
+the Inkplate render to MQTT. This is optional and intended for local clients
+that want weather data without talking directly to OpenWeatherMap, AccuWeather,
+Netatmo, or Google.
+
+Good MQTT consumers include:
+
+- Pico W weather displays
+- ESP32 displays
+- Home Assistant automations
+- Node-RED flows
+- local dashboards
+
+The Inkplate client does not require MQTT. It still downloads the rendered PNG
+from `/calendar.png`.
+
+## Server Configuration
+
+Enable MQTT publishing in `server/config/config.yaml`:
+
+```yaml
+mqtt:
+  enabled: true
+  host: mqtt
+  port: 1883
+  base_topic: inkplate/weather-calendar
+  retain: true
+  qos: 0
+```
+
+The server publishes after each successful weather refresh. MQTT failures are
+logged but do not stop image rendering or HTTP serving.
+
+## Example Broker
+
+For a simple local lab broker, use the included Mosquitto Compose override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mqtt.yml up -d
+```
+
+When using that override, set:
+
+```yaml
+mqtt:
+  enabled: true
+  host: mqtt
+  port: 1883
+  base_topic: inkplate/weather-calendar
+  retain: true
+  qos: 0
+```
+
+The included broker listens on port `1883`, allows anonymous access, and stores
+retained messages in the `mqtt-data` Docker volume. That is convenient for a
+trusted LAN or development setup. Use an authenticated broker configuration
+before exposing MQTT beyond your local network.
+
+To inspect retained messages from the host, install Mosquitto clients and run:
+
+```bash
+mosquitto_sub -h localhost -t 'inkplate/weather-calendar/#' -v
+```
+
+## IPv6
+
+MQTT itself is transport-neutral. In this project, IPv6 support depends on the
+specific publisher, broker, client, and container network path.
+
+The Python weather publisher uses Paho MQTT and passes `mqtt.host` directly to
+the operating system socket stack. It should work with IPv6-capable hostnames or
+IPv6 literals when the server host/container can route to the broker.
+
+Use one of these forms in `server/config/config.yaml`:
+
+```yaml
+mqtt:
+  host: mqtt.example.net
+```
+
+or:
+
+```yaml
+mqtt:
+  host: "2001:db8::10"
+```
+
+Do not use URL syntax for `mqtt.host`; it is a host field, not an MQTT URL. In
+particular, do not include `mqtt://` and do not use bracketed URL literals such
+as `[2001:db8::10]`.
+
+The included Mosquitto config uses:
+
+```text
+listener 1883
+```
+
+Mosquitto can listen on IPv6, but Docker port publishing and bridge networking
+must also be configured for IPv6 on the host. If you run the included broker as
+a Compose service and the weather server connects to `host: mqtt` from the same
+Compose network, Docker's internal service networking is usually enough. If a
+Pico, phone, Home Assistant, or another LAN device connects to the broker over
+IPv6, verify that the Docker host publishes port `1883` on IPv6 and that local
+firewall rules allow it.
+
+The 52Pi EP-0164 Pico example is currently documented and tested as an
+IPv4-first client. MicroPython networking support is port/version dependent, and
+the RP2/Pico W quick reference documents IPv4 connection details with
+`wlan.ipconfig('addr4')`. Treat Pico W IPv6 MQTT as unverified until tested on
+the exact MicroPython build and network.
+
+## Topics
+
+With the default `base_topic`, the server publishes these retained JSON
+messages:
+
+```text
+inkplate/weather-calendar
+inkplate/weather-calendar/current
+inkplate/weather-calendar/hourly
+inkplate/weather-calendar/status
+```
+
+### `inkplate/weather-calendar`
+
+Full snapshot:
+
+```json
+{
+  "generated_at": "2026-06-04T09:00:00+00:00",
+  "source": "openweathermapv3",
+  "units": "metric",
+  "current": {
+    "icon": "icon/cloudy.png",
+    "temperature": {
+      "unit": "\u00b0C",
+      "value": 11,
+      "min": 8,
+      "max": 15
+    }
+  },
+  "hourly": [
+    {
+      "dt": "2026-06-04T10:00:00+00:00",
+      "icon": "icon/rainy.png",
+      "temperature": {
+        "unit": "\u00b0C",
+        "value": 18
+      },
+      "rain_probability": 100
+    }
+  ]
+}
+```
+
+The exact weather fields can vary slightly by provider, but `current`,
+`hourly`, `temperature`, `icon`, and `rain_probability` are the fields intended
+for lightweight display clients.
+
+### `inkplate/weather-calendar/current`
+
+Current conditions only. This is the simplest topic for character LCDs or
+single-screen microcontroller displays.
+
+### `inkplate/weather-calendar/hourly`
+
+Hourly forecast list. This is useful for displays that can show a short forecast
+strip or cycle through several upcoming periods.
+
+### `inkplate/weather-calendar/status`
+
+Metadata only:
+
+```json
+{
+  "generated_at": "2026-06-04T09:00:00+00:00",
+  "source": "openweathermapv3",
+  "units": "metric"
+}
+```
+
+## Icons
+
+The weather payload currently carries the same icon path used by the HTML
+renderer, for example:
+
+```json
+{
+  "icon": "icon/day/clear.png"
+}
+```
+
+For MQTT clients, treat this path as an icon identifier. A small display can map
+it to:
+
+- simple locally drawn shapes
+- local bitmap assets stored on the device
+- short text such as `Rain`, `Cloud`, or `Clear`
+
+Do not assume the MQTT message contains binary icon artwork. If we later want
+server-managed icon assets for MQTT-only clients, the cleaner design is to
+publish retained icon assets on separate topics and reference those topics from
+the weather payload.
+
+## Example Clients
+
+- [52Pi EP-0164 Pico W MQTT weather display](../examples/pico-ep0164-mqtt-weather)

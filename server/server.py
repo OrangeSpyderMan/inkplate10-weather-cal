@@ -9,8 +9,9 @@ import time
 import threading
 import datetime as dt
 import logging.config
-import paho.mqtt.client as mqtt
 from utils import expand_env_vars, get_prop, get_prop_by_keys
+from mqtt_publisher import MqttWeatherPublisher
+from weather.snapshot import WeatherSnapshot
 from views.calendar import CalendarPage
 from google.api import GoogleAPIService
 from werkzeug.serving import make_server
@@ -80,12 +81,8 @@ def main():
     image_width = get_prop_by_keys(config, "image", "width", default=825)
     image_height = get_prop_by_keys(config, "image", "height", default=1200)
 
-    mqtt_enabled = get_prop_by_keys(config, "mqtt", "enabled", default=False)
-    mqtt_host = get_prop_by_keys(config, "mqtt", "host", default="localhost")
-    mqtt_port = get_prop_by_keys(config, "mqtt", "port", default=1883)
-    mqtt_topic = get_prop_by_keys(
-        config, "mqtt", "topic", default="mqtt/eink-cal-client"
-    )
+    mqtt_config = get_prop(config, "mqtt", default={}, required=False) or {}
+    weather_publisher = build_mqtt_weather_publisher(mqtt_config)
 
     gapi = GoogleAPIService(google_apikey)
     map_file = os.path.join(cwd, "views", "html", "map.png")
@@ -129,11 +126,6 @@ def main():
     if not server_enabled:
         sys.exit(0)
 
-    # set up listener for client logs
-    mqtt_client = None
-    if mqtt_enabled:
-        mqtt_client = get_client_mqtt_logging(mqtt_host, mqtt_port, mqtt_topic)
-
     # setup http server
     if server_always_on:
         http_server = ServerThread(app, server_port)
@@ -142,11 +134,13 @@ def main():
         while True:
             log.info(f"Retrieving forecast data")
             try:
-                daily_summary = weather_svc.get_daily_summary()
-                hourly_forecasts = weather_svc.get_hourly_forecast()
-                apply_current_temperature_override(
-                    daily_summary, current_temperature_svc
+                snapshot = build_weather_snapshot(
+                    weather_svc,
+                    current_temperature_svc,
+                    weather_service_type,
+                    weather_metric,
                 )
+                publish_weather_snapshot(weather_publisher, snapshot)
             except Exception as e:
                 error_string = repr(e)
                 log.error(f"An error occurred whilst getting weather data!")
@@ -158,13 +152,7 @@ def main():
             try:
                 # generate page images
                 log.info(f"Generating page")
-                page = CalendarPage(image_width, image_height)
-                page.template(
-                    map_url=map_url,
-                    daily_summary=daily_summary,
-                    hourly_forecasts=hourly_forecasts,
-                )
-                page.save()
+                render_calendar_snapshot(snapshot, image_width, image_height, map_url)
             except Exception as e:
                 error_string = repr(e)
                 log.error(f"An error occurred whilst creating page!")
@@ -183,11 +171,13 @@ def main():
         )
         server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
         try:
-            daily_summary = weather_svc.get_daily_summary()
-            hourly_forecasts = weather_svc.get_hourly_forecast()
-            apply_current_temperature_override(
-                daily_summary, current_temperature_svc
+            snapshot = build_weather_snapshot(
+                weather_svc,
+                current_temperature_svc,
+                weather_service_type,
+                weather_metric,
             )
+            publish_weather_snapshot(weather_publisher, snapshot)
         except Exception as e:
             error_string = repr(e)
             log.error(f"An error occurred whilst getting weather data!")
@@ -196,13 +186,7 @@ def main():
             log.error(f"Will retry on next cycle...")
         try:
             # generate page images
-            page = CalendarPage(image_width, image_height)
-            page.template(
-                map_url=map_url,
-                daily_summary=daily_summary,
-                hourly_forecasts=hourly_forecasts,
-            )
-            page.save()
+            render_calendar_snapshot(snapshot, image_width, image_height, map_url)
         except Exception as e:
             error_string = repr(e)
             log.error(f"An error occurred whilst creating page!")
@@ -233,10 +217,6 @@ def main():
             diff = dt.datetime.now() - start_wait_dt
 
         http_server.shutdown(timeout=10)
-
-        if mqtt_client:
-            mqtt_client.loop_stop()
-            mqtt_client.disconnect()
 
         log.info(f"Exiting")
         sys.exit(0)
@@ -338,43 +318,55 @@ def apply_current_temperature_override(daily_summary, current_temperature_svc):
     )
 
 
-def get_client_mqtt_logging(host, port, topic):
-    mqtt_client = mqtt.Client("eink-cal-server")
-    client_log = logging.getLogger("client")
+def build_weather_snapshot(
+    weather_svc, current_temperature_svc, weather_service_type, weather_metric
+):
+    daily_summary = weather_svc.get_daily_summary()
+    hourly_forecasts = weather_svc.get_hourly_forecast()
+    apply_current_temperature_override(daily_summary, current_temperature_svc)
 
-    def on_connect(client, userdata, flags, rc):
-        if rc != 0:
-            log.error("Connection to client logging broker failed")
+    return WeatherSnapshot(
+        daily_summary=daily_summary,
+        hourly_forecasts=hourly_forecasts,
+        weather_source=weather_service_type,
+        metric=weather_metric,
+    )
 
-        log.info("Connected to client logging broker")
 
-    def on_disconnect(client, userdata, rc):
-        if rc != 0:
-            log.error("Unexpected broker disconnection")
+def render_calendar_snapshot(snapshot, image_width, image_height, map_url):
+    page = CalendarPage(image_width, image_height)
+    page.template(
+        map_url=map_url,
+        daily_summary=snapshot.daily_summary,
+        hourly_forecasts=snapshot.hourly_forecasts,
+    )
+    page.save()
 
-        log.info("Disconnected from client logging broker")
 
-    def on_message(client, userdata, message):
-        if message.retain:
-            # ignore stale messages
-            return
+def build_mqtt_weather_publisher(mqtt_config):
+    if not mqtt_config.get("enabled", False):
+        return None
 
-        client_log.info(message.payload.decode())
+    host = mqtt_config.get("host", "localhost")
+    port = mqtt_config.get("port", 1883)
+    base_topic = mqtt_config.get("base_topic", "inkplate/weather-calendar")
+    retain = mqtt_config.get("retain", True)
+    qos = mqtt_config.get("qos", 0)
 
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_disconnect = on_disconnect
-    mqtt_client.on_message = on_message
-    try:
-        mqtt_client.connect(host, port, 60)
-        mqtt_client.subscribe(topic)
-        mqtt_client.loop_start()
+    return MqttWeatherPublisher(
+        host=host,
+        port=port,
+        base_topic=base_topic,
+        retain=retain,
+        qos=qos,
+    )
 
-        return mqtt_client
-    except Exception as e:
-        log.error(f"Connection to client logging broker failed: {e}")
 
-    return None
+def publish_weather_snapshot(weather_publisher, snapshot):
+    if weather_publisher is None:
+        return
 
+    weather_publisher.publish_snapshot(snapshot)
 
 class ServerThread(threading.Thread):
     def __init__(self, app, port, max_serves=1):

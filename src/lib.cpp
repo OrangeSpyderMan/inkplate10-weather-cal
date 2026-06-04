@@ -5,12 +5,6 @@ RTC_DATA_ATTR time_t lastBootTime = 0;
 // RTC epoch of the last time deep sleep was initiated.
 RTC_DATA_ATTR time_t lastSleepTime = 0;
 
-// remote mqtt logger
-WiFiClient espClient;
-PubSubClient client(espClient);
-MqttLogger mqttLogger(client, "", MqttLoggerMode::SerialOnly);
-// queue to store messages to publish once mqtt connection is established.
-cppQueue logQ(LOG_MSG_MAX_LEN, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
 // inkplate10 board driver
 Inkplate board(INKPLATE_3BIT);
 // timezone store
@@ -143,47 +137,6 @@ void displayMessage(const char *msg)
 }
 
 /**
-  Connect to a MQTT broker for remote logging.
-
-  @param broker the hostname of the MQTT broker.
-  @param port the port of the MQTT broker.
-  @param topic the topic to publish logs to.
-  @param clientID the name of the logger client to appear as.
-  @param max_retries the number of connection attempts to make before fallback
-  to serial-only logging.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
-*/
-esp_err_t configureMQTT(const char *broker, int port, const char *topic,
-                        const char *clientID, int max_retries)
-{
-    log(LOG_INFO, "configuring remote MQTT logging...");
-
-    client.setServer(broker, port);
-    // Attempt to connect to MQTT broker.
-    int attempts = 0;
-    while (attempts++ <= max_retries && !client.connect(clientID))
-    {
-        logf(LOG_DEBUG, "connection attempt #%d...", attempts);
-        delay(250);
-    }
-
-    if (!client.connected())
-    {
-        return ESP_ERR_TIMEOUT;
-    }
-
-    mqttLogger.setTopic(topic);
-    mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
-
-    // Print the IP address
-    logf(LOG_INFO, "connected to MQTT broker %s:%d", broker, port);
-
-    return ESP_OK;
-}
-
-/**
   Converts a priority into a log level prefix.
 
   @param pri the log level / priority of the message, see LOG_LEVEL.
@@ -239,7 +192,7 @@ void log(uint16_t pri, const char *msg)
     char buf[LOG_MSG_MAX_LEN];
     snprintf(buf, sizeof(buf), "%s%s", prefix.c_str(), msg);
 
-    ensureQueue(buf);
+    Serial.println(buf);
 }
 
 /**
@@ -264,40 +217,7 @@ void logf(uint16_t pri, const char *fmt, ...)
     vsnprintf(buf + prefixLen, sizeof(buf) - prefixLen, fmt, args);
     va_end(args);
 
-    ensureQueue(buf);
-}
-
-/**
-  Ensure log queue is populated/emptied based on MQTT connection.
-
-  @param msg the log message.
-*/
-void ensureQueue(const char *logMsg)
-{
-    if (!client.connected())
-    {
-        // populate log queue while no mqtt connection
-        logQ.push(logMsg);
-    }
-    else
-    {
-        // send queued logs once we are connected.
-        if (logQ.getCount() > 0)
-        {
-            char tempBuf[LOG_MSG_MAX_LEN];
-            mqttLogger.setMode(MqttLoggerMode::MqttOnly);
-            while (!logQ.isEmpty())
-            {
-                if (logQ.pop(tempBuf))
-                {
-                    mqttLogger.println(tempBuf);
-                }
-            }
-            mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
-        }
-    }
-    // print/send the current log
-    mqttLogger.println(logMsg);
+    Serial.println(buf);
 }
 
 /**
