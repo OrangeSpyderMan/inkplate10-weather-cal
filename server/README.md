@@ -167,6 +167,25 @@ Config values can reference environment variables with `${VARIABLE_NAME}`. Use `
 
 This lets you keep committed YAML files free of secrets and inject sensitive values from the runtime environment. In GitHub Actions, store those values as repository or environment secrets and pass them to the relevant step with `env:`. For local Docker runs, use an ignored `.env` file or shell environment variables.
 
+The container image predeclares the expected runtime environment variable names
+with empty defaults so container UIs can show the supported settings:
+
+```text
+WEATHER_API_KEY
+GOOGLE_API_KEY
+GOOGLE_STATICMAPS_MAPID
+NETATMO_CLIENT_ID
+NETATMO_CLIENT_SECRET
+NETATMO_REFRESH_TOKEN
+NETATMO_DEVICE_ID
+NETATMO_MODULE_ID
+```
+
+Empty image defaults do not satisfy required config placeholders such as
+`${WEATHER_API_KEY}`. Required values must still be provided by the runtime
+environment. Optional placeholders such as `${NETATMO_CLIENT_ID:-}` continue to
+expand to an empty string when unset.
+
 ### Image dimensions
 
 The `image.width` and `image.height` config values set the browser capture
@@ -350,7 +369,9 @@ NETATMO_MODULE_ID=
 The compose file mounts `server/config` read-only and stores mutable
 runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
-container replacement.
+container replacement. The image predeclares the same environment variable names
+shown in `.env.example`, but Compose still requires explicit values for
+`WEATHER_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_STATICMAPS_MAPID`.
 
 ### Docker MQTT broker
 
@@ -474,6 +495,11 @@ Configure the container with:
 - a read-only config directory mounted at `/srv/inkplate/server/config`, with
   the file available as `/srv/inkplate/server/config/config.yaml`
 - persistent storage mounted at `/srv/inkplate/server/data`
+
+The OCI image metadata predeclares the expected environment variable names with
+empty defaults. Fill in at least `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and
+`GOOGLE_STATICMAPS_MAPID`; leave Netatmo values empty unless
+`current_temperature.source` is set to `netatmo`.
 
 Do not mount a directory over `/srv/inkplate/server`; that path contains the
 application code copied into the image. Mount only the config directory and data
