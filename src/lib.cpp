@@ -120,20 +120,158 @@ esp_err_t displayImage(const char *filePath)
 }
 
 /**
-  Draw an message to the display. The error message is drawn in the top-left
-  corner of the display. Error message will overlay previously drawn image.
+  Draw a high-contrast error screen to the display.
+
+  @param title short error category.
+  @param detail short human-readable error detail.
+  @param diagnostics optional diagnostic lines.
+  error.
+*/
+void displayError(const char *title, const char *detail, const String &diagnostics)
+{
+    const uint8_t black = 0;
+    const uint8_t white = 7;
+    const int margin = 24;
+    const int bannerHeight = 96;
+
+    board.clearDisplay();
+    board.setTextWrap(true);
+
+    board.fillRect(0, 0, board.width(), bannerHeight, black);
+    board.setTextColor(white, black);
+    board.setTextSize(3);
+    board.setCursor(margin, 28);
+    board.print("Weather calendar error");
+
+    board.setTextColor(black, white);
+    board.setTextSize(3);
+    board.setCursor(margin, bannerHeight + 28);
+    board.println(title);
+
+    board.setTextSize(2);
+    board.setCursor(margin, bannerHeight + 96);
+    board.println(detail);
+
+    if (diagnostics.length() > 0)
+    {
+        board.println();
+        board.println("Diagnostics:");
+        board.println(diagnostics);
+    }
+
+    board.display();
+}
+
+void displayError(const char *title, const char *detail)
+{
+    displayError(title, detail, String());
+}
+
+/**
+  Draw a high-contrast message to the display.
 
   @param msg the message to display.
   error.
 */
 void displayMessage(const char *msg)
 {
-    board.setTextSize(4);
-    board.setTextColor(1, 0);
-    board.setTextWrap(true);
-    board.setCursor(0, 0);
-    board.print(msg);
-    board.display();
+    displayError("Error", msg);
+}
+
+String wifiStatusName(wl_status_t status)
+{
+    switch (status)
+    {
+    case WL_CONNECTED:
+        return "connected";
+    case WL_NO_SHIELD:
+        return "no shield";
+    case WL_IDLE_STATUS:
+        return "idle";
+    case WL_NO_SSID_AVAIL:
+        return "ssid unavailable";
+    case WL_SCAN_COMPLETED:
+        return "scan complete";
+    case WL_CONNECT_FAILED:
+        return "connect failed";
+    case WL_CONNECTION_LOST:
+        return "connection lost";
+    case WL_DISCONNECTED:
+        return "disconnected";
+    default:
+        return "unknown";
+    }
+}
+
+String networkDiagnostics()
+{
+    String msg = "WiFi: ";
+    msg += wifiStatusName(WiFi.status());
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        msg += "\nIP: ";
+        msg += WiFi.localIP().toString();
+    }
+
+    return msg;
+}
+
+String joinDiagnostics(const String &first, const String &second)
+{
+    if (first.length() == 0)
+    {
+        return second;
+    }
+    if (second.length() == 0)
+    {
+        return first;
+    }
+
+    return first + "\n" + second;
+}
+
+String appendDiagnostic(const String &base, const String &label, const String &value)
+{
+    String line = label + value;
+    return joinDiagnostics(base, line);
+}
+
+String retryDiagnostics(const int attempts, const int retries)
+{
+    String msg = "Attempts: ";
+    msg += attempts;
+    msg += "\nRetries configured: ";
+    msg += retries;
+    return msg;
+}
+
+String urlDiagnostics(const char *url)
+{
+    String msg = "URL: ";
+    msg += url;
+    return msg;
+}
+
+String fileDiagnostics(const char *filePath)
+{
+    String msg = "File: ";
+    msg += filePath;
+    return msg;
+}
+
+String batteryDiagnostics(const float voltage)
+{
+    String msg = "Battery: ";
+    msg += String(voltage, 2);
+    msg += "V";
+    return msg;
+}
+
+String configDiagnostics(const char *path)
+{
+    String msg = "Config: ";
+    msg += path;
+    return msg;
 }
 
 /**

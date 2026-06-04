@@ -12,7 +12,7 @@ bool isMissingConfigValue(const char *value)
 void failConfig(const char *msg)
 {
     log(LOG_ERROR, msg);
-    displayMessage(msg);
+    displayError("Config error", msg, configDiagnostics(CONFIG_FILE_PATH));
     sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     while (true)
     {
@@ -67,7 +67,7 @@ void setup()
     {
         const char *errMsg = "SD card init failure";
         log(LOG_ERROR, errMsg);
-        displayMessage(errMsg);
+        displayError("Storage error", errMsg);
         sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
 
@@ -78,7 +78,7 @@ void setup()
     {
         const char *errMsg = "Failed to open config file";
         logf(LOG_ERROR, errMsg);
-        displayMessage(errMsg);
+        displayError("Config error", errMsg, configDiagnostics(CONFIG_FILE_PATH));
         sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
 
@@ -90,7 +90,9 @@ void setup()
     {
         const char *errMsg = "Failed to load config from file";
         logf(LOG_ERROR, "failed to deserialize YAML: %s", dse.c_str());
-        displayMessage(errMsg);
+        String diagnostics = configDiagnostics(CONFIG_FILE_PATH);
+        diagnostics = appendDiagnostic(diagnostics, "Parser: ", dse.c_str());
+        displayError("Config error", errMsg, diagnostics);
         sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
     file.close();
@@ -146,7 +148,10 @@ void setup()
     {
         const char *errMsg = "wifi connect timeout";
         log(LOG_ERROR, errMsg);
-        displayMessage(errMsg);
+        String diagnostics = networkDiagnostics();
+        diagnostics = appendDiagnostic(diagnostics, "SSID: ", wifiSSID);
+        diagnostics = appendDiagnostic(diagnostics, "Retries configured: ", String(wifiRetries));
+        displayError("WiFi error", errMsg, diagnostics);
         sleep(calendarRefreshInterval);
     }
 
@@ -180,7 +185,10 @@ void setup()
         if (bvolt < 3.1)
         {
             log(LOG_NOTICE, "battery near empty! - sleeping until charged");
-            displayMessage("Battery empty, please charge!");
+            displayError(
+                "Battery low",
+                "Battery empty, please charge!",
+                batteryDiagnostics(bvolt));
             // Sleep instead of proceeding when battery is too low.
             sleep(calendarRefreshInterval);
         }
@@ -227,7 +235,17 @@ void setup()
     // If we were not successfully, print the error msg to the inkplate display.
     if (err != ESP_OK)
     {
-        displayMessage(errMsg);
+        String diagnostics = retryDiagnostics(attempts, calendarRetries);
+        if (err == ESP_ERR_EDRAW)
+        {
+            diagnostics = joinDiagnostics(diagnostics, fileDiagnostics(CALENDAR_RW_PATH));
+        }
+        else
+        {
+            diagnostics = joinDiagnostics(diagnostics, urlDiagnostics(calendarUrl));
+        }
+        diagnostics = joinDiagnostics(diagnostics, networkDiagnostics());
+        displayError("Refresh error", errMsg, diagnostics);
     }
 
     // Deep sleep until next refresh time

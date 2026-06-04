@@ -91,8 +91,27 @@ esp_err_t downloadFile(const char *url, int32_t size, const char *filePath);
 esp_err_t displayImage(const char *filePath);
 
 /**
-  Draw an message to the display. The error message is drawn in the top-left
-  corner of the display. Error message will overlay previously drawn image.
+  Draw a high-contrast error screen to the display.
+
+  @param title short error category.
+  @param detail short human-readable error detail.
+  @param diagnostics optional diagnostic lines.
+  error.
+*/
+void displayError(const char *title, const char *detail, const String &diagnostics);
+void displayError(const char *title, const char *detail);
+
+String appendDiagnostic(const String &base, const String &label, const String &value);
+String batteryDiagnostics(const float voltage);
+String configDiagnostics(const char *path);
+String fileDiagnostics(const char *filePath);
+String joinDiagnostics(const String &first, const String &second);
+String networkDiagnostics();
+String retryDiagnostics(const int attempts, const int retries);
+String urlDiagnostics(const char *url);
+
+/**
+  Draw a high-contrast message to the display.
 
   @param msg the message to display.
   error.
