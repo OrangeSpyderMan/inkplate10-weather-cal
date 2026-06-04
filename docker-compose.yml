@@ -20,7 +20,7 @@ services:
       NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
       NETATMO_MODULE_ID: ${NETATMO_MODULE_ID:-}
     volumes:
-      - ./server/config.yaml:/srv/inkplate/server/config.yaml:ro
+      - ./server/config:/srv/inkplate/server/config:ro
       - inkplate-data:/srv/inkplate/server/data
     healthcheck:
       test:

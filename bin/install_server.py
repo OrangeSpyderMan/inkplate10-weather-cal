@@ -28,7 +28,8 @@ VENV_DIR = INSTALL_DIR / "inkplate_venv"
 NATIVE_ENV_FILE = Path("/etc/inkplate/weather.env")
 SERVICE_FILE = Path("/etc/systemd/system/inkplate.service")
 DOCKER_ENV_FILE = Path(".env")
-SERVER_CONFIG = Path("server/config.yaml")
+SERVER_CONFIG = Path("server/config/config.yaml")
+LEGACY_SERVER_CONFIG = Path("server/config.yaml")
 DEFAULT_PORT = 8080
 DEFAULT_REFRESH_HOURS = 3
 DEFAULT_FORECASTS = 6
@@ -136,7 +137,11 @@ def ensure_repo_root(repo_root: Path) -> None:
 def install_docker(repo_root: Path, dry_run: bool) -> None:
     existing = [
         path
-        for path in (repo_root / DOCKER_ENV_FILE, repo_root / SERVER_CONFIG)
+        for path in (
+            repo_root / DOCKER_ENV_FILE,
+            repo_root / SERVER_CONFIG,
+            repo_root / LEGACY_SERVER_CONFIG,
+        )
         if path.exists()
     ]
     action = choose_existing_action("Docker", existing)
@@ -146,7 +151,7 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
 
     if action in ("fresh", "reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
-        current_config = read_simple_yaml(repo_root / SERVER_CONFIG)
+        current_config = read_simple_yaml(existing_config_path(repo_root))
         answers = collect_answers(current_env, current_config, mode="docker")
         write_text_atomic(
             repo_root / SERVER_CONFIG,
@@ -192,7 +197,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
     if action in ("fresh", "reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
-        current_config = read_simple_yaml(INSTALL_DIR / SERVER_CONFIG)
+        current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
         answers = collect_answers(current_env, current_config, mode="systemd")
         write_text_atomic(
             INSTALL_DIR / SERVER_CONFIG,
@@ -224,6 +229,16 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         print("Logs: sudo journalctl -u inkplate -f")
     else:
         print("Start later with: sudo systemctl start inkplate")
+
+
+def existing_config_path(base_dir: Path) -> Path:
+    preferred = base_dir / SERVER_CONFIG
+    if preferred.exists():
+        return preferred
+    legacy = base_dir / LEGACY_SERVER_CONFIG
+    if legacy.exists():
+        return legacy
+    return preferred
 
 
 def choose_existing_action(label: str, existing: list[Path]) -> str:
@@ -568,7 +583,7 @@ def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
         ignore = install_copy_ignore(repo_root)
         shutil.copytree(repo_root, tmp_path, ignore=ignore)
         run(["cp", "-a", f"{tmp_path}/.", str(install_dir)], sudo=True)
-    run(["mkdir", "-p", str(install_dir / "server" / "data")], sudo=True)
+    run(["mkdir", "-p", str(install_dir / "server" / "config"), str(install_dir / "server" / "data")], sudo=True)
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(install_dir)], sudo=True)
 
 
@@ -615,6 +630,8 @@ def install_copy_ignore(repo_root: Path):
         except ValueError:
             relative = Path()
         if relative == Path("server"):
+            ignored.add("config.yaml")
+        if relative == Path("server/config"):
             ignored.add("config.yaml")
         return ignored
 

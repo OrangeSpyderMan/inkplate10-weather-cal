@@ -14,9 +14,12 @@ from utils import expand_env_vars, get_prop, get_prop_by_keys
 from views.calendar import CalendarPage
 from google.api import GoogleAPIService
 from werkzeug.serving import make_server
-from flask import Flask, send_file, abort
+from flask import Flask, send_file, abort, send_from_directory
 
 cwd = os.path.dirname(os.path.realpath(__file__))
+pwa_dir = os.path.join(cwd, "views", "pwa")
+default_config_path = os.path.join(cwd, "config.yaml")
+default_config_dir_path = os.path.join(cwd, "config", "config.yaml")
 log = None
 
 app = Flask(__name__)
@@ -28,9 +31,9 @@ server_max_serves = 1
 def main():
     global log, server_max_serves
 
-    config_file = open(os.path.join(cwd, "config.yaml"))
-    config = expand_env_vars(yaml.safe_load(config_file))
-    config_file.close()
+    config_path = resolve_config_path()
+    with open(config_path) as config_file:
+        config = expand_env_vars(yaml.safe_load(config_file))
 
     debug = get_prop(config, "debug", default=False)
     # Create and configure logger
@@ -39,6 +42,7 @@ def main():
         logging.config.fileConfig(os.path.join(cwd, "logging.dev.ini"))
     logging.config.fileConfig(log_ini_path)
     log = logging.getLogger("server")
+    log.info(f"Loaded config from {config_path}")
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
@@ -238,6 +242,32 @@ def main():
         sys.exit(0)
 
 
+def resolve_config_path():
+    env_config_path = os.environ.get("INKPLATE_CONFIG_FILE")
+    if env_config_path:
+        if os.path.isfile(env_config_path):
+            return env_config_path
+
+        print(
+            f"INKPLATE_CONFIG_FILE points to a missing config file: {env_config_path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if os.path.isfile(default_config_dir_path):
+        return default_config_dir_path
+
+    if os.path.isfile(default_config_path):
+        return default_config_path
+
+    print(
+        "No config file found. Checked "
+        f"{default_config_dir_path} and {default_config_path}.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def build_current_temperature_service(config, metric):
     current_temperature_config = get_prop(
         config, "current_temperature", default={}, required=False
@@ -389,7 +419,88 @@ def serve_cal_png():
         as_attachment=True,
         download_name=os.path.basename(path),
     )
-    
+
+
+@app.route("/")
+@app.route("/app")
+@app.route("/app/")
+@app.route("/app/index.html")
+def serve_pwa():
+    return send_from_directory(pwa_dir, "index.html")
+
+
+@app.route("/app.css")
+def serve_pwa_css():
+    return send_from_directory(pwa_dir, "app.css")
+
+
+@app.route("/app.js")
+def serve_pwa_js():
+    return send_from_directory(pwa_dir, "app.js")
+
+
+@app.route("/manifest.webmanifest")
+def serve_pwa_manifest():
+    return send_from_directory(
+        pwa_dir,
+        "manifest.webmanifest",
+        mimetype="application/manifest+json",
+    )
+
+
+@app.route("/sw.js")
+def serve_pwa_service_worker():
+    return send_from_directory(
+        pwa_dir,
+        "sw.js",
+        mimetype="application/javascript",
+    )
+
+
+@app.route("/icons/<path:filename>")
+def serve_pwa_icon(filename):
+    return send_from_directory(os.path.join(pwa_dir, "icons"), filename)
+
+
+@app.route("/favicon.ico")
+def serve_favicon():
+    return send_from_directory(
+        os.path.join(pwa_dir, "icons"),
+        "weathercal-favicon.ico",
+        mimetype="image/x-icon",
+    )
+
+
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def serve_apple_touch_icon():
+    return send_from_directory(
+        os.path.join(pwa_dir, "icons"),
+        "weathercal-icon-192.png",
+        mimetype="image/png",
+    )
+
+
+@app.route("/app/calendar.png")
+def serve_pwa_cal_png():
+    """
+    Returns the calendar image for browsers without affecting the Inkplate
+    download route's serve counter or Content-Disposition behavior.
+    """
+
+    path = os.path.join(cwd, "views/calendar.png")
+
+    if not os.path.exists(path):
+        log.error(f"{path}: no such file exists")
+        abort(404)
+
+    return send_file(
+        path,
+        mimetype="image/png",
+        as_attachment=False,
+        max_age=0,
+    )
+
 
 if __name__ == "__main__":
     main()

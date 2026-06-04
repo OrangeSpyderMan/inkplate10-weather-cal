@@ -81,10 +81,15 @@ workspace.code-workspace
 .vscode/
 
 # gen'd files
+/server/config.yaml
+/server/config/config.yaml
 **/*.log
 **/*.log.*
 **/*.html
+!server/views/pwa/index.html
 **/*.png
+!server/views/pwa/icons/*.png
+!server/views/pwa/icons/*.ico
 **/*.bmp
 **/*/samples
 .tools/

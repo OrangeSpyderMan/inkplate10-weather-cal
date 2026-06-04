@@ -1,0 +1,59 @@
+:root {
+  color-scheme: light;
+  background: #000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+body {
+  background: #000;
+  color: #101415;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.viewer {
+  align-items: center;
+  display: grid;
+  height: 100dvh;
+  justify-items: center;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 100vw;
+}
+
+#calendar {
+  display: block;
+  height: auto;
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
+#status {
+  background: rgba(247, 245, 236, 0.92);
+  border: 2px solid #101415;
+  border-radius: 6px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  font-size: 0.875rem;
+  left: 50%;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+#status[hidden] {
+  display: none;
+}

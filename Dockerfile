@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ARG BUILD_DATE
 ARG VCS_REF
@@ -24,7 +24,7 @@ ARG HOMEDIR=/srv/inkplate
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl firefox-esr; \
+    apt-get install -y --no-install-recommends ca-certificates curl firefox-esr isc-dhcp-client; \
     arch_from_uname="$(uname -m)"; \
     case "${TARGETPLATFORM:-}" in \
         "") target="${arch_from_uname}" ;; \
@@ -53,7 +53,7 @@ RUN pip install --upgrade pip setuptools wheel \
     && rm /tmp/requirements.txt
 
 COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
-RUN mkdir -p ${HOMEDIR}/server/data \
+RUN mkdir -p ${HOMEDIR}/server/config ${HOMEDIR}/server/data \
     && chown -R ${USERNAME}:${USERNAME} ${HOMEDIR}/server
 
 USER ${USERNAME}

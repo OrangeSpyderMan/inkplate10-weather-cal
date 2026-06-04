@@ -16,7 +16,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 
 ## Background
 
-I was looking for a weather station for my home and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This is a fork of that project. The main differences are a stronger focus on Docker-based server deployment, more frequent updates, and a few display and firmware tweaks, but the original concept is Chris' work.
+I was looking for a weather station for my home and came across [Chris Twomey's Inkplate Weather Calendar](https://github.com/chrisjtwomey/inkplate10-weather-cal). This project began as a fork of that work, but has since diverged into a separately maintained project with a stronger focus on Docker-based server deployment, repeatable firmware builds, published container images, installer tooling, and display/server tweaks. The original concept remains Chris' work, and the repository history and license attribution preserve that origin.
 
 ## How it Works
 
@@ -123,6 +123,12 @@ Likely parameters you'll need to change are:
 
 See the [server](/server) for info on server setup.
 
+The server can also expose the rendered calendar as a lightweight browser/PWA
+viewer at `http://<server-host>:8080/app`. Use `server.alwayson: true` for this
+mode so the server keeps refreshing and serving the PNG continuously. The
+browser viewer uses a separate inline image route and does not interfere with
+the Inkplate client's `/calendar.png` download route.
+
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
@@ -139,10 +145,15 @@ The installer prompts for the weather provider, API keys, Google Static Maps
 Map ID, location, optional Netatmo details, optional MQTT logging, and whether
 to start the service/container. It keeps secrets out of committed YAML files:
 
-- Docker installs write secrets to `.env` and config to `server/config.yaml`.
+- Docker installs write secrets to `.env` and config to
+  `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
-  `/srv/inkplate/server/config.yaml`, and dependencies to
+  `/srv/inkplate/server/config/config.yaml`, and dependencies to
   `/srv/inkplate/inkplate_venv`.
+
+The old server config path, `server/config.yaml`, is deprecated and will be
+removed in a future release. Move existing installs to
+`server/config/config.yaml` as soon as practical.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system

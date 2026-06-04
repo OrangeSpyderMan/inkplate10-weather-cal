@@ -2,6 +2,8 @@
 server:
   enabled: true
   port: 8080
+  # Keep true for Docker and for the browser/PWA viewer at /app.
+  # One-shot mode is mainly for scheduled Inkplate-only refresh workflows.
   alwayson: true
   refreshhours: 3
 weather:

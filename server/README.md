@@ -15,7 +15,8 @@ Example 1                  | Example 2                 | Example 3
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
-- Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images.
+- Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images and
+  a browser/PWA viewer.
 
 ## Setup
 
@@ -37,9 +38,9 @@ Static Maps Map ID, optional Netatmo credentials, optional MQTT logging, and
 whether to start the service or container. Secrets are written outside committed
 YAML:
 
-- Docker: `.env` plus `server/config.yaml`
-- systemd: `/etc/inkplate/weather.env`, `/srv/inkplate/server/config.yaml`, and
-  `/srv/inkplate/inkplate_venv`
+- Docker: `.env` plus `server/config/config.yaml`
+- systemd: `/etc/inkplate/weather.env`,
+  `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
 Docker mode runs as the current user and expects that user to be able to run
 `docker compose`. Native systemd mode needs root privileges for package
@@ -143,6 +144,56 @@ target for the generated PNG. The current HTML/CSS layout is tuned for Inkplate
 system. Changing them may produce cropped, stretched, or poorly spaced output
 unless the layout is also retuned.
 
+### Browser and PWA viewer
+
+The server also exposes a lightweight browser client for phones, tablets, and
+desktop browsers. It does not reimplement the calendar layout; it displays the
+same rendered PNG that the Inkplate uses.
+
+Open the viewer at:
+
+```text
+http://<server-host>:8080/app
+```
+
+The root URL also opens the same viewer:
+
+```text
+http://<server-host>:8080/
+```
+
+The viewer refreshes the image every 15 minutes and whenever the browser tab or
+installed app becomes visible. It fetches the image from:
+
+```text
+http://<server-host>:8080/app/calendar.png
+```
+
+This browser-facing image route is intentionally separate from the Inkplate
+route:
+
+- `/calendar.png` keeps the existing attachment response and increments the
+  Inkplate serve counter used by one-shot server mode.
+- `/app/calendar.png` serves the same file inline for browsers and does not
+  increment the Inkplate serve counter.
+
+For the browser/PWA viewer, keep the server running continuously:
+
+```yaml
+server:
+  alwayson: true
+```
+
+Without `server.alwayson: true`, the server can shut down after the configured
+one-shot lifetime or after the Inkplate has fetched `/calendar.png`. Docker
+Compose and the example Docker config already use `server.alwayson: true`;
+one-shot mode is mainly useful for scheduled Inkplate-only refresh workflows.
+
+To use it like an app, open `/app` on the device and use the browser's install
+or "Add to Home Screen" action. The client is intentionally simple: it caches
+the app shell with a service worker, but always asks the server for the latest
+calendar image.
+
 ### Google StaticMaps API
 
 <img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />
@@ -184,11 +235,28 @@ it should be OK to use, but may be less tested.
 ```
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
-cp server/EXAMPLE_config.yaml server/config.yaml
+cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 python3 -m pip install -r server/requirements.txt
 ```
 
-Edit `server/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
+Edit `server/config/config.yaml` before starting the server. At minimum, set the weather provider, API keys, Google Static Maps Map ID, and location. Environment variable placeholders such as `${WEATHER_API_KEY}` are expanded at runtime.
+
+By default the server looks for config in:
+
+1. the file named by `INKPLATE_CONFIG_FILE`, when set
+2. `server/config/config.yaml`
+3. `server/config.yaml`
+
+The `server/config/config.yaml` path is the preferred layout for new installs
+because it can be mounted as a config directory without hiding application code.
+The legacy `server/config.yaml` path remains supported for existing installs
+for now, but it is deprecated and will be removed in a future release. Move
+existing configs to `server/config/config.yaml` as soon as practical:
+
+```bash
+mkdir -p server/config
+mv server/config.yaml server/config/config.yaml
+```
 
 Run the server manually:
 ```
@@ -219,7 +287,7 @@ server as an unprivileged `inkplate` user.
 Create a Docker server config from the example:
 
 ```bash
-cp server/EXAMPLE_docker_config.yaml server/config.yaml
+cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 ```
 
 For Docker, keep `server.alwayson: true`. The compose file uses
@@ -248,7 +316,7 @@ NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
 ```
 
-The compose file mounts `server/config.yaml` read-only and stores mutable
+The compose file mounts `server/config` read-only and stores mutable
 runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement.
@@ -263,8 +331,9 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:next
 Use `:main` for stable deployments. Use `:next` to test changes before they are
 promoted to `main`.
 
-Do not commit `server/config.yaml` or `.env`; keep API keys and refresh tokens
-in local files or runtime environment variables.
+Do not commit `server/config/config.yaml`, deprecated legacy
+`server/config.yaml`, or `.env`; keep API keys and refresh tokens in local
+files or runtime environment variables.
 
 Docker dependency updates are split across two mechanisms. Dependabot updates
 the Python packages, GitHub Actions, and Docker base image on the `next` branch.
@@ -299,11 +368,17 @@ The server listens on port `8080` and serves the generated image from:
 http://localhost:8080/calendar.png
 ```
 
+The browser/PWA viewer is available from:
+
+```text
+http://localhost:8080/app
+```
+
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
-If MQTT logging is enabled, set `mqtt.host` in `server/config.yaml` to a host
-that is reachable from inside the container. On Docker Desktop,
+If MQTT logging is enabled, set `mqtt.host` in `server/config/config.yaml` to a
+host that is reachable from inside the container. On Docker Desktop,
 `host.docker.internal` usually points to the host. On Linux, you may prefer to
 run the MQTT broker as another Compose service or use the host's LAN IP.
 
@@ -323,7 +398,7 @@ podman run -d \
   --name inkplate-weather-cal \
   --env-file .env \
   -p 8080:8080 \
-  -v ./server/config.yaml:/srv/inkplate/server/config.yaml:ro \
+  -v ./server/config:/srv/inkplate/server/config:ro \
   -v inkplate-data:/srv/inkplate/server/data \
   ghcr.io/orangespyderman/inkplate10-weather-cal:main
 ```
@@ -352,13 +427,37 @@ Configure the container with:
 
 - environment variables from `.env.example`
 - port `8080` exposed to your LAN
-- a read-only config mount at `/srv/inkplate/server/config.yaml`
+- network configured with `ip=dhcp` or a static IPv4 address if the container
+  should be reachable over IPv4
+- a read-only config directory mounted at `/srv/inkplate/server/config`, with
+  the file available as `/srv/inkplate/server/config/config.yaml`
 - persistent storage mounted at `/srv/inkplate/server/data`
+
+Do not mount a directory over `/srv/inkplate/server`; that path contains the
+application code copied into the image. Mount only the config directory and data
+directory.
+
+When using Proxmox host-managed DHCP, Proxmox starts the container and runs a
+DHCP client inside the container namespace. The image includes Debian's
+`isc-dhcp-client` package for this path. If the container still starts without a
+usable IPv4 address, check the Proxmox network line includes `ip=dhcp`; a config
+with only `ip6=dhcp` requests IPv6 DHCP but does not request an IPv4 lease.
+
+The repository includes [config/EXAMPLE_config.yaml](config/EXAMPLE_config.yaml)
+as a starting point for this directory-mount layout. Put the edited file on the
+Proxmox host as `config.yaml`, then mount the containing directory read-only to
+`/srv/inkplate/server/config`.
 
 The generated PNG is served from:
 
 ```text
 http://<container-ip-or-hostname>:8080/calendar.png
+```
+
+The browser/PWA viewer is served from:
+
+```text
+http://<container-ip-or-hostname>:8080/app
 ```
 
 Known caveats:
