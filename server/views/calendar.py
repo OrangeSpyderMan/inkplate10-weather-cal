@@ -52,7 +52,7 @@ class CalendarPage(Page):
         if temperature_unit == "\N{DEGREE SIGN}F":
             temperature_axis_min = 5
             temperature_axis_max = 104
-        rain_axis_max = 220
+        rain_axis_max = 100
         chart_width = int(self.image_width * 0.95)
         chart_height = 400
 
@@ -177,9 +177,9 @@ class CalendarPage(Page):
                                             roughness: 4,
                                             bowing: 0.2,
                                             fillStyle: 'zigzag',
-                                            fillWeight: 1.5,
+                                            fillWeight: 1,
                                             hachureAngle: 45,
-                                            hachureGap: 12
+                                            hachureGap: 18
                                         }}
                                     }}, {{
                                         yAxisID: 'temperature',
@@ -195,8 +195,8 @@ class CalendarPage(Page):
                                             }},
                                             anchor: 'center',
                                             offset: 12,
-                                            backgroundColor: "#FFF",
-                                            borderRadius: 4,
+                                            textStrokeColor: "#FFF",
+                                            textStrokeWidth: 6,
                                             font: {{
                                                 family: 'Merienda-Regular',
                                                 size: 32
