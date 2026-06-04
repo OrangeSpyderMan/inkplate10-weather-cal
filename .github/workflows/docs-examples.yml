@@ -1,0 +1,41 @@
+name: Docs and Examples CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - "README.md"
+      - "docs/**"
+      - "examples/**"
+      - "server/README.md"
+      - ".github/workflows/docs-examples.yml"
+  pull_request:
+    paths:
+      - "README.md"
+      - "docs/**"
+      - "examples/**"
+      - "server/README.md"
+      - ".github/workflows/docs-examples.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check generated Python artifacts are absent
+        run: |
+          if find docs examples \( -name "__pycache__" -o -name "*.pyc" \) -print -quit | grep -q .; then
+            echo "Generated Python artifacts must not be committed." >&2
+            find docs examples \( -name "__pycache__" -o -name "*.pyc" \) -print >&2
+            exit 1
+          fi
+
+      - name: Syntax check Python examples
+        run: |
+          python3 -B -m py_compile \
+            examples/pico-ep0164-mqtt-weather/config.example.py \
+            examples/pico-ep0164-mqtt-weather/main.py

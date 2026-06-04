@@ -158,7 +158,8 @@ inkplate/weather-calendar/status
 ```
 
 Publishing failures are logged but do not stop image generation or HTTP
-serving.
+serving. See [MQTT Weather Publishing](../docs/mqtt.md) for broker setup,
+payload details, topic examples, and example clients.
 
 ### Secrets
 
@@ -358,28 +359,8 @@ You can use an existing broker by setting `mqtt.host` in
 `server/config/config.yaml` to that broker's hostname or IP address.
 
 For a simple local Docker broker, this repository includes an optional Compose
-override:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.mqtt.yml up -d
-```
-
-Use this server config when running the broker from the override:
-
-```yaml
-mqtt:
-  enabled: true
-  host: mqtt
-  port: 1883
-  base_topic: inkplate/weather-calendar
-  retain: true
-  qos: 0
-```
-
-The included Mosquitto config listens on port `1883`, allows anonymous access,
-and persists retained messages in the `mqtt-data` volume. That is convenient for
-a trusted LAN or lab setup; use an authenticated broker configuration before
-exposing MQTT beyond your local network.
+override. See [MQTT Weather Publishing](../docs/mqtt.md) for the broker command,
+matching server config, and security notes.
 
 The published OCI images are:
 

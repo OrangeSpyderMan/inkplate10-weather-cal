@@ -8,6 +8,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 - [How it Works](#how-it-works)
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
+- [MQTT Weather Clients](#mqtt-weather-clients)
 - [Server Installation](#server-installation)
 - [Firmware](#firmware)
   - [Building with Arduino CLI](#building-with-arduino-cli)
@@ -118,6 +119,16 @@ viewer at `http://<server-host>:8080/app`. Use `server.alwayson: true` for this
 mode so the server keeps refreshing and serving the PNG continuously. The
 browser viewer uses a separate inline image route and does not interfere with
 the Inkplate client's `/calendar.png` download route.
+
+## MQTT Weather Clients
+
+The server can optionally publish the normalized weather snapshot to MQTT for
+other local displays and automations. This is separate from the Inkplate client,
+which still downloads the rendered PNG.
+
+See [MQTT Weather Publishing](docs/mqtt.md) for broker setup, topics, payloads,
+and example clients such as the
+[52Pi EP-0164 Pico W weather display](examples/pico-ep0164-mqtt-weather).
 
 ## Server Installation
 
