@@ -14,14 +14,14 @@ def create_mqtt_client(client_id):
 class MqttWeatherPublisher:
     def __init__(
         self,
-        host,
+        broker,
         port=1883,
         base_topic="inkplate/weather",
         retain=True,
         qos=0,
         client_id="inkplate-weather-server",
     ):
-        self.host = host
+        self.broker = broker
         self.port = port
         self.base_topic = base_topic.rstrip("/")
         self.retain = retain
@@ -44,7 +44,7 @@ class MqttWeatherPublisher:
 
         client = create_mqtt_client(self.client_id)
         try:
-            client.connect(self.host, self.port, 60)
+            client.connect(self.broker, self.port, 60)
             client.loop_start()
             for topic, value in messages.items():
                 result = client.publish(

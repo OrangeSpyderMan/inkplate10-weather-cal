@@ -6,13 +6,13 @@ import paho.mqtt.client as mqtt
 class MqttDiagnosticListener:
     def __init__(
         self,
-        host,
+        broker,
         port=1883,
         topic="inkplate/weather-calendar/diagnostics",
         qos=0,
         client_id="inkplate-diagnostics-server",
     ):
-        self.host = host
+        self.broker = broker
         self.port = port
         self.topic = topic
         self.qos = qos
@@ -30,7 +30,7 @@ class MqttDiagnosticListener:
 
     def start(self):
         try:
-            self.client.connect_async(self.host, self.port, 60)
+            self.client.connect_async(self.broker, self.port, 60)
             self.client.loop_start()
         except Exception as exc:
             self.log.error("Failed to start MQTT diagnostic listener: %s", exc)
@@ -63,7 +63,7 @@ class MqttDiagnosticListener:
     def _on_connect_fail(self, client, userdata):
         self.log.warning(
             "Unable to connect to MQTT diagnostic broker %s:%s; retrying",
-            self.host,
+            self.broker,
             self.port,
         )
 

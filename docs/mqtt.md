@@ -24,14 +24,14 @@ Enable MQTT publishing in `server/config/config.yaml`:
 mqtt:
   weather:
     enabled: true
-    host: mqtt
+    broker: mqtt
     port: 1883
     base_topic: inkplate/weather-calendar
     retain: true
     qos: 0
   diagnostics:
     enabled: true
-    host: mqtt
+    broker: mqtt
     port: 1883
     topic: inkplate/weather-calendar/diagnostics
     qos: 0
@@ -71,14 +71,14 @@ When using that override, set:
 mqtt:
   weather:
     enabled: true
-    host: mqtt
+    broker: mqtt
     port: 1883
     base_topic: inkplate/weather-calendar
     retain: true
     qos: 0
   diagnostics:
     enabled: true
-    host: mqtt
+    broker: mqtt
     port: 1883
     topic: inkplate/weather-calendar/diagnostics
     qos: 0
@@ -101,7 +101,7 @@ MQTT itself is transport-neutral. In this project, IPv6 support depends on the
 specific publisher, broker, client, and container network path.
 
 The Python weather publisher and diagnostic listener use Paho MQTT and pass
-their configured `host` values directly to the operating system socket stack.
+their configured `broker` values directly to the operating system socket stack.
 They should work with IPv6-capable hostnames or IPv6 literals when the server
 host/container can route to the broker.
 
@@ -110,7 +110,7 @@ Use one of these forms in `server/config/config.yaml`:
 ```yaml
 mqtt:
   weather:
-    host: mqtt.example.net
+    broker: mqtt.example.net
 ```
 
 or:
@@ -118,10 +118,10 @@ or:
 ```yaml
 mqtt:
   diagnostics:
-    host: "2001:db8::10"
+    broker: "2001:db8::10"
 ```
 
-Do not use URL syntax for either host field. In particular, do not include
+Do not use URL syntax for either broker field. In particular, do not include
 `mqtt://` and do not use bracketed URL literals such as `[2001:db8::10]`.
 
 The included Mosquitto config uses:
@@ -132,7 +132,7 @@ listener 1883
 
 Mosquitto can listen on IPv6, but Docker port publishing and bridge networking
 must also be configured for IPv6 on the host. If you run the included broker as
-a Compose service and the weather server connects to `host: mqtt` from the same
+a Compose service and the weather server connects to `broker: mqtt` from the same
 Compose network, Docker's internal service networking is usually enough. If a
 Pico, phone, Home Assistant, or another LAN device connects to the broker over
 IPv6, verify that the Docker host publishes port `1883` on IPv6 and that local

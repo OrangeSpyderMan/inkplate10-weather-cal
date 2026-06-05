@@ -13,11 +13,11 @@
   "metric": true,
   "netatmo_enabled": false,
   "mqtt_weather_enabled": false,
-  "mqtt_weather_host": "host.docker.internal",
+  "mqtt_weather_broker": "host.docker.internal",
   "mqtt_weather_port": 1883,
   "mqtt_weather_base_topic": "inkplate/weather-calendar",
   "mqtt_diagnostics_enabled": false,
-  "mqtt_diagnostics_host": "host.docker.internal",
+  "mqtt_diagnostics_broker": "host.docker.internal",
   "mqtt_diagnostics_port": 1883,
   "mqtt_diagnostics_topic": "inkplate/weather-calendar/diagnostics"
 }

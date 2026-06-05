@@ -345,12 +345,14 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         default=parse_bool(config.get("mqtt.weather.enabled", "false")),
         key="mqtt_weather_enabled",
     )
-    default_mqtt_host = "host.docker.internal" if mode == "docker" else "localhost"
-    answers["mqtt_weather_host"] = prompt_text(
-        "MQTT weather publisher host",
-        default=config.get("mqtt.weather.host", default_mqtt_host),
+    default_mqtt_broker = (
+        "host.docker.internal" if mode == "docker" else "localhost"
+    )
+    answers["mqtt_weather_broker"] = prompt_text(
+        "MQTT weather publisher broker",
+        default=config.get("mqtt.weather.broker", default_mqtt_broker),
         required=False,
-        key="mqtt_weather_host",
+        key="mqtt_weather_broker",
     )
     answers["mqtt_weather_port"] = prompt_int(
         "MQTT weather publisher port",
@@ -372,11 +374,11 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         default=parse_bool(config.get("mqtt.diagnostics.enabled", "false")),
         key="mqtt_diagnostics_enabled",
     )
-    answers["mqtt_diagnostics_host"] = prompt_text(
-        "MQTT diagnostic listener host",
-        default=config.get("mqtt.diagnostics.host", default_mqtt_host),
+    answers["mqtt_diagnostics_broker"] = prompt_text(
+        "MQTT diagnostic listener broker",
+        default=config.get("mqtt.diagnostics.broker", default_mqtt_broker),
         required=False,
-        key="mqtt_diagnostics_host",
+        key="mqtt_diagnostics_broker",
     )
     answers["mqtt_diagnostics_port"] = prompt_int(
         "MQTT diagnostic listener port",
@@ -400,11 +402,15 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
 def render_config(answers: dict[str, object], mode: str) -> str:
     token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
     alwayson = "true"
-    default_mqtt_host = (
+    default_mqtt_broker = (
         "host.docker.internal" if mode == "docker" else "localhost"
     )
-    mqtt_weather_host = answers["mqtt_weather_host"] or default_mqtt_host
-    mqtt_diagnostics_host = answers["mqtt_diagnostics_host"] or default_mqtt_host
+    mqtt_weather_broker = (
+        answers["mqtt_weather_broker"] or default_mqtt_broker
+    )
+    mqtt_diagnostics_broker = (
+        answers["mqtt_diagnostics_broker"] or default_mqtt_broker
+    )
     lines = [
         "---",
         "server:",
@@ -436,7 +442,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "mqtt:",
         "  weather:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",
-        f"    host: {mqtt_weather_host}",
+        f"    broker: {mqtt_weather_broker}",
         f"    port: {answers['mqtt_weather_port']}",
         "    base_topic: "
         f"{answers['mqtt_weather_base_topic'] or 'inkplate/weather-calendar'}",
@@ -444,7 +450,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "    qos: 0",
         "  diagnostics:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_diagnostics_enabled']))}",
-        f"    host: {mqtt_diagnostics_host}",
+        f"    broker: {mqtt_diagnostics_broker}",
         f"    port: {answers['mqtt_diagnostics_port']}",
         "    topic: "
         f"{answers['mqtt_diagnostics_topic'] or 'inkplate/weather-calendar/diagnostics'}",

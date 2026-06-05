@@ -359,14 +359,14 @@ def build_mqtt_weather_publisher(mqtt_config):
     if not mqtt_config.get("enabled", False):
         return None
 
-    host = mqtt_config.get("host", "localhost")
+    broker = mqtt_config.get("broker", "localhost")
     port = mqtt_config.get("port", 1883)
     base_topic = mqtt_config.get("base_topic", "inkplate/weather-calendar")
     retain = mqtt_config.get("retain", True)
     qos = mqtt_config.get("qos", 0)
 
     return MqttWeatherPublisher(
-        host=host,
+        broker=broker,
         port=port,
         base_topic=base_topic,
         retain=retain,
@@ -379,7 +379,7 @@ def build_mqtt_diagnostic_listener(mqtt_config):
         return None
 
     return MqttDiagnosticListener(
-        host=mqtt_config.get("host", "localhost"),
+        broker=mqtt_config.get("broker", "localhost"),
         port=mqtt_config.get("port", 1883),
         topic=mqtt_config.get(
             "topic", "inkplate/weather-calendar/diagnostics"

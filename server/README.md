@@ -141,14 +141,14 @@ weather data without talking directly to the weather provider APIs.
 mqtt:
   weather:
     enabled: true
-    host: localhost
+    broker: localhost
     port: 1883
     base_topic: inkplate/weather-calendar
     retain: true
     qos: 0
   diagnostics:
     enabled: true
-    host: localhost
+    broker: localhost
     port: 1883
     topic: inkplate/weather-calendar/diagnostics
     qos: 0
@@ -169,7 +169,7 @@ serving. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for broker setup,
 payload details, topic examples, and example clients.
 
 The diagnostic listener is independent from weather publishing. It records
-non-retained messages from the Inkplate through the existing `client` logger and
+non-retained messages from the Inkplate through the `MQTT` logger and
 resubscribes after reconnecting. The matching firmware topic is configured in
 the Inkplate `mqtt_logger` section, either on the SD card or in an embedded
 firmware configuration.
@@ -389,7 +389,7 @@ container replacement. Compose requires explicit values for
 ### Docker MQTT broker
 
 If either MQTT feature is enabled, the server needs a reachable MQTT broker.
-Configure `mqtt.weather.host` and `mqtt.diagnostics.host` independently; they
+Configure `mqtt.weather.broker` and `mqtt.diagnostics.broker` independently; they
 may point to the same broker.
 
 For a simple local Docker broker, this repository includes an optional Compose
@@ -452,7 +452,7 @@ http://localhost:8080/app
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
-Set each enabled MQTT host to a broker reachable from inside the container. On
+Set each enabled MQTT broker to an address reachable from inside the container. On
 Docker Desktop, `host.docker.internal` usually points to the host. On Linux, you
 may prefer to run the MQTT broker as another Compose service or use the host's
 LAN IP.

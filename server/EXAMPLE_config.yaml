@@ -34,7 +34,7 @@ mqtt:
   weather:
     # Optional weather data publisher for other local clients.
     enabled: false
-    host: localhost
+    broker: localhost
     port: 1883
     base_topic: inkplate/weather-calendar
     retain: true
@@ -42,7 +42,7 @@ mqtt:
   diagnostics:
     # Optional listener for diagnostic messages published by the Inkplate.
     enabled: false
-    host: localhost
+    broker: localhost
     port: 1883
     topic: inkplate/weather-calendar/diagnostics
     qos: 0

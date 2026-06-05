@@ -21,7 +21,7 @@ class FakeMessage:
 class MqttDiagnosticListenerTests(unittest.TestCase):
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_uses_callback_api_v2(self, client_class):
-        mqtt_diagnostics.MqttDiagnosticListener("broker")
+        mqtt_diagnostics.MqttDiagnosticListener(broker="broker")
 
         client_class.assert_called_once_with(
             callback_api_version=mqtt_diagnostics.mqtt.CallbackAPIVersion.VERSION2,
@@ -36,7 +36,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
             1,
         )
         listener = mqtt_diagnostics.MqttDiagnosticListener(
-            "broker", topic="inkplate/diagnostics", qos=1
+            broker="broker", topic="inkplate/diagnostics", qos=1
         )
 
         listener._on_connect(client, None, None, 0, None)
@@ -52,7 +52,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
 
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_ignores_retained_messages(self, client_class):
-        listener = mqtt_diagnostics.MqttDiagnosticListener("broker")
+        listener = mqtt_diagnostics.MqttDiagnosticListener(broker="broker")
         self.assertEqual(listener.client_log.name, "MQTT")
         listener.client_log = mock.Mock()
 
@@ -72,7 +72,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_start_failure_is_non_fatal(self, client_class):
         client_class.return_value.connect_async.side_effect = OSError("invalid")
-        listener = mqtt_diagnostics.MqttDiagnosticListener("broker")
+        listener = mqtt_diagnostics.MqttDiagnosticListener(broker="broker")
 
         with self.assertLogs("server", logging.ERROR):
             self.assertFalse(listener.start())
@@ -81,7 +81,9 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
 
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_starts_async_for_initial_connection_retries(self, client_class):
-        listener = mqtt_diagnostics.MqttDiagnosticListener("broker", port=1884)
+        listener = mqtt_diagnostics.MqttDiagnosticListener(
+            broker="broker", port=1884
+        )
 
         self.assertTrue(listener.start())
 
@@ -115,7 +117,9 @@ class MqttWeatherPublisherTests(unittest.TestCase):
             "hourly": [],
         }
 
-        mqtt_publisher.MqttWeatherPublisher("broker").publish_snapshot(snapshot)
+        mqtt_publisher.MqttWeatherPublisher(
+            broker="broker"
+        ).publish_snapshot(snapshot)
 
         self.assertEqual(client.publish.call_count, 4)
         self.assertEqual(
