@@ -5,11 +5,10 @@ import paho.mqtt.client as mqtt
 
 
 def create_mqtt_client(client_id):
-    callback_api_version = getattr(mqtt, "CallbackAPIVersion", None)
-    if callback_api_version is None:
-        return mqtt.Client(client_id)
-
-    return mqtt.Client(callback_api_version.VERSION1, client_id=client_id)
+    return mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id=client_id,
+    )
 
 
 class MqttWeatherPublisher:
@@ -54,10 +53,7 @@ class MqttWeatherPublisher:
                     qos=self.qos,
                     retain=self.retain,
                 )
-                try:
-                    result.wait_for_publish(timeout=5)
-                except TypeError:
-                    result.wait_for_publish()
+                result.wait_for_publish(timeout=5)
                 if result.rc != mqtt.MQTT_ERR_SUCCESS:
                     self.log.error(
                         "Failed to publish weather snapshot to MQTT topic %s: %s",
