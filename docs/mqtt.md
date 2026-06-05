@@ -41,7 +41,8 @@ The server publishes after each successful weather refresh. The diagnostic
 listener subscribes when it connects and subscribes again after reconnecting.
 MQTT failures do not stop image rendering or HTTP serving.
 
-Enable diagnostic publishing in the Inkplate SD-card `config.yaml`:
+Enable diagnostic publishing in the Inkplate configuration, either the SD-card
+`config.yaml` or the YAML passed to `make firmware-upload CONFIG=...`:
 
 ```yaml
 mqtt_logger:

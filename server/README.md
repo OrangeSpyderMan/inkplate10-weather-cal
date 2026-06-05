@@ -171,7 +171,8 @@ payload details, topic examples, and example clients.
 The diagnostic listener is independent from weather publishing. It records
 non-retained messages from the Inkplate through the existing `client` logger and
 resubscribes after reconnecting. The matching firmware topic is configured in
-the Inkplate SD-card `mqtt_logger` section.
+the Inkplate `mqtt_logger` section, either on the SD card or in an embedded
+firmware configuration.
 
 ### Secrets
 

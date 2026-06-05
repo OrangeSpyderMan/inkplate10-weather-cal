@@ -1,0 +1,18 @@
+calendar:
+  url: http://<server-host>:8080/calendar.png
+  refresh_interval: 3
+  retries: 3
+wifi:
+  ssid: your-wifi
+  pass: your-wifi-password
+  retries: 6
+ntp:
+  host: pool.ntp.org
+  timezone: Europe/Paris
+mqtt_logger:
+  enabled: false
+  broker: <mqtt-broker-host>
+  port: 1883
+  clientId: inkplate10-weather-cal
+  topic: inkplate/weather-calendar/diagnostics
+  retries: 3

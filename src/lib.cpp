@@ -53,70 +53,19 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
 }
 
 /**
-  Download a file at a given URL. Store the file on disk at a given path.
+  Draw an image directly from a URL.
 
-  @param url the URL of the file to download.
-  @param size the size of the file to download.
-  @param retries the number of download attempts to make before returning an
-  error.
+  @param url the URL of the image.
   @returns the esp_err_t code:
   - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
+  - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
-esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
+esp_err_t displayImage(const char *url)
 {
-    logf(LOG_INFO, "downloading file at URL %s", url);
-
-    // Download file from URL
-    uint8_t *buf = board.downloadFile(url, &size);
-    if (!buf)
-    {
-        return ESP_ERR_EDL;
-    }
-
-    logf(LOG_INFO, "writing file to path %s", filePath);
-    SdFat &sd = board.getSdFat();
-
-    // Write image buffer to SD card
-    if (sd.exists(filePath))
-    {
-        sd.remove(filePath);
-    }
-
-    File sdfile = sd.open(filePath, FILE_WRITE);
-    if (!sdfile)
-    {
-        free(buf);
-        return ESP_ERR_EFILEW;
-    }
-
-    size_t written = sdfile.write(buf, size);
-    sdfile.close();
-    free(buf);
-    if (written != (size_t)size)
-    {
-        return ESP_ERR_EFILEW;
-    }
-
-    return ESP_OK;
-}
-
-/**
-  Draw an image to the display.
-
-  @param filePath the path of the file on disk.
-  error.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_EDL if download file fails.
-  - ESP_ERR_EFILEW if writing file to filePath fails.
-*/
-esp_err_t displayImage(const char *filePath)
-{
-    logf(LOG_INFO, "drawing image from path: %s", filePath);
+    logf(LOG_INFO, "drawing image from URL: %s", url);
 
     board.clearDisplay();
-    if (!board.image.draw(filePath, 0, 0, false, true))
+    if (!board.image.draw(url, 0, 0, false, true))
     {
         return ESP_ERR_EDRAW;
     }
@@ -278,29 +227,6 @@ String appendDiagnostic(const String &base, const String &label, const String &v
 {
     String line = label + value;
     return joinDiagnostics(base, line);
-}
-
-String retryDiagnostics(const int attempts, const int retries)
-{
-    String msg = "Attempts: ";
-    msg += attempts;
-    msg += "\nRetries configured: ";
-    msg += retries;
-    return msg;
-}
-
-String urlDiagnostics(const char *url)
-{
-    String msg = "URL: ";
-    msg += url;
-    return msg;
-}
-
-String fileDiagnostics(const char *filePath)
-{
-    String msg = "File: ";
-    msg += filePath;
-    return msg;
 }
 
 String batteryDiagnostics(const float voltage)
@@ -491,8 +417,10 @@ void sleep(const int sleepHours)
     WiFi.disconnect();
     log(LOG_DEBUG, "Turn off WiFi...");
     WiFi.mode(WIFI_OFF);
+#if !defined(EMBEDDED_CONFIG)
     log(LOG_DEBUG, "Sleep SDCard...");
     board.sdCardSleep();
+#endif
 
     const uint64_t sleepMicroseconds = ((uint64_t)boundedSleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
     logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);

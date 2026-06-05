@@ -4,6 +4,10 @@
 
 #include "lib.h"
 
+#if defined(EMBEDDED_CONFIG)
+#include "embedded_config.h"
+#endif
+
 bool isMissingConfigValue(const char *value)
 {
     return value == nullptr || value[0] == '\0';
@@ -12,7 +16,7 @@ bool isMissingConfigValue(const char *value)
 void failConfig(const char *msg)
 {
     log(LOG_ERROR, msg);
-    displayError("Config error", msg, configDiagnostics(CONFIG_FILE_PATH));
+    displayError("Config error", msg, configDiagnostics(CONFIG_SOURCE));
     sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     while (true)
     {
@@ -62,7 +66,12 @@ void setup()
     // Init err state.
     esp_err_t err = ESP_OK;
 
-    // Init storage.
+    StaticJsonDocument<768> doc;
+
+#if defined(EMBEDDED_CONFIG)
+    DeserializationError dse = deserializeYml(doc, EMBEDDED_CONFIG_YAML);
+#else
+    // SD mode uses the card only as a configuration source.
     if (!board.sdCardInit())
     {
         const char *errMsg = "SD card init failure";
@@ -82,20 +91,23 @@ void setup()
         sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
 
-    // Attempt to parse yaml file.
-    StaticJsonDocument<768> doc;
     ReadBufferingStream bufferedFile(file, 64);
     DeserializationError dse = deserializeYml(doc, bufferedFile);
+#endif
+
     if (dse)
     {
-        const char *errMsg = "Failed to load config from file";
+        const char *errMsg = "Failed to load configuration";
         logf(LOG_ERROR, "failed to deserialize YAML: %s", dse.c_str());
-        String diagnostics = configDiagnostics(CONFIG_FILE_PATH);
+        String diagnostics = configDiagnostics(CONFIG_SOURCE);
         diagnostics = appendDiagnostic(diagnostics, "Parser: ", dse.c_str());
         displayError("Config error", errMsg, diagnostics);
         sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
     }
+#if !defined(EMBEDDED_CONFIG)
     file.close();
+    board.sdCardSleep();
+#endif
 
     // Assign config values.
     JsonObject calendarCfg = doc["calendar"];
@@ -259,15 +271,7 @@ void setup()
     {
         logf(LOG_DEBUG, "calendar refresh attempt #%d", attempts + 1);
 
-        err = downloadFile(calendarUrl, CALENDAR_IMAGE_SIZE, CALENDAR_RW_PATH);
-        if (err != ESP_OK)
-        {
-            errMsg = "file download error";
-            log(LOG_ERROR, errMsg);
-            continue;
-        }
-
-        err = displayImage(CALENDAR_RW_PATH);
+        err = displayImage(calendarUrl);
         if (err != ESP_OK)
         {
             errMsg = "image display error";
@@ -276,20 +280,12 @@ void setup()
         }
     } while (err != ESP_OK && ++attempts <= calendarRetries);
 
-    // If we were not successfully, print the error msg to the inkplate display.
+    // E-ink retains the previous image, so a failed refresh should not replace
+    // a valid forecast with an error screen.
     if (err != ESP_OK)
     {
-        String diagnostics = retryDiagnostics(attempts, calendarRetries);
-        if (err == ESP_ERR_EDRAW)
-        {
-            diagnostics = joinDiagnostics(diagnostics, fileDiagnostics(CALENDAR_RW_PATH));
-        }
-        else
-        {
-            diagnostics = joinDiagnostics(diagnostics, urlDiagnostics(calendarUrl));
-        }
-        diagnostics = joinDiagnostics(diagnostics, networkDiagnostics());
-        displayError("Refresh error", errMsg, diagnostics);
+        logf(LOG_ERROR, "%s after %d attempts", errMsg, attempts);
+        logf(LOG_ERROR, "calendar URL: %s", calendarUrl);
     }
 
     // Deep sleep until next refresh time

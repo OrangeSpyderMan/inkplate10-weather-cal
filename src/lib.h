@@ -21,19 +21,18 @@
 #define LOG_MSG_MAX_LEN 128
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
+#if defined(EMBEDDED_CONFIG)
+#define CONFIG_SOURCE "embedded firmware config"
+#else
+#define CONFIG_SOURCE CONFIG_FILE_PATH
+#endif
 // Fallback time to refresh.
 #define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
-// The path on SD card where calendar images are downloaded to and read from.
-#define CALENDAR_RW_PATH "/calendar.png"
-// Guestimate file size for PNG image @ 1200x825
-#define CALENDAR_IMAGE_SIZE E_INK_WIDTH * E_INK_HEIGHT * 4 + 100
 
 // Enum of errors that might be encountered.
 #define ESP_ERR_ERRNO_BASE (0)
-#define ESP_ERR_EDL (1 + ESP_ERR_ERRNO_BASE)    // Download error
-#define ESP_ERR_EDRAW (2 + ESP_ERR_ERRNO_BASE)  // Draw error
-#define ESP_ERR_EFILEW (3 + ESP_ERR_ERRNO_BASE) // File write error
-#define ESP_ERR_ENTP (4 + ESP_ERR_ERRNO_BASE)   // NTP error
+#define ESP_ERR_EDRAW (1 + ESP_ERR_ERRNO_BASE) // Draw error
+#define ESP_ERR_ENTP (2 + ESP_ERR_ERRNO_BASE)  // NTP error
 
 // Enum of log verbosity levels.
 #define LOG_CRIT 0
@@ -75,29 +74,14 @@ extern Timezone myTz;
 esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
 
 /**
-  Download a file at a given URL. Store the file on disk at a given path.
+  Draw an image directly from a URL.
 
-  @param url the URL of the file to download.
-  @param size the size of the file to download.
-  @param retries the number of download attempts to make before returning an
-  error.
+  @param url the URL of the image.
   @returns the esp_err_t code:
   - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
+  - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
-esp_err_t downloadFile(const char *url, int32_t size, const char *filePath);
-
-/**
-  Draw an image to the display.
-
-  @param filePath the path of the file on disk.
-  error.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_EDL if download file fails.
-  - ESP_ERR_EFILEW if writing file to filePath fails.
-*/
-esp_err_t displayImage(const char *filePath);
+esp_err_t displayImage(const char *url);
 
 /**
   Draw a high-contrast error screen to the display.
@@ -113,11 +97,8 @@ void displayError(const char *title, const char *detail);
 String appendDiagnostic(const String &base, const String &label, const String &value);
 String batteryDiagnostics(const float voltage);
 String configDiagnostics(const char *path);
-String fileDiagnostics(const char *filePath);
 String joinDiagnostics(const String &first, const String &second);
 String networkDiagnostics();
-String retryDiagnostics(const int attempts, const int retries);
-String urlDiagnostics(const char *url);
 
 /**
   Draw a high-contrast message to the display.

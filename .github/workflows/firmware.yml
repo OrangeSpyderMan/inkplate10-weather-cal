@@ -6,12 +6,16 @@ on:
       - 'src/**'
       - 'Makefile'
       - 'bin/install_arduino_cli.sh'
+      - 'bin/generate_firmware_config.py'
+      - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   pull_request:
     paths:
       - 'src/**'
       - 'Makefile'
       - 'bin/install_arduino_cli.sh'
+      - 'bin/generate_firmware_config.py'
+      - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
 
 permissions:
@@ -44,14 +48,20 @@ jobs:
 
       - name: Compile firmware
         run: |
+          # No CONFIG is supplied: release firmware remains the generic
+          # SD-card-configured variant.
           make firmware-compile
+
+      - name: Compile embedded-config firmware
+        run: |
+          make firmware-compile CONFIG=firmware-config.example.yaml
 
       - name: Collect firmware binaries
         run: |
           mkdir -p firmware_binaries
 
-          cp build/arduino/src.ino.bin firmware_binaries/inkplate10-firmware.bin
-          cp build/arduino/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
+          cp build/arduino-sd/src.ino.bin firmware_binaries/inkplate10-firmware.bin
+          cp build/arduino-sd/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v7
