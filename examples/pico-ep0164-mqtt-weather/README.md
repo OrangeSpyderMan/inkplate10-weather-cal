@@ -16,6 +16,7 @@ This example does not vendor the 52Pi display driver. Install the driver from
 
 - Raspberry Pi Pico W with MicroPython installed.
 - 52Pi EP-0164 Pico Breadboard Kit.
+- MicroPython's `umqtt.simple` package installed on the Pico.
 - 52Pi ILI9341 MicroPython display driver copied to the Pico as
   `ili934xnew.py`.
 - 52Pi/driver font dependency copied to the Pico as `glcdfont.py`.
@@ -33,6 +34,50 @@ Raspberry Pi MicroPython setup guide or the MicroPython Pico W download page:
 Use the Pico W firmware, not the non-wireless Pico firmware. After flashing, you
 should be able to connect to the MicroPython REPL over USB and copy files to the
 board with your preferred Pico file tool.
+
+## Install MQTT Support
+
+`umqtt.simple` is distributed through
+[micropython-lib](https://github.com/micropython/micropython-lib) and is not
+included in every Pico W MicroPython firmware build.
+
+Install `mpremote` on the computer connected to the Pico:
+
+```bash
+pipx install mpremote
+```
+
+If `pipx` is not available, use:
+
+```bash
+python3 -m pip install --user mpremote
+```
+
+Then install the package over USB:
+
+```bash
+mpremote connect /dev/ttyACM0 mip install umqtt.simple
+```
+
+Adjust the serial port for your system. This host-side method is preferred
+because it does not depend on the Pico's DNS or HTTPS support.
+
+Recent network-connected MicroPython builds can also install directly from the
+REPL:
+
+```python
+import mip
+mip.install("umqtt.simple")
+```
+
+If that fails while fetching `https://micropython.org/pi/v2`, use the
+`mpremote` command instead.
+
+Confirm the installation before running the example:
+
+```python
+from umqtt.simple import MQTTClient
+```
 
 ## Files
 
