@@ -4,7 +4,14 @@ import network
 import ujson as json
 from machine import Pin, SPI
 from micropython import const
-from umqtt.simple import MQTTClient
+
+try:
+    from umqtt.simple import MQTTClient
+except ImportError:
+    raise ImportError(
+        "umqtt.simple is required; install it with mpremote as described "
+        "in the example README"
+    )
 
 from config import (
     IDLE_SLEEP_SECONDS,
