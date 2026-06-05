@@ -117,11 +117,19 @@ class MqttWeatherPublisherTests(unittest.TestCase):
             "hourly": [],
         }
 
-        mqtt_publisher.MqttWeatherPublisher(
-            broker="broker"
-        ).publish_snapshot(snapshot)
+        publisher = mqtt_publisher.MqttWeatherPublisher(
+            broker="broker", port=1884, base_topic="inkplate/weather"
+        )
+        publisher.log = mock.Mock()
+        publisher.publish_snapshot(snapshot)
 
         self.assertEqual(client.publish.call_count, 4)
+        publisher.log.info.assert_called_once_with(
+            "Publishing weather snapshot to MQTT broker %s:%s under %s",
+            "broker",
+            1884,
+            "inkplate/weather",
+        )
         self.assertEqual(
             result.wait_for_publish.call_args_list,
             [mock.call(timeout=5)] * 4,

@@ -46,6 +46,12 @@ class MqttWeatherPublisher:
         try:
             client.connect(self.broker, self.port, 60)
             client.loop_start()
+            self.log.info(
+                "Publishing weather snapshot to MQTT broker %s:%s under %s",
+                self.broker,
+                self.port,
+                self.base_topic,
+            )
             for topic, value in messages.items():
                 result = client.publish(
                     topic,
