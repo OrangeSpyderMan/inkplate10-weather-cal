@@ -237,7 +237,7 @@ class CalendarPage(Page):
                                                 padding: 4,
                                                 callback: function(value, index, values) {{
                                                     var rain = {1}[index];
-                                                    return rain > 0 ? rain + "%" : "";
+                                                    return rain == null ? "" : rain + "%";
                                                 }}
                                             }}
                                         }}],
