@@ -339,17 +339,20 @@ def apply_current_temperature_override(daily_summary, current_temperature_svc):
 
 
 def get_client_mqtt_logging(host, port, topic):
-    mqtt_client = mqtt.Client("eink-cal-server")
+    mqtt_client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id="eink-cal-server",
+    )
     client_log = logging.getLogger("client")
 
-    def on_connect(client, userdata, flags, rc):
-        if rc != 0:
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code != 0:
             log.error("Connection to client logging broker failed")
 
         log.info("Connected to client logging broker")
 
-    def on_disconnect(client, userdata, rc):
-        if rc != 0:
+    def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+        if reason_code != 0:
             log.error("Unexpected broker disconnection")
 
         log.info("Disconnected from client logging broker")
