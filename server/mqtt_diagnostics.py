@@ -18,7 +18,7 @@ class MqttDiagnosticListener:
         self.qos = qos
         self.client_id = client_id
         self.log = logging.getLogger("server")
-        self.client_log = logging.getLogger("client")
+        self.client_log = logging.getLogger("MQTT")
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.client_id,

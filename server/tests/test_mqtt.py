@@ -53,6 +53,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_ignores_retained_messages(self, client_class):
         listener = mqtt_diagnostics.MqttDiagnosticListener("broker")
+        self.assertEqual(listener.client_log.name, "MQTT")
         listener.client_log = mock.Mock()
 
         listener._on_message(
