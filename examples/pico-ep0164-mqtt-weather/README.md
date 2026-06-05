@@ -74,7 +74,7 @@ TFT_DC   GP15
 
 Enable MQTT weather publishing on the server. See:
 
-- [MQTT Weather Publishing](../../docs/mqtt.md)
+- [MQTT Weather and Diagnostics](../../docs/mqtt.md)
 
 The example subscribes to the full retained snapshot topic:
 

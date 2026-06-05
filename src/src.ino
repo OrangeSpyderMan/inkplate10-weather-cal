@@ -114,6 +114,15 @@ void setup()
     const char *ntpHost = doc["ntp"]["host"];
     const char *ntpTimezone = doc["ntp"]["timezone"];
 
+    // Optional remote diagnostic logging config.
+    JsonObject mqttLoggerCfg = doc["mqtt_logger"];
+    bool mqttLoggerEnabled = mqttLoggerCfg["enabled"] | false;
+    const char *mqttLoggerBroker = mqttLoggerCfg["broker"];
+    int mqttLoggerPort = mqttLoggerCfg["port"] | 1883;
+    const char *mqttLoggerClientID = mqttLoggerCfg["clientId"];
+    const char *mqttLoggerTopic = mqttLoggerCfg["topic"];
+    int mqttLoggerRetries = mqttLoggerCfg["retries"] | 3;
+
     if (isMissingConfigValue(calendarUrl))
     {
         failConfig("Missing calendar.url");
@@ -142,6 +151,30 @@ void setup()
     {
         failConfig("Missing ntp.timezone");
     }
+    if (mqttLoggerEnabled)
+    {
+        if (isMissingConfigValue(mqttLoggerBroker))
+        {
+            failConfig("Missing mqtt_logger.broker");
+        }
+        if (mqttLoggerPort <= 0)
+        {
+            failConfig("Invalid mqtt_logger.port");
+        }
+        if (isMissingConfigValue(mqttLoggerClientID))
+        {
+            failConfig("Missing mqtt_logger.clientId");
+        }
+        if (isMissingConfigValue(mqttLoggerTopic))
+        {
+            failConfig("Missing mqtt_logger.topic");
+        }
+        if (mqttLoggerRetries < 0)
+        {
+            failConfig("Invalid mqtt_logger.retries");
+        }
+    }
+
     // Attempt to connect to WiFi.
     err = configureWiFi(wifiSSID, wifiPass, wifiRetries);
     if (err == ESP_ERR_TIMEOUT)
@@ -153,6 +186,17 @@ void setup()
         diagnostics = appendDiagnostic(diagnostics, "Retries configured: ", String(wifiRetries));
         displayError("WiFi error", errMsg, diagnostics);
         sleep(calendarRefreshInterval);
+    }
+
+    if (mqttLoggerEnabled)
+    {
+        err = configureMQTT(mqttLoggerBroker, mqttLoggerPort, mqttLoggerTopic,
+                            mqttLoggerClientID, mqttLoggerRetries);
+        if (err == ESP_ERR_TIMEOUT)
+        {
+            log(LOG_WARNING,
+                "failed to connect remote diagnostics, fallback to serial");
+        }
     }
 
     // Attempt to synchronize clocks with network time.

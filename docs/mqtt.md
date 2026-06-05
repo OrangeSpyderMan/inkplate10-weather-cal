@@ -1,9 +1,9 @@
-# MQTT Weather Publishing
+# MQTT Weather and Diagnostics
 
-The weather server can publish the normalized weather data it already uses for
-the Inkplate render to MQTT. This is optional and intended for local clients
-that want weather data without talking directly to OpenWeatherMap, AccuWeather,
-Netatmo, or Google.
+MQTT supports two independent features:
+
+- the server publishes normalized weather data for local clients
+- the Inkplate firmware publishes diagnostic logs for the server to record
 
 Good MQTT consumers include:
 
@@ -13,8 +13,8 @@ Good MQTT consumers include:
 - Node-RED flows
 - local dashboards
 
-The Inkplate client does not require MQTT. It still downloads the rendered PNG
-from `/calendar.png`.
+Neither feature is required for the Inkplate to download the rendered PNG from
+`/calendar.png`.
 
 ## Server Configuration
 
@@ -22,16 +22,39 @@ Enable MQTT publishing in `server/config/config.yaml`:
 
 ```yaml
 mqtt:
-  enabled: true
-  host: mqtt
-  port: 1883
-  base_topic: inkplate/weather-calendar
-  retain: true
-  qos: 0
+  weather:
+    enabled: true
+    host: mqtt
+    port: 1883
+    base_topic: inkplate/weather-calendar
+    retain: true
+    qos: 0
+  diagnostics:
+    enabled: true
+    host: mqtt
+    port: 1883
+    topic: inkplate/weather-calendar/diagnostics
+    qos: 0
 ```
 
-The server publishes after each successful weather refresh. MQTT failures are
-logged but do not stop image rendering or HTTP serving.
+The server publishes after each successful weather refresh. The diagnostic
+listener subscribes when it connects and subscribes again after reconnecting.
+MQTT failures do not stop image rendering or HTTP serving.
+
+Enable diagnostic publishing in the Inkplate SD-card `config.yaml`:
+
+```yaml
+mqtt_logger:
+  enabled: true
+  broker: mqtt.example.net
+  port: 1883
+  clientId: inkplate10-weather-cal
+  topic: inkplate/weather-calendar/diagnostics
+  retries: 3
+```
+
+Diagnostic messages are not retained. If the broker cannot be reached, the
+firmware continues with serial-only logging.
 
 ## Example Broker
 
@@ -45,12 +68,19 @@ When using that override, set:
 
 ```yaml
 mqtt:
-  enabled: true
-  host: mqtt
-  port: 1883
-  base_topic: inkplate/weather-calendar
-  retain: true
-  qos: 0
+  weather:
+    enabled: true
+    host: mqtt
+    port: 1883
+    base_topic: inkplate/weather-calendar
+    retain: true
+    qos: 0
+  diagnostics:
+    enabled: true
+    host: mqtt
+    port: 1883
+    topic: inkplate/weather-calendar/diagnostics
+    qos: 0
 ```
 
 The included broker listens on port `1883`, allows anonymous access, and stores
@@ -69,27 +99,29 @@ mosquitto_sub -h localhost -t 'inkplate/weather-calendar/#' -v
 MQTT itself is transport-neutral. In this project, IPv6 support depends on the
 specific publisher, broker, client, and container network path.
 
-The Python weather publisher uses Paho MQTT and passes `mqtt.host` directly to
-the operating system socket stack. It should work with IPv6-capable hostnames or
-IPv6 literals when the server host/container can route to the broker.
+The Python weather publisher and diagnostic listener use Paho MQTT and pass
+their configured `host` values directly to the operating system socket stack.
+They should work with IPv6-capable hostnames or IPv6 literals when the server
+host/container can route to the broker.
 
 Use one of these forms in `server/config/config.yaml`:
 
 ```yaml
 mqtt:
-  host: mqtt.example.net
+  weather:
+    host: mqtt.example.net
 ```
 
 or:
 
 ```yaml
 mqtt:
-  host: "2001:db8::10"
+  diagnostics:
+    host: "2001:db8::10"
 ```
 
-Do not use URL syntax for `mqtt.host`; it is a host field, not an MQTT URL. In
-particular, do not include `mqtt://` and do not use bracketed URL literals such
-as `[2001:db8::10]`.
+Do not use URL syntax for either host field. In particular, do not include
+`mqtt://` and do not use bracketed URL literals such as `[2001:db8::10]`.
 
 The included Mosquitto config uses:
 
@@ -121,6 +153,12 @@ inkplate/weather-calendar
 inkplate/weather-calendar/current
 inkplate/weather-calendar/hourly
 inkplate/weather-calendar/status
+```
+
+Inkplate diagnostics use a separate, non-retained topic:
+
+```text
+inkplate/weather-calendar/diagnostics
 ```
 
 ### `inkplate/weather-calendar`

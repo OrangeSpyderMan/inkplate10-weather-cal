@@ -8,7 +8,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 - [How it Works](#how-it-works)
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
-- [MQTT Weather Clients](#mqtt-weather-clients)
+- [MQTT](#mqtt)
 - [Server Installation](#server-installation)
 - [Firmware](#firmware)
   - [Building with Arduino CLI](#building-with-arduino-cli)
@@ -28,11 +28,12 @@ Both a server and client are required. The main workload is on the server, which
 ### Client (Inkplate 10)
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
-2. Attempts to get current network time and update real-time clock.
-3. Attempts to download the PNG image that the server is hosting.
-4. Write the downloaded PNG image to SD card.
-5. Read the PNG image back from SD card and write to the e-ink display.
-6. Returns to deep sleep for the configured refresh interval.
+2. Optionally connects to MQTT to publish diagnostic logs.
+3. Attempts to get current network time and update real-time clock.
+4. Attempts to download the PNG image that the server is hosting.
+5. Write the downloaded PNG image to SD card.
+6. Read the PNG image back from SD card and write to the e-ink display.
+7. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
 
@@ -42,6 +43,7 @@ Both a server and client are required. The main workload is on the server, which
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
+- Can publish diagnostic logs to MQTT while retaining serial output.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
 - Stores calendar images on SD card.
 - Reconfigure client by updating YAML file on SD card and reboot - easy!
@@ -52,7 +54,7 @@ Both a server and client are required. The main workload is on the server, which
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
-5. (Optional) The server publishes the normalized weather snapshot to MQTT for other local clients.
+5. (Optional) The server publishes weather snapshots and listens for Inkplate diagnostics over MQTT.
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
 7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
 
@@ -102,6 +104,13 @@ wifi:
 ntp:
   host: pool.ntp.org
   timezone: Europe/Dublin
+mqtt_logger:
+  enabled: false
+  broker: <mqtt-broker-host>
+  port: 1883
+  clientId: inkplate10-weather-cal
+  topic: inkplate/weather-calendar/diagnostics
+  retries: 3
 ```
 
 Likely parameters you'll need to change are:
@@ -111,6 +120,7 @@ Likely parameters you'll need to change are:
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
+- `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 
 See the [server](/server) for info on server setup.
 
@@ -120,13 +130,14 @@ mode so the server keeps refreshing and serving the PNG continuously. The
 browser viewer uses a separate inline image route and does not interfere with
 the Inkplate client's `/calendar.png` download route.
 
-## MQTT Weather Clients
+## MQTT
 
 The server can optionally publish the normalized weather snapshot to MQTT for
-other local displays and automations. This is separate from the Inkplate client,
-which still downloads the rendered PNG.
+other local displays and automations. It can separately listen for diagnostic
+messages from the Inkplate firmware. The Inkplate still downloads the rendered
+PNG regardless of either MQTT feature.
 
-See [MQTT Weather Publishing](docs/mqtt.md) for broker setup, topics, payloads,
+See [MQTT Weather and Diagnostics](docs/mqtt.md) for broker setup, topics, payloads,
 and example clients such as the
 [52Pi EP-0164 Pico W weather display](examples/pico-ep0164-mqtt-weather).
 
@@ -144,8 +155,8 @@ Run it from the repository root:
 
 The installer prompts for the weather provider, API keys, Google Static Maps
 Map ID, location, optional Netatmo details, optional MQTT weather publishing,
-and whether to start the service/container. It keeps secrets out of committed
-YAML files:
+optional MQTT diagnostic listening, and whether to start the service/container.
+It keeps secrets out of committed YAML files:
 
 - Docker installs write secrets to `.env` and config to
   `server/config/config.yaml`.
@@ -259,6 +270,8 @@ The following libraries should be installed in your Arduino IDE. They are availa
 
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [ArduinoJson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
+- [MQTTLogger](https://github.com/androbi-com/MqttLogger)
+- [Queue](https://github.com/SMFSW/Queue)
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)
 - [ezTime](https://github.com/ropg/ezTime)

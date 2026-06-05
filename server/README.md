@@ -35,8 +35,8 @@ images, and MQTT disabled.
 
 It prompts for the location, weather API key, Google Static Maps API key, Google
 Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
-publishing, and whether to start the service or container. Secrets are written
-outside committed YAML:
+publishing, optional MQTT diagnostic listening, and whether to start the service
+or container. Secrets are written outside committed YAML:
 
 - Docker: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
@@ -139,12 +139,19 @@ weather data without talking directly to the weather provider APIs.
 
 ```yaml
 mqtt:
-  enabled: true
-  host: localhost
-  port: 1883
-  base_topic: inkplate/weather-calendar
-  retain: true
-  qos: 0
+  weather:
+    enabled: true
+    host: localhost
+    port: 1883
+    base_topic: inkplate/weather-calendar
+    retain: true
+    qos: 0
+  diagnostics:
+    enabled: true
+    host: localhost
+    port: 1883
+    topic: inkplate/weather-calendar/diagnostics
+    qos: 0
 ```
 
 When enabled, the server publishes retained JSON payloads after a successful
@@ -158,8 +165,13 @@ inkplate/weather-calendar/status
 ```
 
 Publishing failures are logged but do not stop image generation or HTTP
-serving. See [MQTT Weather Publishing](../docs/mqtt.md) for broker setup,
+serving. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for broker setup,
 payload details, topic examples, and example clients.
+
+The diagnostic listener is independent from weather publishing. It records
+non-retained messages from the Inkplate through the existing `client` logger and
+resubscribes after reconnecting. The matching firmware topic is configured in
+the Inkplate SD-card `mqtt_logger` section.
 
 ### Secrets
 
@@ -375,12 +387,12 @@ container replacement. Compose requires explicit values for
 
 ### Docker MQTT broker
 
-If MQTT weather publishing is enabled, the server needs a reachable MQTT broker.
-You can use an existing broker by setting `mqtt.host` in
-`server/config/config.yaml` to that broker's hostname or IP address.
+If either MQTT feature is enabled, the server needs a reachable MQTT broker.
+Configure `mqtt.weather.host` and `mqtt.diagnostics.host` independently; they
+may point to the same broker.
 
 For a simple local Docker broker, this repository includes an optional Compose
-override. See [MQTT Weather Publishing](../docs/mqtt.md) for the broker command,
+override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the broker command,
 matching server config, and security notes.
 
 The published OCI images are:
@@ -439,11 +451,10 @@ http://localhost:8080/app
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
-If MQTT weather publishing is enabled, set `mqtt.host` in
-`server/config/config.yaml` to a host that is reachable from inside the
-container. On Docker Desktop, `host.docker.internal` usually points to the host.
-On Linux, you may prefer to run the MQTT broker as another Compose service or
-use the host's LAN IP.
+Set each enabled MQTT host to a broker reachable from inside the container. On
+Docker Desktop, `host.docker.internal` usually points to the host. On Linux, you
+may prefer to run the MQTT broker as another Compose service or use the host's
+LAN IP.
 
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
 used to check the Docker logs for ERROR messages. By default that runs every

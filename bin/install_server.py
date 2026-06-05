@@ -340,30 +340,59 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         answers["netatmo_device_id"] = env.get("NETATMO_DEVICE_ID", "")
         answers["netatmo_module_id"] = env.get("NETATMO_MODULE_ID", "")
 
-    answers["mqtt_enabled"] = prompt_yes_no(
+    answers["mqtt_weather_enabled"] = prompt_yes_no(
         "Publish weather data to MQTT?",
-        default=parse_bool(config.get("mqtt.enabled", "false")),
-        key="mqtt_enabled",
+        default=parse_bool(config.get("mqtt.weather.enabled", "false")),
+        key="mqtt_weather_enabled",
     )
     default_mqtt_host = "host.docker.internal" if mode == "docker" else "localhost"
-    answers["mqtt_host"] = prompt_text(
-        "MQTT host",
-        default=config.get("mqtt.host", default_mqtt_host),
+    answers["mqtt_weather_host"] = prompt_text(
+        "MQTT weather publisher host",
+        default=config.get("mqtt.weather.host", default_mqtt_host),
         required=False,
-        key="mqtt_host",
+        key="mqtt_weather_host",
     )
-    answers["mqtt_port"] = prompt_int(
-        "MQTT port",
-        default=int(config.get("mqtt.port", 1883)),
+    answers["mqtt_weather_port"] = prompt_int(
+        "MQTT weather publisher port",
+        default=int(config.get("mqtt.weather.port", 1883)),
         minimum=1,
         maximum=65535,
-        key="mqtt_port",
+        key="mqtt_weather_port",
     )
-    answers["mqtt_base_topic"] = prompt_text(
-        "MQTT base topic",
-        default=config.get("mqtt.base_topic", "inkplate/weather-calendar"),
+    answers["mqtt_weather_base_topic"] = prompt_text(
+        "MQTT weather base topic",
+        default=config.get(
+            "mqtt.weather.base_topic", "inkplate/weather-calendar"
+        ),
         required=False,
-        key="mqtt_base_topic",
+        key="mqtt_weather_base_topic",
+    )
+    answers["mqtt_diagnostics_enabled"] = prompt_yes_no(
+        "Listen for Inkplate diagnostics on MQTT?",
+        default=parse_bool(config.get("mqtt.diagnostics.enabled", "false")),
+        key="mqtt_diagnostics_enabled",
+    )
+    answers["mqtt_diagnostics_host"] = prompt_text(
+        "MQTT diagnostic listener host",
+        default=config.get("mqtt.diagnostics.host", default_mqtt_host),
+        required=False,
+        key="mqtt_diagnostics_host",
+    )
+    answers["mqtt_diagnostics_port"] = prompt_int(
+        "MQTT diagnostic listener port",
+        default=int(config.get("mqtt.diagnostics.port", 1883)),
+        minimum=1,
+        maximum=65535,
+        key="mqtt_diagnostics_port",
+    )
+    answers["mqtt_diagnostics_topic"] = prompt_text(
+        "MQTT diagnostic topic",
+        default=config.get(
+            "mqtt.diagnostics.topic",
+            "inkplate/weather-calendar/diagnostics",
+        ),
+        required=False,
+        key="mqtt_diagnostics_topic",
     )
     return answers
 
@@ -371,7 +400,11 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
 def render_config(answers: dict[str, object], mode: str) -> str:
     token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
     alwayson = "true"
-    mqtt_host = answers["mqtt_host"] or ("host.docker.internal" if mode == "docker" else "localhost")
+    default_mqtt_host = (
+        "host.docker.internal" if mode == "docker" else "localhost"
+    )
+    mqtt_weather_host = answers["mqtt_weather_host"] or default_mqtt_host
+    mqtt_diagnostics_host = answers["mqtt_diagnostics_host"] or default_mqtt_host
     lines = [
         "---",
         "server:",
@@ -401,12 +434,21 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"  width: {DEFAULT_IMAGE_WIDTH}",
         f"  height: {DEFAULT_IMAGE_HEIGHT}",
         "mqtt:",
-        f"  enabled: {yaml_bool(bool(answers['mqtt_enabled']))}",
-        f"  host: {mqtt_host}",
-        f"  port: {answers['mqtt_port']}",
-        f"  base_topic: {answers['mqtt_base_topic'] or 'inkplate/weather-calendar'}",
-        "  retain: true",
-        "  qos: 0",
+        "  weather:",
+        f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",
+        f"    host: {mqtt_weather_host}",
+        f"    port: {answers['mqtt_weather_port']}",
+        "    base_topic: "
+        f"{answers['mqtt_weather_base_topic'] or 'inkplate/weather-calendar'}",
+        "    retain: true",
+        "    qos: 0",
+        "  diagnostics:",
+        f"    enabled: {yaml_bool(bool(answers['mqtt_diagnostics_enabled']))}",
+        f"    host: {mqtt_diagnostics_host}",
+        f"    port: {answers['mqtt_diagnostics_port']}",
+        "    topic: "
+        f"{answers['mqtt_diagnostics_topic'] or 'inkplate/weather-calendar/diagnostics'}",
+        "    qos: 0",
         "",
     ]
     return "\n".join(lines)

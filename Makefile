@@ -7,7 +7,7 @@ export ARDUINO_DIRECTORIES_USER := $(CURDIR)/$(FIRMWARE_SKETCHBOOK_DIR)
 FIRMWARE_FQBN ?= Inkplate_Boards:esp32:Inkplate10V2
 FIRMWARE_CORE ?= Inkplate_Boards:esp32@8.1.0
 FIRMWARE_BOARD_URL ?= https://github.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
-FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson StreamUtils YAMLDuino ezTime SdFat
+FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson MQTTLogger Queue StreamUtils YAMLDuino ezTime SdFat
 FIRMWARE_UPLOAD_SPEED ?= 115200
 
 .PHONY: firmware-install-cli firmware-setup firmware-compile firmware-upload firmware-clean firmware-board-list

@@ -10,6 +10,7 @@ import threading
 import datetime as dt
 import logging.config
 from utils import expand_env_vars, get_prop, get_prop_by_keys
+from mqtt_diagnostics import MqttDiagnosticListener
 from mqtt_publisher import MqttWeatherPublisher
 from weather.snapshot import WeatherSnapshot
 from views.calendar import CalendarPage
@@ -82,7 +83,12 @@ def main():
     image_height = get_prop_by_keys(config, "image", "height", default=1200)
 
     mqtt_config = get_prop(config, "mqtt", default={}, required=False) or {}
-    weather_publisher = build_mqtt_weather_publisher(mqtt_config)
+    weather_publisher = build_mqtt_weather_publisher(
+        mqtt_config.get("weather", {}) or {}
+    )
+    diagnostic_listener = build_mqtt_diagnostic_listener(
+        mqtt_config.get("diagnostics", {}) or {}
+    )
 
     gapi = GoogleAPIService(google_apikey)
     map_file = os.path.join(cwd, "views", "html", "map.png")
@@ -125,6 +131,9 @@ def main():
     # bail early if http server is not enabled
     if not server_enabled:
         sys.exit(0)
+
+    if diagnostic_listener is not None and not diagnostic_listener.start():
+        diagnostic_listener = None
 
     # setup http server
     if server_always_on:
@@ -217,6 +226,9 @@ def main():
             diff = dt.datetime.now() - start_wait_dt
 
         http_server.shutdown(timeout=10)
+
+        if diagnostic_listener is not None:
+            diagnostic_listener.stop()
 
         log.info(f"Exiting")
         sys.exit(0)
@@ -362,11 +374,26 @@ def build_mqtt_weather_publisher(mqtt_config):
     )
 
 
+def build_mqtt_diagnostic_listener(mqtt_config):
+    if not mqtt_config.get("enabled", False):
+        return None
+
+    return MqttDiagnosticListener(
+        host=mqtt_config.get("host", "localhost"),
+        port=mqtt_config.get("port", 1883),
+        topic=mqtt_config.get(
+            "topic", "inkplate/weather-calendar/diagnostics"
+        ),
+        qos=mqtt_config.get("qos", 0),
+    )
+
+
 def publish_weather_snapshot(weather_publisher, snapshot):
     if weather_publisher is None:
         return
 
     weather_publisher.publish_snapshot(snapshot)
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, port, max_serves=1):

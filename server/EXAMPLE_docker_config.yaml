@@ -31,10 +31,18 @@ image:
   width: 825
   height: 1200
 mqtt:
-  # Optional weather data publisher for other local clients.
-  enabled: false
-  host: host.docker.internal
-  port: 1883
-  base_topic: inkplate/weather-calendar
-  retain: true
-  qos: 0
+  weather:
+    # Optional weather data publisher for other local clients.
+    enabled: false
+    host: host.docker.internal
+    port: 1883
+    base_topic: inkplate/weather-calendar
+    retain: true
+    qos: 0
+  diagnostics:
+    # Optional listener for diagnostic messages published by the Inkplate.
+    enabled: false
+    host: host.docker.internal
+    port: 1883
+    topic: inkplate/weather-calendar/diagnostics
+    qos: 0
