@@ -8,6 +8,7 @@ Display today's date, weather forecast and a stylised map of your area using an 
 - [How it Works](#how-it-works)
 - [Bill of Materials](#bill-of-materials)
 - [Setup](#setup)
+- [MQTT](#mqtt)
 - [Server Installation](#server-installation)
 - [Firmware](#firmware)
   - [Building with Arduino CLI](#building-with-arduino-cli)
@@ -27,12 +28,10 @@ Both a server and client are required. The main workload is on the server, which
 ### Client (Inkplate 10)
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
-2. Attempts to get current network time and update real-time clock.
-3. (Optional) Attempts to connect to an MQTT topic to publish logs. This allows us to see what the ESP32 controller is doing without needing to monitor the serial connection.
-4. Attempts to download the PNG image that the server is hosting.
-5. Write the downloaded PNG image to SD card.
-6. Read the PNG image back from SD card and write to the e-ink display.
-7. Returns to deep sleep for the configured refresh interval.
+2. Optionally connects to MQTT to publish diagnostic logs.
+3. Attempts to get current network time and update real-time clock.
+4. Downloads and renders the server-hosted PNG directly over HTTP.
+5. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
 
@@ -42,10 +41,9 @@ Both a server and client are required. The main workload is on the server, which
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
-- Can publish to an MQTT topic for remote logging.
+- Can publish diagnostic logs to MQTT while retaining serial output.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
-- Stores calendar images on SD card.
-- Reconfigure client by updating YAML file on SD card and reboot - easy!
+- Supports SD-card configuration or configuration embedded during compilation.
 
 ### Server (Raspberry Pi)
 
@@ -53,7 +51,7 @@ Both a server and client are required. The main workload is on the server, which
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
 4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
-5. (Optional) The server listens for client logs by subscribing to an MQTT topic using [Mosquitto](https://mosquitto.org/).
+5. (Optional) The server publishes weather snapshots and listens for Inkplate diagnostics over MQTT.
 6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
 7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
 
@@ -67,9 +65,11 @@ See the [server](/server) for more features.
 
   The [Inkplate 10](https://www.crowdsupply.com/soldered/inkplate-10) is an all-in-one hardware solution for something like this. It has a 9.7" 1200x825 display with integrated ESP32, real-time clock, and battery power management. You can get it either [directly from Soldered Electronics](https://soldered.com/product/soldered-inkplate-10-9-7-e-paper-board-with-enclosure-copy) or from a [UK reseller like Pimoroni](https://shop.pimoroni.com/products/inkplate-10-9-7-e-paper-display?variant=39959293591635). While it might seem pricey at first glance, a [similarly sized raw display from Waveshare](https://www.amazon.co.uk/Waveshare-Parallel-Resolution-Industrial-Instrument/dp/B07JG4SXBV) can cost the same or likely more, and you would still need to source the microcontroller, RTC, and BMS yourself.
 
-- **2 GB microSD card ~€5**
+- **Optional: 2 GB microSD card ~€5**
 
-  Whatever is the cheapest microSD card you can find, you will not likely need more than few hundred kilobytes of storage. It will be mainly used by Inkplate to cache downloaded images from the server until it needs to refresh the next day. The config file for the code will also need to be stored here.
+  A card is only required for the generic firmware build, which reads
+  `config.yaml` from its root. An embedded-config build does not initialize or
+  use the SD card.
 
 - **3000mAh LiPo battery pack ~€10**
 
@@ -89,7 +89,7 @@ See the [server](/server) for more features.
 
 ## Setup
 
-Place `config.yaml` in the root directory of an SD card and connect it to your Inkplate 10 board.
+The generic release firmware reads `config.yaml` from the root of an SD card:
 
 ```
 calendar:
@@ -105,10 +105,10 @@ ntp:
   timezone: Europe/Dublin
 mqtt_logger:
   enabled: false
-  broker: localhost
+  broker: <mqtt-broker-host>
   port: 1883
   clientId: inkplate10-weather-cal
-  topic: mqtt/weather-cal
+  topic: inkplate/weather-calendar/diagnostics
   retries: 3
 ```
 
@@ -119,7 +119,7 @@ Likely parameters you'll need to change are:
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
-- `mqtt_logger.broker` - the hostname or IP address of your server (likely the same server as the image host).
+- `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 
 See the [server](/server) for info on server setup.
 
@@ -128,6 +128,17 @@ viewer at `http://<server-host>:8080/app`. Use `server.alwayson: true` for this
 mode so the server keeps refreshing and serving the PNG continuously. The
 browser viewer uses a separate inline image route and does not interfere with
 the Inkplate client's `/calendar.png` download route.
+
+## MQTT
+
+The server can optionally publish the normalized weather snapshot to MQTT for
+other local displays and automations. It can separately listen for diagnostic
+messages from the Inkplate firmware. The Inkplate still downloads the rendered
+PNG regardless of either MQTT feature.
+
+See [MQTT Weather and Diagnostics](docs/mqtt.md) for broker setup, topics, payloads,
+and example clients such as the
+[52Pi EP-0164 Pico W weather display](examples/pico-ep0164-mqtt-weather).
 
 ## Server Installation
 
@@ -142,8 +153,9 @@ Run it from the repository root:
 ```
 
 The installer prompts for the weather provider, API keys, Google Static Maps
-Map ID, location, optional Netatmo details, optional MQTT logging, and whether
-to start the service/container. It keeps secrets out of committed YAML files:
+Map ID, location, optional Netatmo details, optional MQTT weather publishing,
+optional MQTT diagnostic listening, and whether to start the service/container.
+It keeps secrets out of committed YAML files:
 
 - Docker installs write secrets to `.env` and config to
   `server/config/config.yaml`.
@@ -218,6 +230,20 @@ Compile the firmware:
 make firmware-compile
 ```
 
+This is the generic build used by CI and release binaries. It expects
+`/config.yaml` on an SD card but renders the calendar image directly from HTTP.
+
+For an SD-free build, copy and edit the firmware configuration template:
+
+```bash
+cp firmware-config.example.yaml firmware-config.yaml
+make firmware-compile CONFIG=firmware-config.yaml
+```
+
+The generated header and build output stay under ignored `build/` paths. The
+resulting binary contains the WiFi password and any MQTT details in recoverable
+form, so do not publish it.
+
 To clean build artifacts and local libraries:
 
 ```bash
@@ -229,6 +255,15 @@ Upload to a connected Inkplate 10:
 ```bash
 make firmware-upload PORT=/dev/ttyUSB0
 ```
+
+`firmware-upload` recompiles before flashing. Add `CONFIG` to compile and flash
+the embedded-config variant:
+
+```bash
+make firmware-upload PORT=/dev/ttyUSB0 CONFIG=firmware-config.yaml
+```
+
+Without `CONFIG`, upload builds the generic SD-config variant.
 
 On macOS the port is usually under `/dev/cu.*`; on Windows it is usually a
 `COMx` port. You can list connected boards with:

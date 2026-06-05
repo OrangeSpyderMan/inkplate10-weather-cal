@@ -21,19 +21,18 @@
 #define LOG_MSG_MAX_LEN 128
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
+#if defined(EMBEDDED_CONFIG)
+#define CONFIG_SOURCE "embedded firmware config"
+#else
+#define CONFIG_SOURCE CONFIG_FILE_PATH
+#endif
 // Fallback time to refresh.
 #define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
-// The path on SD card where calendar images are downloaded to and read from.
-#define CALENDAR_RW_PATH "/calendar.png"
-// Guestimate file size for PNG image @ 1200x825
-#define CALENDAR_IMAGE_SIZE E_INK_WIDTH * E_INK_HEIGHT * 4 + 100
 
 // Enum of errors that might be encountered.
 #define ESP_ERR_ERRNO_BASE (0)
-#define ESP_ERR_EDL (1 + ESP_ERR_ERRNO_BASE)    // Download error
-#define ESP_ERR_EDRAW (2 + ESP_ERR_ERRNO_BASE)  // Draw error
-#define ESP_ERR_EFILEW (3 + ESP_ERR_ERRNO_BASE) // File write error
-#define ESP_ERR_ENTP (4 + ESP_ERR_ERRNO_BASE)   // NTP error
+#define ESP_ERR_EDRAW (1 + ESP_ERR_ERRNO_BASE) // Draw error
+#define ESP_ERR_ENTP (2 + ESP_ERR_ERRNO_BASE)  // NTP error
 
 // Enum of log verbosity levels.
 #define LOG_CRIT 0
@@ -75,33 +74,34 @@ extern Timezone myTz;
 esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
 
 /**
-  Download a file at a given URL. Store the file on disk at a given path.
+  Draw an image directly from a URL.
 
-  @param url the URL of the file to download.
-  @param size the size of the file to download.
-  @param retries the number of download attempts to make before returning an
-  error.
+  @param url the URL of the image.
   @returns the esp_err_t code:
   - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
+  - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
-esp_err_t downloadFile(const char *url, int32_t size, const char *filePath);
+esp_err_t displayImage(const char *url);
 
 /**
-  Draw an image to the display.
+  Draw a high-contrast error screen to the display.
 
-  @param filePath the path of the file on disk.
+  @param title short error category.
+  @param detail short human-readable error detail.
+  @param diagnostics optional diagnostic lines.
   error.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_EDL if download file fails.
-  - ESP_ERR_EFILEW if writing file to filePath fails.
 */
-esp_err_t displayImage(const char *filePath);
+void displayError(const char *title, const char *detail, const String &diagnostics);
+void displayError(const char *title, const char *detail);
+
+String appendDiagnostic(const String &base, const String &label, const String &value);
+String batteryDiagnostics(const float voltage);
+String configDiagnostics(const char *path);
+String joinDiagnostics(const String &first, const String &second);
+String networkDiagnostics();
 
 /**
-  Draw an message to the display. The error message is drawn in the top-left
-  corner of the display. Error message will overlay previously drawn image.
+  Draw a high-contrast message to the display.
 
   @param msg the message to display.
   error.
@@ -129,7 +129,7 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 void sleep(const int sleepHours);
 
 /**
-  Connect to a MQTT broker for remote logging.
+  Connect to a MQTT broker for remote diagnostic logging.
 
   @param broker the hostname of the MQTT broker.
   @param port the port of the MQTT broker.
@@ -169,7 +169,7 @@ void logf(uint16_t pri, const char *fmt, ...);
 String msgPrefix(uint16_t pri);
 
 /**
-  Ensure log queue is populated/emptied based on MQTT connection.
+  Queue or publish a diagnostic log message based on MQTT connection state.
 
   @param msg the log message
 */

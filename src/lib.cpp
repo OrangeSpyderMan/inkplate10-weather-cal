@@ -53,70 +53,19 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
 }
 
 /**
-  Download a file at a given URL. Store the file on disk at a given path.
+  Draw an image directly from a URL.
 
-  @param url the URL of the file to download.
-  @param size the size of the file to download.
-  @param retries the number of download attempts to make before returning an
-  error.
+  @param url the URL of the image.
   @returns the esp_err_t code:
   - ESP_OK if successful.
-  - ESP_ERR_TIMEOUT if number of retries is exceeded without success.
+  - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
-esp_err_t downloadFile(const char *url, int32_t size, const char *filePath)
+esp_err_t displayImage(const char *url)
 {
-    logf(LOG_INFO, "downloading file at URL %s", url);
-
-    // Download file from URL
-    uint8_t *buf = board.downloadFile(url, &size);
-    if (!buf)
-    {
-        return ESP_ERR_EDL;
-    }
-
-    logf(LOG_INFO, "writing file to path %s", filePath);
-    SdFat &sd = board.getSdFat();
-
-    // Write image buffer to SD card
-    if (sd.exists(filePath))
-    {
-        sd.remove(filePath);
-    }
-
-    File sdfile = sd.open(filePath, FILE_WRITE);
-    if (!sdfile)
-    {
-        free(buf);
-        return ESP_ERR_EFILEW;
-    }
-
-    size_t written = sdfile.write(buf, size);
-    sdfile.close();
-    free(buf);
-    if (written != (size_t)size)
-    {
-        return ESP_ERR_EFILEW;
-    }
-
-    return ESP_OK;
-}
-
-/**
-  Draw an image to the display.
-
-  @param filePath the path of the file on disk.
-  error.
-  @returns the esp_err_t code:
-  - ESP_OK if successful.
-  - ESP_ERR_EDL if download file fails.
-  - ESP_ERR_EFILEW if writing file to filePath fails.
-*/
-esp_err_t displayImage(const char *filePath)
-{
-    logf(LOG_INFO, "drawing image from path: %s", filePath);
+    logf(LOG_INFO, "drawing image from URL: %s", url);
 
     board.clearDisplay();
-    if (!board.image.draw(filePath, 0, 0, false, true))
+    if (!board.image.draw(url, 0, 0, false, true))
     {
         return ESP_ERR_EDRAW;
     }
@@ -126,24 +75,66 @@ esp_err_t displayImage(const char *filePath)
 }
 
 /**
-  Draw an message to the display. The error message is drawn in the top-left
-  corner of the display. Error message will overlay previously drawn image.
+  Draw a high-contrast error screen to the display.
+
+  @param title short error category.
+  @param detail short human-readable error detail.
+  @param diagnostics optional diagnostic lines.
+  error.
+*/
+void displayError(const char *title, const char *detail, const String &diagnostics)
+{
+    const uint8_t black = 0;
+    const uint8_t white = 7;
+    const int margin = 24;
+    const int bannerHeight = 96;
+
+    board.clearDisplay();
+    board.setTextWrap(true);
+
+    board.fillRect(0, 0, board.width(), bannerHeight, black);
+    board.setTextColor(white, black);
+    board.setTextSize(3);
+    board.setCursor(margin, 28);
+    board.print("Weather calendar error");
+
+    board.setTextColor(black, white);
+    board.setTextSize(3);
+    board.setCursor(margin, bannerHeight + 28);
+    board.println(title);
+
+    board.setTextSize(2);
+    board.setCursor(margin, bannerHeight + 96);
+    board.println(detail);
+
+    if (diagnostics.length() > 0)
+    {
+        board.println();
+        board.println("Diagnostics:");
+        board.println(diagnostics);
+    }
+
+    board.display();
+}
+
+void displayError(const char *title, const char *detail)
+{
+    displayError(title, detail, String());
+}
+
+/**
+  Draw a high-contrast message to the display.
 
   @param msg the message to display.
   error.
 */
 void displayMessage(const char *msg)
 {
-    board.setTextSize(4);
-    board.setTextColor(1, 0);
-    board.setTextWrap(true);
-    board.setCursor(0, 0);
-    board.print(msg);
-    board.display();
+    displayError("Error", msg);
 }
 
 /**
-  Connect to a MQTT broker for remote logging.
+  Connect to a MQTT broker for remote diagnostic logging.
 
   @param broker the hostname of the MQTT broker.
   @param port the port of the MQTT broker.
@@ -158,14 +149,13 @@ void displayMessage(const char *msg)
 esp_err_t configureMQTT(const char *broker, int port, const char *topic,
                         const char *clientID, int max_retries)
 {
-    log(LOG_INFO, "configuring remote MQTT logging...");
+    log(LOG_INFO, "configuring remote MQTT diagnostics...");
 
     client.setServer(broker, port);
-    // Attempt to connect to MQTT broker.
     int attempts = 0;
     while (attempts++ <= max_retries && !client.connect(clientID))
     {
-        logf(LOG_DEBUG, "connection attempt #%d...", attempts);
+        logf(LOG_DEBUG, "MQTT connection attempt #%d...", attempts);
         delay(250);
     }
 
@@ -176,11 +166,82 @@ esp_err_t configureMQTT(const char *broker, int port, const char *topic,
 
     mqttLogger.setTopic(topic);
     mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
-
-    // Print the IP address
     logf(LOG_INFO, "connected to MQTT broker %s:%d", broker, port);
 
     return ESP_OK;
+}
+
+String wifiStatusName(wl_status_t status)
+{
+    switch (status)
+    {
+    case WL_CONNECTED:
+        return "connected";
+    case WL_NO_SHIELD:
+        return "no shield";
+    case WL_IDLE_STATUS:
+        return "idle";
+    case WL_NO_SSID_AVAIL:
+        return "ssid unavailable";
+    case WL_SCAN_COMPLETED:
+        return "scan complete";
+    case WL_CONNECT_FAILED:
+        return "connect failed";
+    case WL_CONNECTION_LOST:
+        return "connection lost";
+    case WL_DISCONNECTED:
+        return "disconnected";
+    default:
+        return "unknown";
+    }
+}
+
+String networkDiagnostics()
+{
+    String msg = "WiFi: ";
+    msg += wifiStatusName(WiFi.status());
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        msg += "\nIP: ";
+        msg += WiFi.localIP().toString();
+    }
+
+    return msg;
+}
+
+String joinDiagnostics(const String &first, const String &second)
+{
+    if (first.length() == 0)
+    {
+        return second;
+    }
+    if (second.length() == 0)
+    {
+        return first;
+    }
+
+    return first + "\n" + second;
+}
+
+String appendDiagnostic(const String &base, const String &label, const String &value)
+{
+    String line = label + value;
+    return joinDiagnostics(base, line);
+}
+
+String batteryDiagnostics(const float voltage)
+{
+    String msg = "Battery: ";
+    msg += String(voltage, 2);
+    msg += "V";
+    return msg;
+}
+
+String configDiagnostics(const char *path)
+{
+    String msg = "Config: ";
+    msg += path;
+    return msg;
 }
 
 /**
@@ -268,35 +329,30 @@ void logf(uint16_t pri, const char *fmt, ...)
 }
 
 /**
-  Ensure log queue is populated/emptied based on MQTT connection.
+  Queue or publish a diagnostic log message based on MQTT connection state.
 
-  @param msg the log message.
+  @param logMsg the log message.
 */
 void ensureQueue(const char *logMsg)
 {
     if (!client.connected())
     {
-        // populate log queue while no mqtt connection
         logQ.push(logMsg);
     }
-    else
+    else if (logQ.getCount() > 0)
     {
-        // send queued logs once we are connected.
-        if (logQ.getCount() > 0)
+        char tempBuf[LOG_MSG_MAX_LEN];
+        mqttLogger.setMode(MqttLoggerMode::MqttOnly);
+        while (!logQ.isEmpty())
         {
-            char tempBuf[LOG_MSG_MAX_LEN];
-            mqttLogger.setMode(MqttLoggerMode::MqttOnly);
-            while (!logQ.isEmpty())
+            if (logQ.pop(tempBuf))
             {
-                if (logQ.pop(tempBuf))
-                {
-                    mqttLogger.println(tempBuf);
-                }
+                mqttLogger.println(tempBuf);
             }
-            mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
         }
+        mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
     }
-    // print/send the current log
+
     mqttLogger.println(logMsg);
 }
 
@@ -361,8 +417,10 @@ void sleep(const int sleepHours)
     WiFi.disconnect();
     log(LOG_DEBUG, "Turn off WiFi...");
     WiFi.mode(WIFI_OFF);
+#if !defined(EMBEDDED_CONFIG)
     log(LOG_DEBUG, "Sleep SDCard...");
     board.sdCardSleep();
+#endif
 
     const uint64_t sleepMicroseconds = ((uint64_t)boundedSleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
     logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);

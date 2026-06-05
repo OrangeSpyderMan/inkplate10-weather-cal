@@ -51,8 +51,9 @@ def expand_env_vars(value):
     def replace_match(match):
         var_name = match.group(1)
         default = match.group(2)
-        if var_name in os.environ:
-            return os.environ[var_name]
+        env_value = os.environ.get(var_name)
+        if env_value:
+            return env_value
         if default is not None:
             return default
 

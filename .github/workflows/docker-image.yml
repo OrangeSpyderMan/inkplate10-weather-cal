@@ -44,6 +44,10 @@ jobs:
           docker run --rm inkplate10-weather-cal:ci firefox --version
           docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
             server/server.py \
+            server/mqtt_diagnostics.py \
+            server/mqtt_publisher.py \
             server/utils.py \
             server/views/page.py \
             server/views/calendar.py
+          docker run --rm inkplate10-weather-cal:ci \
+            python3 -m unittest discover -s server/tests -v

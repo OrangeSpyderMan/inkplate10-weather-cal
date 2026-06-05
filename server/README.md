@@ -34,9 +34,9 @@ port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
 images, and MQTT disabled.
 
 It prompts for the location, weather API key, Google Static Maps API key, Google
-Static Maps Map ID, optional Netatmo credentials, optional MQTT logging, and
-whether to start the service or container. Secrets are written outside committed
-YAML:
+Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
+publishing, optional MQTT diagnostic listening, and whether to start the service
+or container. Secrets are written outside committed YAML:
 
 - Docker: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
@@ -130,11 +130,75 @@ current_temperature:
 
 The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
 
+### MQTT weather publishing
+
+The server can optionally publish the same normalized weather snapshot used by
+the renderer to MQTT. This is intended for lightweight local clients such as
+ESP32 displays, Pico-class devices, Home Assistant, or Node-RED flows that need
+weather data without talking directly to the weather provider APIs.
+
+```yaml
+mqtt:
+  weather:
+    enabled: true
+    broker: localhost
+    port: 1883
+    base_topic: inkplate/weather-calendar
+    retain: true
+    qos: 0
+  diagnostics:
+    enabled: true
+    broker: localhost
+    port: 1883
+    topic: inkplate/weather-calendar/diagnostics
+    qos: 0
+```
+
+When enabled, the server publishes retained JSON payloads after a successful
+weather refresh:
+
+```text
+inkplate/weather-calendar
+inkplate/weather-calendar/current
+inkplate/weather-calendar/hourly
+inkplate/weather-calendar/status
+```
+
+Publishing failures are logged but do not stop image generation or HTTP
+serving. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for broker setup,
+payload details, topic examples, and example clients.
+
+The diagnostic listener is independent from weather publishing. It records
+non-retained messages from the Inkplate through the `MQTT` logger and
+resubscribes after reconnecting. The matching firmware topic is configured in
+the Inkplate `mqtt_logger` section, either on the SD card or in an embedded
+firmware configuration.
+
 ### Secrets
 
 Config values can reference environment variables with `${VARIABLE_NAME}`. Use `${VARIABLE_NAME:-default}` when the value is optional or when a provider is configured but not currently selected.
 
 This lets you keep committed YAML files free of secrets and inject sensitive values from the runtime environment. In GitHub Actions, store those values as repository or environment secrets and pass them to the relevant step with `env:`. For local Docker runs, use an ignored `.env` file or shell environment variables.
+
+The expected runtime environment variable names are documented in
+`.env.example` and listed here for container UIs that require values to be added
+manually:
+
+```text
+WEATHER_API_KEY
+GOOGLE_API_KEY
+GOOGLE_STATICMAPS_MAPID
+NETATMO_CLIENT_ID
+NETATMO_CLIENT_SECRET
+NETATMO_REFRESH_TOKEN
+NETATMO_DEVICE_ID
+NETATMO_MODULE_ID
+```
+
+Empty runtime values do not satisfy required config placeholders such as
+`${WEATHER_API_KEY}`. Required values must be provided by the runtime
+environment. Optional placeholders such as `${NETATMO_CLIENT_ID:-}` continue to
+expand to an empty string when unset.
 
 ### Image dimensions
 
@@ -319,7 +383,18 @@ NETATMO_MODULE_ID=
 The compose file mounts `server/config` read-only and stores mutable
 runtime data in the named `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
-container replacement.
+container replacement. Compose requires explicit values for
+`WEATHER_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_STATICMAPS_MAPID`.
+
+### Docker MQTT broker
+
+If either MQTT feature is enabled, the server needs a reachable MQTT broker.
+Configure `mqtt.weather.broker` and `mqtt.diagnostics.broker` independently; they
+may point to the same broker.
+
+For a simple local Docker broker, this repository includes an optional Compose
+override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the broker command,
+matching server config, and security notes.
 
 The published OCI images are:
 
@@ -377,10 +452,10 @@ http://localhost:8080/app
 `localhost` is correct when testing from the Docker host. The Inkplate firmware
 must use the host's LAN hostname or IP address in `calendar.url`.
 
-If MQTT logging is enabled, set `mqtt.host` in `server/config/config.yaml` to a
-host that is reachable from inside the container. On Docker Desktop,
-`host.docker.internal` usually points to the host. On Linux, you may prefer to
-run the MQTT broker as another Compose service or use the host's LAN IP.
+Set each enabled MQTT broker to an address reachable from inside the container. On
+Docker Desktop, `host.docker.internal` usually points to the host. On Linux, you
+may prefer to run the MQTT broker as another Compose service or use the host's
+LAN IP.
 
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
 used to check the Docker logs for ERROR messages. By default that runs every
@@ -432,6 +507,11 @@ Configure the container with:
 - a read-only config directory mounted at `/srv/inkplate/server/config`, with
   the file available as `/srv/inkplate/server/config/config.yaml`
 - persistent storage mounted at `/srv/inkplate/server/data`
+
+Fill in at least `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and
+`GOOGLE_STATICMAPS_MAPID`; leave Netatmo values empty unless
+`current_temperature.source` is set to `netatmo`. The supported variable names
+are listed in `.env.example`.
 
 Do not mount a directory over `/srv/inkplate/server`; that path contains the
 application code copied into the image. Mount only the config directory and data
