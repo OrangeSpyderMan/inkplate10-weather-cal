@@ -4,7 +4,7 @@ services:
     build:
       context: .
       args:
-        GECKOVERSION: v0.36.0
+        GECKOVERSION: v0.37.0
     restart: unless-stopped
     ports:
       - "8080:8080"
