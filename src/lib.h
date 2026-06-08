@@ -28,6 +28,12 @@
 #endif
 // Fallback time to refresh.
 #define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
+// Battery voltage thresholds for a single-cell LiPo.
+#define BATTERY_VALID_MIN_VOLTAGE 2.5F
+#define BATTERY_VALID_MAX_VOLTAGE 4.4F
+#define BATTERY_CRITICAL_VOLTAGE 3.1F
+#define BATTERY_WARNING_VOLTAGE 3.3F
+#define BATTERY_CONFIRMATION_SAMPLES 5
 
 // Enum of errors that might be encountered.
 #define ESP_ERR_ERRNO_BASE (0)
@@ -51,6 +57,8 @@
 extern RTC_DATA_ATTR time_t lastBootTime;
 // RTC epoch of the last time deep sleep was initiated.
 extern RTC_DATA_ATTR time_t lastSleepTime;
+// Whether the retained e-ink display already shows the critical battery warning.
+extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
 // The remote logging instance.
 extern MqttLogger mqttLogger;
 // The log message queue.
@@ -82,6 +90,14 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
   - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
 esp_err_t displayImage(const char *url);
+
+/**
+  Read the battery voltage. Normal readings use one sample; low readings are
+  confirmed with a median of multiple samples.
+
+  @returns the measured battery voltage, or 0 if the reading is implausible.
+*/
+float readBatteryVoltage();
 
 /**
   Draw a high-contrast error screen to the display.

@@ -187,6 +187,36 @@ void setup()
         }
     }
 
+    // Check the battery before starting the radio or other network work.
+    float bvolt = readBatteryVoltage();
+    if (bvolt <= 0.0F)
+    {
+        log(LOG_WARNING, "battery voltage reading is invalid");
+    }
+    else
+    {
+        logf(LOG_INFO, "battery voltage: %sV", String(bvolt, 2).c_str());
+        if (bvolt < BATTERY_CRITICAL_VOLTAGE)
+        {
+            log(LOG_NOTICE, "battery critical; skipping network refresh");
+            if (!batteryLowWarningDisplayed)
+            {
+                displayError(
+                    "Battery low",
+                    "Battery empty, please charge!",
+                    batteryDiagnostics(bvolt));
+                batteryLowWarningDisplayed = true;
+            }
+            sleep(calendarRefreshInterval);
+        }
+
+        batteryLowWarningDisplayed = false;
+        if (bvolt < BATTERY_WARNING_VOLTAGE)
+        {
+            log(LOG_WARNING, "battery low, charge soon");
+        }
+    }
+
     // Attempt to connect to WiFi.
     err = configureWiFi(wifiSSID, wifiPass, wifiRetries);
     if (err == ESP_ERR_TIMEOUT)
@@ -230,37 +260,6 @@ void setup()
     {
         logf(LOG_INFO, "last sleep time: %s",
              dateTime(lastSleepTime, RFC3339).c_str());
-    }
-
-    // Read battery voltage.
-    float bvolt = board.readBattery();
-    logf(LOG_INFO, "battery voltage: %sv", String(bvolt, 2).c_str());
-
-    if (bvolt > 0.0)
-    {
-        if (bvolt < 3.1)
-        {
-            log(LOG_NOTICE, "battery near empty! - sleeping until charged");
-            displayError(
-                "Battery low",
-                "Battery empty, please charge!",
-                batteryDiagnostics(bvolt));
-            // Sleep instead of proceeding when battery is too low.
-            sleep(calendarRefreshInterval);
-        }
-        else if (bvolt < 3.3)
-        {
-            log(LOG_WARNING, "battery low, charge soon!");
-        }
-        else
-        {
-            const char *bstat = (bvolt < 3.6) ? "below" : "above";
-            logf(LOG_INFO, "battery approx %s 50%% capacity", bstat);
-        }
-    }
-    else
-    {
-        log(LOG_WARNING, "problem detecting battery voltage");
     }
 
     // Reset err state.

@@ -4,6 +4,11 @@
 RTC_DATA_ATTR time_t lastBootTime = 0;
 // RTC epoch of the last time deep sleep was initiated.
 RTC_DATA_ATTR time_t lastSleepTime = 0;
+// Avoid redrawing the same retained low-battery screen on every wake.
+RTC_DATA_ATTR bool batteryLowWarningDisplayed = false;
+// Cache timezone rules across deep sleep to avoid a network lookup every wake.
+RTC_DATA_ATTR char cachedTimezoneName[64] = "";
+RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
 
 // remote mqtt logger
 WiFiClient espClient;
@@ -29,16 +34,27 @@ Timezone myTz;
 */
 esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
 {
+    WiFi.persistent(false);
+    WiFi.setAutoReconnect(false);
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pass);
     logf(LOG_INFO, "connecting to WiFi SSID %s...", ssid);
 
-    // Retry until success or give up
-    int attempts = 0;
-    while (attempts++ <= retries && WiFi.status() != WL_CONNECTED)
+    // Preserve the configured 2.5-second retry windows, but poll frequently so
+    // a quick association does not always incur the full delay.
+    for (int attempt = 0; attempt <= retries; ++attempt)
     {
-        logf(LOG_DEBUG, "connection attempt #%d...", attempts);
-        delay(2500);
+        logf(LOG_DEBUG, "connection attempt #%d...", attempt + 1);
+        const unsigned long started = millis();
+        while (WiFi.status() != WL_CONNECTED &&
+               millis() - started < 2500)
+        {
+            delay(100);
+        }
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            break;
+        }
     }
 
     // If still not connected, error with timeout.
@@ -48,8 +64,58 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
     }
     // Print the IP address
     logf(LOG_INFO, "IP address: %s", WiFi.localIP().toString().c_str());
+    // Network transfers temporarily disable modem sleep when they need maximum
+    // throughput; keep it enabled between those transfers.
+    WiFi.setSleep(true);
 
     return ESP_OK;
+}
+
+float readBatteryVoltage()
+{
+    float samples[BATTERY_CONFIRMATION_SAMPLES];
+    samples[0] = board.readBattery();
+
+    if (samples[0] < BATTERY_VALID_MIN_VOLTAGE ||
+        samples[0] > BATTERY_VALID_MAX_VOLTAGE)
+    {
+        return 0.0F;
+    }
+
+    if (samples[0] >= BATTERY_WARNING_VOLTAGE)
+    {
+        return samples[0];
+    }
+
+    int validSamples = 1;
+    for (int i = 1; i < BATTERY_CONFIRMATION_SAMPLES; ++i)
+    {
+        float sample = board.readBattery();
+        if (sample >= BATTERY_VALID_MIN_VOLTAGE &&
+            sample <= BATTERY_VALID_MAX_VOLTAGE)
+        {
+            samples[validSamples++] = sample;
+        }
+    }
+    if (validSamples < 3)
+    {
+        return 0.0F;
+    }
+
+    // Insertion sort is sufficient for this small fixed-size sample set.
+    for (int i = 1; i < validSamples; ++i)
+    {
+        float value = samples[i];
+        int position = i - 1;
+        while (position >= 0 && samples[position] > value)
+        {
+            samples[position + 1] = samples[position];
+            --position;
+        }
+        samples[position + 1] = value;
+    }
+
+    return samples[validSamples / 2];
 }
 
 /**
@@ -371,16 +437,32 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
     log(LOG_INFO, "configuring network time and RTC...");
 
     setServer(ntpHost);
-
-    if (!waitForSync())
+    updateNTP();
+    if (!waitForSync(5))
     {
         return ESP_ERR_ENTP;
     }
-    myTz.setLocation(F(timezoneName));
 
-    updateNTP();
+    if (strcmp(cachedTimezoneName, timezoneName) == 0 &&
+        cachedTimezonePosix[0] != '\0')
+    {
+        myTz.setPosix(String(cachedTimezonePosix));
+        log(LOG_DEBUG, "using cached timezone rules");
+    }
+    else
+    {
+        if (!myTz.setLocation(F(timezoneName)))
+        {
+            return ESP_ERR_ENTP;
+        }
+        String timezonePosix = myTz.getPosix();
+        snprintf(cachedTimezoneName, sizeof(cachedTimezoneName), "%s",
+                 timezoneName);
+        timezonePosix.toCharArray(cachedTimezonePosix,
+                                  sizeof(cachedTimezonePosix));
+    }
+
     // Sync RTC with NTP time
-    // time_t nowTime = now();
     time_t nowTime = myTz.now();
     board.rtc.setEpoch(nowTime);
     logf(LOG_INFO, "RTC synced to %s", dateTime(nowTime, RFC3339).c_str());
@@ -407,15 +489,17 @@ void sleep(const int sleepHours)
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
     logf(LOG_INFO, "waking in %d hours", boundedSleepHours);
-    log(LOG_NOTICE, "deep sleeping in 5 seconds");
-    delay(5000);
-
     lastSleepTime = rtcTime;
 
     log(LOG_NOTICE, "Shutdown is NOW!");
-    log(LOG_DEBUG, "Disconnect WiFi...");
-    WiFi.disconnect();
-    log(LOG_DEBUG, "Turn off WiFi...");
+    if (client.connected())
+    {
+        client.loop();
+        delay(100);
+        client.disconnect();
+    }
+    Serial.flush();
+    WiFi.disconnect(false, false);
     WiFi.mode(WIFI_OFF);
 #if !defined(EMBEDDED_CONFIG)
     log(LOG_DEBUG, "Sleep SDCard...");

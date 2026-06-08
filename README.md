@@ -41,6 +41,8 @@ Both a server and client are required. The main workload is on the server, which
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
+- Battery voltage is checked before WiFi starts; low readings are confirmed
+  before a refresh is skipped.
 - Can publish diagnostic logs to MQTT while retaining serial output.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
 - Supports SD-card configuration or configuration embedded during compilation.
