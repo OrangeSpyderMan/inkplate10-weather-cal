@@ -60,6 +60,8 @@ extern RTC_DATA_ATTR time_t lastBootTime;
 extern RTC_DATA_ATTR time_t lastSleepTime;
 // Whether the retained e-ink display already shows the critical battery warning.
 extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
+// Whether routine debug and informational messages should be sent over MQTT.
+extern bool mqttDebugEnabled;
 // The log message queue.
 extern cppQueue logQ;
 // The Inkplate board driver instance.
@@ -181,6 +183,16 @@ void log(uint16_t pri, const char *msg);
 void logf(uint16_t pri, const char *fmt, ...);
 
 /**
+  Log an event with a stable tag. Tagged events are always sent over MQTT when
+  remote diagnostics are enabled.
+
+  @param pri the log level / priority of the message.
+  @param tag stable event tag such as WAKE, BATTERY, or REFRESH.
+  @param fmt the event detail format.
+*/
+void logTagged(uint16_t pri, const char *tag, const char *fmt, ...);
+
+/**
   Converts a priority into a log level prefix.
 
   @param pri the log level / priority of the message, see LOG_LEVEL.
@@ -189,10 +201,12 @@ void logf(uint16_t pri, const char *fmt, ...);
 String msgPrefix(uint16_t pri);
 
 /**
-  Queue or publish a diagnostic log message based on MQTT connection state.
+  Write a diagnostic message to serial and optionally queue or publish it over
+  MQTT.
 
   @param msg the log message
+  @param mqttEligible whether the message should be sent over MQTT
 */
-void ensureQueue(const char *msg);
+void ensureQueue(const char *msg, bool mqttEligible);
 
 #endif

@@ -13,6 +13,7 @@ RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
 // Remote MQTT diagnostics.
 esp_mqtt_client_handle_t mqttClient = nullptr;
 volatile bool mqttConnected = false;
+bool mqttDebugEnabled = false;
 // queue to store messages to publish once mqtt connection is established.
 cppQueue logQ(LOG_MSG_MAX_LEN, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
 const char *mqttLogTopic = nullptr;
@@ -156,7 +157,8 @@ esp_err_t displayImage(const char *url)
 
     // The image is now decoded in the framebuffer. The radio is not needed
     // while the comparatively slow e-paper waveform drives the panel.
-    log(LOG_INFO, "image ready; shutting down network before display refresh");
+    logTagged(LOG_INFO, "REFRESH", "status=ready");
+    log(LOG_DEBUG, "shutting down network before display refresh");
     shutdownNetwork();
     board.display();
 
@@ -411,7 +413,7 @@ void log(uint16_t pri, const char *msg)
     char buf[LOG_MSG_MAX_LEN];
     snprintf(buf, sizeof(buf), "%s%s", prefix.c_str(), msg);
 
-    ensureQueue(buf);
+    ensureQueue(buf, mqttDebugEnabled || pri <= LOG_WARNING);
 }
 
 /**
@@ -436,18 +438,45 @@ void logf(uint16_t pri, const char *fmt, ...)
     vsnprintf(buf + prefixLen, sizeof(buf) - prefixLen, fmt, args);
     va_end(args);
 
-    ensureQueue(buf);
+    ensureQueue(buf, mqttDebugEnabled || pri <= LOG_WARNING);
+}
+
+void logTagged(uint16_t pri, const char *tag, const char *fmt, ...)
+{
+    if (pri > LOG_LEVEL)
+        return;
+
+    char buf[LOG_MSG_MAX_LEN];
+    int prefixLen = snprintf(
+        buf, sizeof(buf), "%s - %s - ",
+        myTz.dateTime(RFC3339).c_str(), tag);
+    if (prefixLen >= (int)sizeof(buf))
+        prefixLen = sizeof(buf) - 1;
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf + prefixLen, sizeof(buf) - prefixLen, fmt, args);
+    va_end(args);
+
+    ensureQueue(buf, true);
 }
 
 /**
-  Queue or publish a diagnostic log message based on MQTT connection state.
+  Write a diagnostic message to serial and optionally queue or publish it over
+  MQTT.
 
   @param logMsg the log message.
+  @param mqttEligible whether the message should be sent over MQTT.
 */
-void ensureQueue(const char *logMsg)
+void ensureQueue(const char *logMsg, bool mqttEligible)
 {
     // Keep serial diagnostics independent of MQTT delivery.
     Serial.println(logMsg);
+
+    if (!mqttEligible)
+    {
+        return;
+    }
 
     if (!mqttConnected || mqttClient == nullptr || mqttLogTopic == nullptr)
     {

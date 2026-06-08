@@ -107,6 +107,7 @@ ntp:
   timezone: Europe/Dublin
 mqtt_logger:
   enabled: false
+  debug: false
   broker: <mqtt-broker-host>
   port: 1883
   clientId: inkplate10-weather-cal
@@ -122,6 +123,7 @@ Likely parameters you'll need to change are:
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
+- `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.
 
 See the [server](/server) for info on server setup.
 

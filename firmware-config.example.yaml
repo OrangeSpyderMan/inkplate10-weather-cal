@@ -11,6 +11,7 @@ ntp:
   timezone: Europe/Paris
 mqtt_logger:
   enabled: false
+  debug: false
   broker: <mqtt-broker-host>
   port: 1883
   clientId: inkplate10-weather-cal

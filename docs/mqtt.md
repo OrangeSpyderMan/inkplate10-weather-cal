@@ -47,6 +47,7 @@ Enable diagnostic publishing in the Inkplate configuration, either the SD-card
 ```yaml
 mqtt_logger:
   enabled: true
+  debug: false
   broker: mqtt.example.net
   port: 1883
   clientId: inkplate10-weather-cal
@@ -56,6 +57,23 @@ mqtt_logger:
 
 Diagnostic messages are not retained. If the broker cannot be reached, the
 firmware continues with serial-only logging.
+
+`mqtt_logger.debug` defaults to `false`. Normal MQTT output contains the tagged
+`WAKE`, `BATTERY`, and `REFRESH` lifecycle events, plus all warnings and errors.
+For example:
+
+```text
+2026-06-08T17:14:38+02:00 - WAKE - cause=timer
+2026-06-08T17:14:38+02:00 - BATTERY - voltage=4.26V
+2026-06-08T17:14:45+02:00 - REFRESH - status=ready
+```
+
+`REFRESH status=ready` means that the image has been downloaded and decoded.
+The firmware then acknowledges outstanding MQTT messages and turns off the
+network before driving the e-paper panel.
+
+Set `debug: true` to also publish detailed connection, timing, retry, and sleep
+messages. Serial logging remains verbose in both modes.
 
 ## Example Broker
 

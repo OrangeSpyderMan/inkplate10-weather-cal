@@ -39,23 +39,29 @@ void setup()
 
     logf(LOG_DEBUG, "boot time: %s", dateTime(bootTime, RFC3339).c_str());
 
+    const char *wakeCause = "reset";
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     switch (wakeup_reason)
     {
     case ESP_SLEEP_WAKEUP_EXT0:
+        wakeCause = "rtc_io";
         logf(LOG_DEBUG, "wakeup caused by external signal using RTC_IO.");
         board.rtc.clearAlarmFlag();
         break;
     case ESP_SLEEP_WAKEUP_EXT1:
+        wakeCause = "rtc_control";
         logf(LOG_DEBUG, "wakeup caused by external signal using RTC_CNTL.");
         break;
     case ESP_SLEEP_WAKEUP_TIMER:
+        wakeCause = "timer";
         logf(LOG_DEBUG, "wakeup caused by timer.");
         break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        wakeCause = "touchpad";
         logf(LOG_DEBUG, "wakeup caused by touchpad.");
         break;
     case ESP_SLEEP_WAKEUP_ULP:
+        wakeCause = "ulp";
         logf(LOG_DEBUG, "wakeup caused by ULP program.");
         break;
     default:
@@ -134,6 +140,7 @@ void setup()
     const char *mqttLoggerClientID = mqttLoggerCfg["clientId"];
     const char *mqttLoggerTopic = mqttLoggerCfg["topic"];
     int mqttLoggerRetries = mqttLoggerCfg["retries"] | 3;
+    mqttDebugEnabled = mqttLoggerCfg["debug"] | false;
 
     if (isMissingConfigValue(calendarUrl))
     {
@@ -187,6 +194,8 @@ void setup()
         }
     }
 
+    logTagged(LOG_INFO, "WAKE", "cause=%s", wakeCause);
+
     // Check the battery before starting the radio or other network work.
     float bvolt = readBatteryVoltage();
     if (bvolt <= 0.0F)
@@ -195,7 +204,7 @@ void setup()
     }
     else
     {
-        logf(LOG_INFO, "battery voltage: %sV", String(bvolt, 2).c_str());
+        logTagged(LOG_INFO, "BATTERY", "voltage=%.2fV", bvolt);
         if (bvolt < BATTERY_CRITICAL_VOLTAGE)
         {
             log(LOG_NOTICE, "battery critical; skipping network refresh");
