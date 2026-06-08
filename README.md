@@ -294,7 +294,6 @@ The following libraries should be installed in your Arduino IDE. They are availa
 
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [ArduinoJson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
-- [MQTTLogger](https://github.com/androbi-com/MqttLogger)
 - [Queue](https://github.com/SMFSW/Queue)
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)

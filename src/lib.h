@@ -6,9 +6,8 @@
 #include <cppQueue.h>
 #include <driver/rtc_io.h>
 #include <ezTime.h>
+#include <mqtt_client.h>
 #include <rom/rtc.h>
-
-#include "MqttLogger.h"
 
 #define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
@@ -19,6 +18,8 @@
 #define LOG_QUEUE_MAX_ENTRIES 10
 // log message maximum length
 #define LOG_MSG_MAX_LEN 128
+// Maximum time to wait for QoS 1 MQTT acknowledgements before sleeping.
+#define MQTT_ACK_TIMEOUT_MS 1500
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
 #if defined(EMBEDDED_CONFIG)
@@ -59,8 +60,6 @@ extern RTC_DATA_ATTR time_t lastBootTime;
 extern RTC_DATA_ATTR time_t lastSleepTime;
 // Whether the retained e-ink display already shows the critical battery warning.
 extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
-// The remote logging instance.
-extern MqttLogger mqttLogger;
 // The log message queue.
 extern cppQueue logQ;
 // The Inkplate board driver instance.

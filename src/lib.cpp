@@ -10,10 +10,9 @@ RTC_DATA_ATTR bool batteryLowWarningDisplayed = false;
 RTC_DATA_ATTR char cachedTimezoneName[64] = "";
 RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
 
-// remote mqtt logger
-WiFiClient espClient;
-PubSubClient client(espClient);
-MqttLogger mqttLogger(client, "", MqttLoggerMode::SerialOnly);
+// Remote MQTT diagnostics.
+esp_mqtt_client_handle_t mqttClient = nullptr;
+volatile bool mqttConnected = false;
 // queue to store messages to publish once mqtt connection is established.
 cppQueue logQ(LOG_MSG_MAX_LEN, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
 const char *mqttLogTopic = nullptr;
@@ -21,6 +20,24 @@ const char *mqttLogTopic = nullptr;
 Inkplate board(INKPLATE_3BIT);
 // timezone store
 Timezone myTz;
+
+esp_err_t handleMQTTEvent(esp_mqtt_event_handle_t event)
+{
+    switch (event->event_id)
+    {
+    case MQTT_EVENT_CONNECTED:
+        mqttConnected = true;
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+    case MQTT_EVENT_ERROR:
+        mqttConnected = false;
+        break;
+    default:
+        break;
+    }
+
+    return ESP_OK;
+}
 
 /**
   Connect to a WiFi network in Station Mode.
@@ -218,22 +235,43 @@ esp_err_t configureMQTT(const char *broker, int port, const char *topic,
 {
     log(LOG_INFO, "configuring remote MQTT diagnostics...");
 
-    client.setServer(broker, port);
-    int attempts = 0;
-    while (attempts++ <= max_retries && !client.connect(clientID))
+    esp_mqtt_client_config_t mqttConfig = {};
+    mqttConfig.event_handle = handleMQTTEvent;
+    mqttConfig.host = broker;
+    mqttConfig.port = port;
+    mqttConfig.client_id = clientID;
+    mqttConfig.disable_auto_reconnect = false;
+    mqttConfig.reconnect_timeout_ms = 250;
+    mqttConfig.network_timeout_ms = 2000;
+
+    mqttClient = esp_mqtt_client_init(&mqttConfig);
+    if (mqttClient == nullptr || esp_mqtt_client_start(mqttClient) != ESP_OK)
     {
-        logf(LOG_DEBUG, "MQTT connection attempt #%d...", attempts);
+        if (mqttClient != nullptr)
+        {
+            esp_mqtt_client_destroy(mqttClient);
+            mqttClient = nullptr;
+        }
+        return ESP_FAIL;
+    }
+
+    for (int attempt = 0;
+         attempt <= max_retries && !mqttConnected;
+         ++attempt)
+    {
+        logf(LOG_DEBUG, "MQTT connection attempt #%d...", attempt + 1);
         delay(250);
     }
 
-    if (!client.connected())
+    if (!mqttConnected)
     {
+        esp_mqtt_client_stop(mqttClient);
+        esp_mqtt_client_destroy(mqttClient);
+        mqttClient = nullptr;
         return ESP_ERR_TIMEOUT;
     }
 
     mqttLogTopic = topic;
-    mqttLogger.setTopic(topic);
-    mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
     logf(LOG_INFO, "connected to MQTT broker %s:%d", broker, port);
 
     return ESP_OK;
@@ -406,7 +444,7 @@ void ensureQueue(const char *logMsg)
     // Keep serial diagnostics independent of MQTT delivery.
     Serial.println(logMsg);
 
-    if (!client.connected() || mqttLogTopic == nullptr)
+    if (!mqttConnected || mqttClient == nullptr || mqttLogTopic == nullptr)
     {
         logQ.push(logMsg);
         return;
@@ -417,11 +455,20 @@ void ensureQueue(const char *logMsg)
         char tempBuf[LOG_MSG_MAX_LEN];
         if (logQ.pop(tempBuf))
         {
-            client.publish(mqttLogTopic, tempBuf, false);
+            if (esp_mqtt_client_publish(
+                    mqttClient, mqttLogTopic, tempBuf, 0, 1, 0) < 0)
+            {
+                logQ.push(tempBuf);
+                return;
+            }
         }
     }
 
-    client.publish(mqttLogTopic, logMsg, false);
+    if (esp_mqtt_client_publish(
+            mqttClient, mqttLogTopic, logMsg, 0, 1, 0) < 0)
+    {
+        logQ.push(logMsg);
+    }
 }
 
 /**
@@ -494,17 +541,29 @@ void sleep(const int sleepHours)
     lastSleepTime = rtcTime;
 
     log(LOG_NOTICE, "Shutdown is NOW!");
-    if (client.connected())
+    if (mqttClient != nullptr)
     {
-        // PubSubClient publishes diagnostics at QoS 0. Give the TCP stack a
-        // short bounded window to transmit queued packets before disconnecting.
-        const unsigned long flushStarted = millis();
-        while (client.connected() && millis() - flushStarted < 750)
+        // QoS 1 entries remain in the outbox until the broker acknowledges
+        // them. A healthy local broker normally clears this immediately.
+        const unsigned long acknowledgementStarted = millis();
+        while (mqttConnected &&
+               esp_mqtt_client_get_outbox_size(mqttClient) > 0 &&
+               millis() - acknowledgementStarted < MQTT_ACK_TIMEOUT_MS)
         {
-            client.loop();
             delay(10);
         }
-        client.disconnect();
+        const int pendingBytes =
+            esp_mqtt_client_get_outbox_size(mqttClient);
+        if (pendingBytes > 0)
+        {
+            Serial.printf(
+                "MQTT shutdown with %d unacknowledged outbox bytes\n",
+                pendingBytes);
+        }
+        esp_mqtt_client_stop(mqttClient);
+        esp_mqtt_client_destroy(mqttClient);
+        mqttClient = nullptr;
+        mqttConnected = false;
     }
     Serial.flush();
     WiFi.disconnect(false, false);

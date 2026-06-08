@@ -234,7 +234,7 @@ void setup()
     {
         err = configureMQTT(mqttLoggerBroker, mqttLoggerPort, mqttLoggerTopic,
                             mqttLoggerClientID, mqttLoggerRetries);
-        if (err == ESP_ERR_TIMEOUT)
+        if (err != ESP_OK)
         {
             log(LOG_WARNING,
                 "failed to connect remote diagnostics, fallback to serial");
