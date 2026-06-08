@@ -91,6 +91,11 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
 esp_err_t displayImage(const char *url);
 
 /**
+  Stop MQTT and WiFi after delivering any outstanding diagnostics.
+*/
+void shutdownNetwork();
+
+/**
   Read the battery voltage. Normal readings use one sample; low readings are
   confirmed with a median of multiple samples.
 

@@ -153,6 +153,11 @@ esp_err_t displayImage(const char *url)
     {
         return ESP_ERR_EDRAW;
     }
+
+    // The image is now decoded in the framebuffer. The radio is not needed
+    // while the comparatively slow e-paper waveform drives the panel.
+    log(LOG_INFO, "image ready; shutting down network before display refresh");
+    shutdownNetwork();
     board.display();
 
     return ESP_OK;
@@ -471,6 +476,40 @@ void ensureQueue(const char *logMsg)
     }
 }
 
+void shutdownNetwork()
+{
+    if (mqttClient != nullptr)
+    {
+        // QoS 1 entries remain in the outbox until the broker acknowledges
+        // them. A healthy local broker normally clears this immediately.
+        const unsigned long acknowledgementStarted = millis();
+        while (mqttConnected &&
+               esp_mqtt_client_get_outbox_size(mqttClient) > 0 &&
+               millis() - acknowledgementStarted < MQTT_ACK_TIMEOUT_MS)
+        {
+            delay(10);
+        }
+        const int pendingBytes =
+            esp_mqtt_client_get_outbox_size(mqttClient);
+        if (pendingBytes > 0)
+        {
+            Serial.printf(
+                "MQTT shutdown with %d unacknowledged outbox bytes\n",
+                pendingBytes);
+        }
+        esp_mqtt_client_stop(mqttClient);
+        esp_mqtt_client_destroy(mqttClient);
+        mqttClient = nullptr;
+        mqttConnected = false;
+    }
+
+    if (WiFi.getMode() != WIFI_OFF)
+    {
+        WiFi.disconnect(false, false);
+        WiFi.mode(WIFI_OFF);
+    }
+}
+
 /**
   Connect to an NTP server and synchronize the on-board real-time clock.
 
@@ -541,33 +580,8 @@ void sleep(const int sleepHours)
     lastSleepTime = rtcTime;
 
     log(LOG_NOTICE, "Shutdown is NOW!");
-    if (mqttClient != nullptr)
-    {
-        // QoS 1 entries remain in the outbox until the broker acknowledges
-        // them. A healthy local broker normally clears this immediately.
-        const unsigned long acknowledgementStarted = millis();
-        while (mqttConnected &&
-               esp_mqtt_client_get_outbox_size(mqttClient) > 0 &&
-               millis() - acknowledgementStarted < MQTT_ACK_TIMEOUT_MS)
-        {
-            delay(10);
-        }
-        const int pendingBytes =
-            esp_mqtt_client_get_outbox_size(mqttClient);
-        if (pendingBytes > 0)
-        {
-            Serial.printf(
-                "MQTT shutdown with %d unacknowledged outbox bytes\n",
-                pendingBytes);
-        }
-        esp_mqtt_client_stop(mqttClient);
-        esp_mqtt_client_destroy(mqttClient);
-        mqttClient = nullptr;
-        mqttConnected = false;
-    }
+    shutdownNetwork();
     Serial.flush();
-    WiFi.disconnect(false, false);
-    WiFi.mode(WIFI_OFF);
 #if !defined(EMBEDDED_CONFIG)
     log(LOG_DEBUG, "Sleep SDCard...");
     board.sdCardSleep();
