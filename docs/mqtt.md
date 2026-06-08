@@ -63,7 +63,7 @@ firmware continues with serial-only logging.
 For example:
 
 ```text
-2026-06-08T17:14:38+02:00 - WAKE - cause=timer
+2026-06-08T17:14:38+02:00 - WAKE - cause=timer firmware=v3.1.0
 2026-06-08T17:14:38+02:00 - BATTERY - voltage=4.26V
 2026-06-08T17:14:45+02:00 - REFRESH - status=ready
 ```

@@ -9,6 +9,12 @@
 #include <mqtt_client.h>
 #include <rom/rtc.h>
 
+#if __has_include("firmware_version.h")
+#include "firmware_version.h"
+#else
+#define FIRMWARE_VERSION "unversioned"
+#endif
+
 #define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
 #define DEEP_SLEEP_FALLBACK_SECONDS 120

@@ -38,6 +38,7 @@ void setup()
     setTime(bootTime);
 
     logf(LOG_DEBUG, "boot time: %s", dateTime(bootTime, RFC3339).c_str());
+    logf(LOG_DEBUG, "firmware version: %s", FIRMWARE_VERSION);
 
     const char *wakeCause = "reset";
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -194,7 +195,9 @@ void setup()
         }
     }
 
-    logTagged(LOG_INFO, "WAKE", "cause=%s", wakeCause);
+    logTagged(
+        LOG_INFO, "WAKE", "cause=%s firmware=%s",
+        wakeCause, FIRMWARE_VERSION);
 
     // Check the battery before starting the radio or other network work.
     float bvolt = readBatteryVoltage();

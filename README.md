@@ -234,6 +234,18 @@ Compile the firmware:
 make firmware-compile
 ```
 
+The build embeds a firmware identity based on the repository's highest release
+tag. Exact tagged builds use the release tag; development builds append the
+short commit SHA, for example `v3.0.1+g0b15863`. Dirty local builds also include
+`.dirty`. Override the detected identity when packaging a specific build:
+
+```bash
+make firmware-compile FIRMWARE_VERSION=v3.1.0
+```
+
+The version is printed in serial boot diagnostics and included in the MQTT
+`WAKE` event.
+
 This is the generic build used by CI and release binaries. It expects
 `/config.yaml` on an SD card but renders the calendar image directly from HTTP.
 
