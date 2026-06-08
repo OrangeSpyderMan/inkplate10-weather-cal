@@ -133,6 +133,18 @@ mode so the server keeps refreshing and serving the PNG continuously. The
 browser viewer uses a separate inline image route and does not interfere with
 the Inkplate client's `/calendar.png` download route.
 
+The server also exposes versioned data and output endpoints:
+
+```text
+/api/v1/weather
+/api/v1/health
+/api/v1/ready
+/outputs/inkplate10-portrait/calendar.png
+```
+
+`/calendar.png` remains available as a compatibility alias for existing
+Inkplate firmware.
+
 ## MQTT
 
 The server can optionally publish the normalized weather snapshot to MQTT for

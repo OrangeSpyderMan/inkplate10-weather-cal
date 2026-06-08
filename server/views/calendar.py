@@ -7,8 +7,9 @@ class CalendarPage(Page):
         self,
         width,
         height,
+        output_path=None,
     ):
-        super().__init__("calendar", width, height)
+        super().__init__("calendar", width, height, output_path=output_path)
 
     def template(
         self,

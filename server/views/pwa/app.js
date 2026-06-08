@@ -1,4 +1,4 @@
-const CALENDAR_URL = "/app/calendar.png";
+const CALENDAR_URL = "/outputs/inkplate10-portrait/calendar.png";
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 const calendar = document.getElementById("calendar");

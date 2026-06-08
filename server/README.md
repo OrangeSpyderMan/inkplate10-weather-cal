@@ -168,6 +168,44 @@ Publishing failures are logged but do not stop image generation or HTTP
 serving. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for broker setup,
 payload details, topic examples, and example clients.
 
+### HTTP API and outputs
+
+Each successful weather retrieval is persisted and exposed through a versioned
+JSON endpoint:
+
+```text
+GET /api/v1/weather
+```
+
+The response uses the same payload as the base MQTT weather topic and includes
+`schema_version`. It provides `ETag` and `Last-Modified` validators. The
+endpoint returns `503` until a snapshot is available.
+
+Generated display artifacts use named output profiles:
+
+```text
+GET /outputs/inkplate10-portrait/calendar.png
+```
+
+The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
+aliases for the same image. `/calendar.png` retains its attachment response for
+existing Inkplate firmware.
+
+Operational endpoints are:
+
+```text
+GET /api/v1/health
+GET /api/v1/ready
+```
+
+Health reports whether the web application is running. Readiness returns `200`
+only after both the weather snapshot and Inkplate output image exist.
+
+Snapshots and rendered outputs use stable paths and are atomically replaced, so
+the data directory does not accumulate historical versions. On startup, the
+producer removes temporary artifact files older than 24 hours that may remain
+after an interrupted write. Valid snapshots and outputs are never age-pruned.
+
 The diagnostic listener is independent from weather publishing. It records
 non-retained messages from the Inkplate through the `MQTT` logger and
 resubscribes after reconnecting. The matching firmware topic is configured in
@@ -230,16 +268,16 @@ The viewer refreshes the image every 15 minutes and whenever the browser tab or
 installed app becomes visible. It fetches the image from:
 
 ```text
-http://<server-host>:8080/app/calendar.png
+http://<server-host>:8080/outputs/inkplate10-portrait/calendar.png
 ```
 
-This browser-facing image route is intentionally separate from the Inkplate
-route:
+The compatibility routes preserve their previous response behavior:
 
 - `/calendar.png` keeps the existing attachment response and increments the
   Inkplate serve counter used by one-shot server mode.
 - `/app/calendar.png` serves the same file inline for browsers and does not
-  increment the Inkplate serve counter.
+  increment the Inkplate serve counter. New clients should use the named output
+  route.
 
 For the browser/PWA viewer, keep the server running continuously:
 

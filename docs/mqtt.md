@@ -186,6 +186,7 @@ Full snapshot:
 
 ```json
 {
+  "schema_version": "1.0",
   "generated_at": "2026-06-04T09:00:00+00:00",
   "source": "openweathermapv3",
   "units": "metric",
@@ -215,6 +216,8 @@ Full snapshot:
 The exact weather fields can vary slightly by provider, but `current`,
 `hourly`, `temperature`, `icon`, and `rain_probability` are the fields intended
 for lightweight display clients.
+
+The same canonical payload is available over HTTP at `/api/v1/weather`.
 
 ### `inkplate/weather-calendar/current`
 

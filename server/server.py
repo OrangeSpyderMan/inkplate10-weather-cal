@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import io
 import sys
 import yaml
 import time
@@ -12,22 +11,37 @@ import logging.config
 from utils import expand_env_vars, get_prop, get_prop_by_keys
 from mqtt_diagnostics import MqttDiagnosticListener
 from mqtt_publisher import MqttWeatherPublisher
+from artifacts import ArtifactStore, DEFAULT_OUTPUT_PROFILE
 from weather.snapshot import WeatherSnapshot
+from web import create_app
 from views.calendar import CalendarPage
 from google.api import GoogleAPIService
 from werkzeug.serving import make_server
-from flask import Flask, send_file, abort, send_from_directory
 
 cwd = os.path.dirname(os.path.realpath(__file__))
-pwa_dir = os.path.join(cwd, "views", "pwa")
 default_config_path = os.path.join(cwd, "config.yaml")
 default_config_dir_path = os.path.join(cwd, "config", "config.yaml")
 log = None
 
-app = Flask(__name__)
 # number of times served
 server_num_serves = 0
 server_max_serves = 1
+
+
+def record_legacy_calendar_serve():
+    global server_num_serves
+    server_num_serves += 1
+    if log is not None:
+        log.info("Served the image")
+
+
+artifact_store = ArtifactStore(
+    os.environ.get("INKPLATE_DATA_DIR", os.path.join(cwd, "data"))
+)
+app = create_app(
+    data_dir=artifact_store.root,
+    legacy_calendar_served=record_legacy_calendar_serve,
+)
 
 
 def main():
@@ -45,6 +59,12 @@ def main():
     logging.config.fileConfig(log_ini_path)
     log = logging.getLogger("server")
     log.info(f"Loaded config from {config_path}")
+    removed_temporary_files = artifact_store.cleanup_stale_temporary_files()
+    if removed_temporary_files:
+        log.info(
+            "Removed %s stale temporary artifact files",
+            len(removed_temporary_files),
+        )
 
     google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
     weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
@@ -149,6 +169,7 @@ def main():
                     weather_service_type,
                     weather_metric,
                 )
+                artifact_store.write_snapshot(snapshot)
                 publish_weather_snapshot(weather_publisher, snapshot)
             except Exception as e:
                 error_string = repr(e)
@@ -161,7 +182,9 @@ def main():
             try:
                 # generate page images
                 log.info(f"Generating page")
-                render_calendar_snapshot(snapshot, image_width, image_height, map_url)
+                render_calendar_snapshot(
+                    snapshot, image_width, image_height, map_url, artifact_store
+                )
             except Exception as e:
                 error_string = repr(e)
                 log.error(f"An error occurred whilst creating page!")
@@ -186,6 +209,7 @@ def main():
                 weather_service_type,
                 weather_metric,
             )
+            artifact_store.write_snapshot(snapshot)
             publish_weather_snapshot(weather_publisher, snapshot)
         except Exception as e:
             error_string = repr(e)
@@ -195,7 +219,9 @@ def main():
             log.error(f"Will retry on next cycle...")
         try:
             # generate page images
-            render_calendar_snapshot(snapshot, image_width, image_height, map_url)
+            render_calendar_snapshot(
+                snapshot, image_width, image_height, map_url, artifact_store
+            )
         except Exception as e:
             error_string = repr(e)
             log.error(f"An error occurred whilst creating page!")
@@ -345,8 +371,17 @@ def build_weather_snapshot(
     )
 
 
-def render_calendar_snapshot(snapshot, image_width, image_height, map_url):
-    page = CalendarPage(image_width, image_height)
+def render_calendar_snapshot(
+    snapshot, image_width, image_height, map_url, store=artifact_store
+):
+    page = CalendarPage(
+        image_width,
+        image_height,
+        output_path=store.output_path(
+            DEFAULT_OUTPUT_PROFILE,
+            "calendar.png",
+        ),
+    )
     page.template(
         map_url=map_url,
         daily_summary=snapshot.daily_summary,
@@ -411,114 +446,6 @@ class ServerThread(threading.Thread):
         log.info(f"Stopping http server in {timeout} seconds")
         time.sleep(timeout)
         self.server.shutdown()
-
-
-@app.route("/calendar.png")
-def serve_cal_png():
-    global server_num_serves, server_max_serves
-    """
-    Returns the calendar image directly through send_file
-    """
-
-    path = os.path.join(cwd, "views/calendar.png")
-
-    if not os.path.exists(path):
-        log.error(f"{path}: no such file exists")
-        abort(404)
-
-    f = open(path, "rb")
-    stream = io.BytesIO(f.read())
-    f.close()
-    server_num_serves += 1
-    log.info(f"Served the image")
-
-    return send_file(
-        stream,
-        mimetype="image/png",
-        as_attachment=True,
-        download_name=os.path.basename(path),
-    )
-
-
-@app.route("/")
-@app.route("/app")
-@app.route("/app/")
-@app.route("/app/index.html")
-def serve_pwa():
-    return send_from_directory(pwa_dir, "index.html")
-
-
-@app.route("/app.css")
-def serve_pwa_css():
-    return send_from_directory(pwa_dir, "app.css")
-
-
-@app.route("/app.js")
-def serve_pwa_js():
-    return send_from_directory(pwa_dir, "app.js")
-
-
-@app.route("/manifest.webmanifest")
-def serve_pwa_manifest():
-    return send_from_directory(
-        pwa_dir,
-        "manifest.webmanifest",
-        mimetype="application/manifest+json",
-    )
-
-
-@app.route("/sw.js")
-def serve_pwa_service_worker():
-    return send_from_directory(
-        pwa_dir,
-        "sw.js",
-        mimetype="application/javascript",
-    )
-
-
-@app.route("/icons/<path:filename>")
-def serve_pwa_icon(filename):
-    return send_from_directory(os.path.join(pwa_dir, "icons"), filename)
-
-
-@app.route("/favicon.ico")
-def serve_favicon():
-    return send_from_directory(
-        os.path.join(pwa_dir, "icons"),
-        "weathercal-favicon.ico",
-        mimetype="image/x-icon",
-    )
-
-
-@app.route("/apple-touch-icon.png")
-@app.route("/apple-touch-icon-precomposed.png")
-def serve_apple_touch_icon():
-    return send_from_directory(
-        os.path.join(pwa_dir, "icons"),
-        "weathercal-icon-192.png",
-        mimetype="image/png",
-    )
-
-
-@app.route("/app/calendar.png")
-def serve_pwa_cal_png():
-    """
-    Returns the calendar image for browsers without affecting the Inkplate
-    download route's serve counter or Content-Disposition behavior.
-    """
-
-    path = os.path.join(cwd, "views/calendar.png")
-
-    if not os.path.exists(path):
-        log.error(f"{path}: no such file exists")
-        abort(404)
-
-    return send_file(
-        path,
-        mimetype="image/png",
-        as_attachment=False,
-        max_age=0,
-    )
 
 
 if __name__ == "__main__":
