@@ -23,7 +23,7 @@ FIRMWARE_CONFIG_DEPS := firmware-generate-config
 FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=-DEMBEDDED_CONFIG -I$(abspath $(FIRMWARE_GENERATED_DIR))"
 endif
 
-.PHONY: firmware-install-cli firmware-setup firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-board-list
+.PHONY: firmware-install-cli firmware-setup firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
 
 firmware-install-cli:
 	bash bin/install_arduino_cli.sh
@@ -60,7 +60,10 @@ endif
 		$(FIRMWARE_SKETCH)
 
 firmware-clean:
-	rm -rf build/arduino-sd build/arduino-embedded build/firmware-config $(FIRMWARE_SKETCHBOOK_DIR)
+	rm -rf build/arduino-sd build/arduino-embedded build/firmware-config
+
+firmware-distclean: firmware-clean
+	rm -rf $(FIRMWARE_SKETCHBOOK_DIR)
 
 firmware-board-list:
 	$(ARDUINO_CLI) board list

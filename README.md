@@ -246,10 +246,17 @@ The generated header and build output stay under ignored `build/` paths. The
 resulting binary contains the WiFi password and any MQTT details in recoverable
 form, so do not publish it.
 
-To clean build artifacts and local libraries:
+To clean generated firmware and embedded configuration artifacts:
 
 ```bash
 make firmware-clean
+```
+
+The locally installed Arduino libraries are preserved. To remove those
+dependencies as well:
+
+```bash
+make firmware-distclean
 ```
 
 Upload to a connected Inkplate 10:
