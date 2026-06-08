@@ -16,6 +16,7 @@ PubSubClient client(espClient);
 MqttLogger mqttLogger(client, "", MqttLoggerMode::SerialOnly);
 // queue to store messages to publish once mqtt connection is established.
 cppQueue logQ(LOG_MSG_MAX_LEN, LOG_QUEUE_MAX_ENTRIES, FIFO, true);
+const char *mqttLogTopic = nullptr;
 // inkplate10 board driver
 Inkplate board(INKPLATE_3BIT);
 // timezone store
@@ -230,6 +231,7 @@ esp_err_t configureMQTT(const char *broker, int port, const char *topic,
         return ESP_ERR_TIMEOUT;
     }
 
+    mqttLogTopic = topic;
     mqttLogger.setTopic(topic);
     mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
     logf(LOG_INFO, "connected to MQTT broker %s:%d", broker, port);
@@ -401,25 +403,25 @@ void logf(uint16_t pri, const char *fmt, ...)
 */
 void ensureQueue(const char *logMsg)
 {
-    if (!client.connected())
+    // Keep serial diagnostics independent of MQTT delivery.
+    Serial.println(logMsg);
+
+    if (!client.connected() || mqttLogTopic == nullptr)
     {
         logQ.push(logMsg);
-    }
-    else if (logQ.getCount() > 0)
-    {
-        char tempBuf[LOG_MSG_MAX_LEN];
-        mqttLogger.setMode(MqttLoggerMode::MqttOnly);
-        while (!logQ.isEmpty())
-        {
-            if (logQ.pop(tempBuf))
-            {
-                mqttLogger.println(tempBuf);
-            }
-        }
-        mqttLogger.setMode(MqttLoggerMode::MqttAndSerial);
+        return;
     }
 
-    mqttLogger.println(logMsg);
+    while (!logQ.isEmpty())
+    {
+        char tempBuf[LOG_MSG_MAX_LEN];
+        if (logQ.pop(tempBuf))
+        {
+            client.publish(mqttLogTopic, tempBuf, false);
+        }
+    }
+
+    client.publish(mqttLogTopic, logMsg, false);
 }
 
 /**
@@ -494,8 +496,14 @@ void sleep(const int sleepHours)
     log(LOG_NOTICE, "Shutdown is NOW!");
     if (client.connected())
     {
-        client.loop();
-        delay(100);
+        // PubSubClient publishes diagnostics at QoS 0. Give the TCP stack a
+        // short bounded window to transmit queued packets before disconnecting.
+        const unsigned long flushStarted = millis();
+        while (client.connected() && millis() - flushStarted < 750)
+        {
+            client.loop();
+            delay(10);
+        }
         client.disconnect();
     }
     Serial.flush();
