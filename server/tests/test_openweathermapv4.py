@@ -135,6 +135,16 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             ),
         )
 
+    def test_converts_kelvin_temperatures_returned_on_later_pages(self):
+        self.service.num_hours = 7
+
+        forecasts = self.service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["temperature"]["value"] for forecast in forecasts],
+            [12, 15, 18, 21, 24, 27, 21],
+        )
+
     def test_closes_all_http_responses(self):
         self.service.get_daily_summary()
         self.service.get_hourly_forecast()

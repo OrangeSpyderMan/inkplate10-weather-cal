@@ -34,9 +34,9 @@ class OpenWeatherMapv4Service(WeatherService):
             "icon": self.get_icon(current["weather"][0]["icon"]),
             "temperature": {
                 "unit": self._temperature_unit(),
-                "value": round(current["temp"]),
-                "min": round(daily["temp"]["min"]),
-                "max": round(daily["temp"]["max"]),
+                "value": round(self._temperature_value(current["temp"])),
+                "min": round(self._temperature_value(daily["temp"]["min"])),
+                "max": round(self._temperature_value(daily["temp"]["max"])),
             },
         }
 
@@ -73,7 +73,7 @@ class OpenWeatherMapv4Service(WeatherService):
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
                 "temperature": {
                     "unit": self._temperature_unit(),
-                    "value": round(entry["temp"]),
+                    "value": round(self._temperature_value(entry["temp"])),
                 },
                 "wind": {
                     "unit": "m/s" if self.units == "metric" else "mph",
@@ -166,3 +166,12 @@ class OpenWeatherMapv4Service(WeatherService):
             if self.units == "metric"
             else "\N{DEGREE SIGN}F"
         )
+
+    def _temperature_value(self, value):
+        if value < 170:
+            return value
+
+        celsius = value - 273.15
+        if self.units == "metric":
+            return celsius
+        return celsius * 9 / 5 + 32
