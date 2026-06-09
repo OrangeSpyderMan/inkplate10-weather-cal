@@ -28,9 +28,14 @@ class OpenWeatherMapv4Service(WeatherService):
         )
         current = current_records[0]
         daily = daily_records[0]
+        alert_ids = current.get("alerts") or []
 
         return {
             "icon": self.get_icon(current["weather"][0]["icon"]),
+            "alerts": {
+                "active": bool(alert_ids),
+                "ids": alert_ids,
+            },
             "temperature": {
                 "unit": self._temperature_unit(),
                 "value": round(current["temp"]),

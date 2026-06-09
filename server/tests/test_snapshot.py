@@ -21,6 +21,16 @@ class WeatherSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot.to_payload()["schema_version"], "1.0")
 
+    def test_payload_preserves_current_weather_alerts(self):
+        alerts = {"active": True, "ids": ["alert-id"]}
+        snapshot = WeatherSnapshot(
+            daily_summary={"alerts": alerts},
+            hourly_forecasts=[],
+            weather_source="openweathermapv4",
+        )
+
+        self.assertEqual(snapshot.to_payload()["current"]["alerts"], alerts)
+
 
 if __name__ == "__main__":
     unittest.main()

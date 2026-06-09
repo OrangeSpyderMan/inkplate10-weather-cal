@@ -9,6 +9,9 @@
       "temp": 16.4,
       "humidity": 58,
       "wind_speed": 2.3,
+      "alerts": [
+        "8B46C632-DCA7-44D7-8BDF-02445621BAFF"
+      ],
       "weather": [
         {
           "id": 801,

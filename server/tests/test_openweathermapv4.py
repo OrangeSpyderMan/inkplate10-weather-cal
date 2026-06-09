@@ -89,6 +89,10 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             summary,
             {
                 "icon": "icon/day/partly-clear.png",
+                "alerts": {
+                    "active": True,
+                    "ids": ["8B46C632-DCA7-44D7-8BDF-02445621BAFF"],
+                },
                 "temperature": {
                     "unit": "\N{DEGREE SIGN}C",
                     "value": 16,

@@ -102,6 +102,12 @@ class CalendarPage(Page):
 
                         with a.div(id="icon-container", klass="numcircle"):
                             a.img(src=daily_summary["icon"])
+                            if daily_summary.get("alerts", {}).get("active"):
+                                with a.div(
+                                    id="weather-alert",
+                                    title="Active weather alert",
+                                ):
+                                    a.span(_t="!")
 
                 with a.div(id="map-container"):
                     a.img(src=map_url, id="map")
