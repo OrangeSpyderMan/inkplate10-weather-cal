@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER_PATH = REPO_ROOT / "bin" / "install_server.py"
 SPEC = importlib.util.spec_from_file_location("install_server", INSTALLER_PATH)
 install_server = importlib.util.module_from_spec(SPEC)
