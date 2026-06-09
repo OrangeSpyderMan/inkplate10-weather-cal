@@ -213,8 +213,6 @@ class CalendarPage(Page):
                                             hachureAngle: 45,
                                             hachureGap: 12
                                         }},
-                                        cubicInterpolationMode: 'monotone',
-                                        lineTension: 0.4,
                                         type: 'line'
                                     }}]
                                 }},

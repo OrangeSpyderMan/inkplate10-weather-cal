@@ -97,7 +97,7 @@ class OpenWeatherMapv4Service(WeatherService):
             visited.add(url)
 
             data = self._get_json(url, params=params)
-            params = None
+            params = {"units": self.units}
             timezone_offset = int(
                 data.get("timezone_offset", timezone_offset)
             )
