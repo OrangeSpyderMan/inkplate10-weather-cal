@@ -1,4 +1,4 @@
-const CACHE_NAME = "weather-calendar-pwa-v2";
+const CACHE_NAME = "weather-calendar-pwa-v3";
 const APP_SHELL = [
   "/app",
   "/app.css",
