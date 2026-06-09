@@ -54,6 +54,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
 RUN mkdir -p ${HOMEDIR}/server/config ${HOMEDIR}/server/data \
+    && chmod 0755 ${HOMEDIR}/server/container_entrypoint.py \
     && chown -R ${USERNAME}:${USERNAME} ${HOMEDIR}/server
 
 USER ${USERNAME}
@@ -63,4 +64,4 @@ ENV INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 
 EXPOSE 8080
 
-CMD ["python3", "server/container_entrypoint.py"]
+CMD ["/srv/inkplate/server/container_entrypoint.py"]

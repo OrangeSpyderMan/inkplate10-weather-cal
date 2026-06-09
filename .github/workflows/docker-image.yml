@@ -47,6 +47,9 @@ jobs:
 
       - name: Smoke test Docker image
         run: |
+          test "$(docker image inspect inkplate10-weather-cal:ci \
+            --format '{{json .Config.Cmd}}')" = \
+            '["/srv/inkplate/server/container_entrypoint.py"]'
           docker run --rm inkplate10-weather-cal:ci geckodriver --version
           docker run --rm inkplate10-weather-cal:ci firefox --version
           docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
