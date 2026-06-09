@@ -61,8 +61,8 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             payload = fixture("daily.json")
         elif url.endswith("/data/4.0/onecall/timeline/1h"):
             payload = fixture("hourly-page-1.json")
-        elif url.endswith("timeline/1h?page=2&units=metric"):
-            self.assertIsNone(params)
+        elif url.endswith("timeline/1h?page=2"):
+            self.assertEqual(params, {"units": "metric"})
             payload = fixture("hourly-page-2.json")
         else:
             raise AssertionError(f"unexpected URL {url}")
@@ -129,8 +129,8 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             second_page_call,
             mock.call(
                 "https://api.openweathermap.org/data/4.0/onecall/"
-                "timeline/1h?page=2&units=metric",
-                params=None,
+                "timeline/1h?page=2",
+                params={"units": "metric"},
                 timeout=20,
             ),
         )

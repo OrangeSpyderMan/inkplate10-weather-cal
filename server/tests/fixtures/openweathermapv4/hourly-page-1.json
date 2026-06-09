@@ -25,5 +25,5 @@
     {"dt": 1781056800, "temp": 28, "humidity": 68, "wind_speed": 2.8, "pop": 0.18, "weather": [{"icon": "10d"}]},
     {"dt": 1781060400, "temp": 29, "humidity": 69, "wind_speed": 2.9, "pop": 0.19, "weather": [{"icon": "10d"}]}
   ],
-  "next": "https://api.openweathermap.org/data/4.0/onecall/timeline/1h?page=2&units=standard"
+  "next": "https://api.openweathermap.org/data/4.0/onecall/timeline/1h?page=2"
 }
