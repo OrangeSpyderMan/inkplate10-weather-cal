@@ -96,6 +96,9 @@ See the [server](/server) for more features.
 The generic release firmware reads `config.yaml` from the root of an SD card:
 
 ```
+display:
+  # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
+  rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
   refresh_interval: 3
@@ -119,6 +122,11 @@ mqtt_logger:
 
 Likely parameters you'll need to change are:
 
+- `display.rotation` - physical display orientation from `0` to `3`, in
+  clockwise 90-degree steps. It defaults to `1`, preserving the existing
+  Inkplate 10 portrait orientation. Use `3` for the opposite portrait
+  orientation when the enclosure is mounted upside down relative to that
+  default.
 - `wifi.ssid` - the SSID of your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.

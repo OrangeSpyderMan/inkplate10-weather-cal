@@ -35,6 +35,8 @@
 #endif
 // Fallback time to refresh.
 #define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
+// Preserve the original Inkplate 10 portrait orientation when unspecified.
+#define CONFIG_DEFAULT_DISPLAY_ROTATION 1
 // Battery voltage thresholds for a single-cell LiPo.
 #define BATTERY_VALID_MIN_VOLTAGE 2.5F
 #define BATTERY_VALID_MAX_VOLTAGE 4.4F

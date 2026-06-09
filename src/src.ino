@@ -29,8 +29,8 @@ void setup()
     Serial.begin(115200);
     // Init inkplate board.
     board.begin();
-    // Set board to portait mode.
-    board.setRotation(1);
+    // Keep startup/configuration errors readable for existing installations.
+    board.setRotation(CONFIG_DEFAULT_DISPLAY_ROTATION);
 
     // Set clock from RTC
     board.rtc.getRtcData();
@@ -115,6 +115,15 @@ void setup()
     file.close();
     board.sdCardSleep();
 #endif
+
+    JsonObject displayCfg = doc["display"];
+    int displayRotation =
+        displayCfg["rotation"] | CONFIG_DEFAULT_DISPLAY_ROTATION;
+    if (displayRotation < 0 || displayRotation > 3)
+    {
+        failConfig("Invalid display.rotation");
+    }
+    board.setRotation(displayRotation);
 
     // Assign config values.
     JsonObject calendarCfg = doc["calendar"];

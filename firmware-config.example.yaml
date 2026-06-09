@@ -1,3 +1,6 @@
+display:
+  # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
+  rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
   refresh_interval: 3
