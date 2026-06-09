@@ -3,53 +3,30 @@
 
 import os
 import sys
-import yaml
 import time
-import threading
-import datetime as dt
 import logging.config
-from utils import expand_env_vars, get_prop, get_prop_by_keys
+from utils import get_prop, get_prop_by_keys
 from mqtt_diagnostics import MqttDiagnosticListener
 from mqtt_publisher import MqttWeatherPublisher
-from artifacts import ArtifactStore, DEFAULT_OUTPUT_PROFILE
+from artifacts import ArtifactStore
+from configuration import load_config
+from output_profiles import load_output_profiles
+from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
-from web import create_app
-from views.calendar import CalendarPage
 from google.api import GoogleAPIService
-from werkzeug.serving import make_server
 
 cwd = os.path.dirname(os.path.realpath(__file__))
-default_config_path = os.path.join(cwd, "config.yaml")
-default_config_dir_path = os.path.join(cwd, "config", "config.yaml")
 log = None
-
-# number of times served
-server_num_serves = 0
-server_max_serves = 1
-
-
-def record_legacy_calendar_serve():
-    global server_num_serves
-    server_num_serves += 1
-    if log is not None:
-        log.info("Served the image")
-
 
 artifact_store = ArtifactStore(
     os.environ.get("INKPLATE_DATA_DIR", os.path.join(cwd, "data"))
 )
-app = create_app(
-    data_dir=artifact_store.root,
-    legacy_calendar_served=record_legacy_calendar_serve,
-)
 
 
 def main():
-    global log, server_max_serves
+    global log
 
-    config_path = resolve_config_path()
-    with open(config_path) as config_file:
-        config = expand_env_vars(yaml.safe_load(config_file))
+    config_path, config = load_config()
 
     debug = get_prop(config, "debug", default=False)
     # Create and configure logger
@@ -94,13 +71,17 @@ def main():
     location = get_prop(config, "location", required=True).strip().replace(" ", "")
 
     server_enabled = get_prop_by_keys(config, "server", "enabled", default=True)
-    server_port = get_prop_by_keys(config, "server", "port", default=8080)
     server_always_on = get_prop_by_keys(config, "server", "alwayson", default=False)
     server_refresh_seconds = 3600 * get_prop_by_keys(
         config, "server", "refreshhours", default=3
     )
-    image_width = get_prop_by_keys(config, "image", "width", default=825)
-    image_height = get_prop_by_keys(config, "image", "height", default=1200)
+    output_profiles, default_output_profile = load_output_profiles(config)
+    output_renderers = build_output_renderers(output_profiles)
+    log.info(
+        "Enabled output profiles: %s (default: %s)",
+        ", ".join(output_profiles),
+        default_output_profile,
+    )
 
     mqtt_config = get_prop(config, "mqtt", default={}, required=False) or {}
     weather_publisher = build_mqtt_weather_publisher(
@@ -155,135 +136,40 @@ def main():
     if diagnostic_listener is not None and not diagnostic_listener.start():
         diagnostic_listener = None
 
-    # setup http server
     if server_always_on:
-        http_server = ServerThread(app, server_port)
-        http_server.start()
-        log.info(f"Started always on server")
         while True:
-            log.info(f"Retrieving forecast data")
-            try:
-                snapshot = build_weather_snapshot(
-                    weather_svc,
-                    current_temperature_svc,
-                    weather_service_type,
-                    weather_metric,
-                )
-                artifact_store.write_snapshot(snapshot)
-                publish_weather_snapshot(weather_publisher, snapshot)
-            except Exception as e:
-                error_string = repr(e)
-                log.error(f"An error occurred whilst getting weather data!")
-                log.error(f"The error was :")
-                log.error(f"{error_string}")
-                log.error(f"Sleeping for 120 seconds before retrying....")
-                time.sleep(120)
-                continue
-            try:
-                # generate page images
-                log.info(f"Generating page")
-                render_calendar_snapshot(
-                    snapshot, image_width, image_height, map_url, artifact_store
-                )
-            except Exception as e:
-                error_string = repr(e)
-                log.error(f"An error occurred whilst creating page!")
-                log.error(f"The error was :")
-                log.error(f"{error_string}")
-                log.error(f"Sleeping for 120 seconds before retrying....")
-                time.sleep(120)
-                continue
-            log.info(f"Serving current image for {server_refresh_seconds} seconds")
-            time.sleep(server_refresh_seconds)
-            log.info(f"Woken after {server_refresh_seconds} seconds to refresh image")
-
-    else:
-        server_alive_seconds = get_prop_by_keys(
-            config, "server", "aliveSeconds", default=60
-        )
-        server_max_serves = get_prop_by_keys(config, "server", "maxServes", default=1)
-        try:
-            snapshot = build_weather_snapshot(
+            if not produce_artifacts(
                 weather_svc,
                 current_temperature_svc,
                 weather_service_type,
                 weather_metric,
-            )
-            artifact_store.write_snapshot(snapshot)
-            publish_weather_snapshot(weather_publisher, snapshot)
-        except Exception as e:
-            error_string = repr(e)
-            log.error(f"An error occurred whilst getting weather data!")
-            log.error(f"The error was :")
-            log.error(f"{error_string}")
-            log.error(f"Will retry on next cycle...")
-        try:
-            # generate page images
-            render_calendar_snapshot(
-                snapshot, image_width, image_height, map_url, artifact_store
-            )
-        except Exception as e:
-            error_string = repr(e)
-            log.error(f"An error occurred whilst creating page!")
-            log.error(f"The error was :")
-            log.error(f"{error_string}")
-            log.error(f"Retrying on next cycle")
-        http_server = ServerThread(app, server_port)
-        http_server.start()
+                weather_publisher,
+                map_url,
+                output_profiles,
+                output_renderers,
+                artifact_store,
+            ):
+                log.error("Sleeping for 120 seconds before retrying....")
+                time.sleep(120)
+                continue
+            log.info(f"Sleeping for {server_refresh_seconds} seconds before refresh")
+            time.sleep(server_refresh_seconds)
 
-        enable_wait = server_alive_seconds > 0
-        enable_max_serves = server_max_serves > 0
-
-        if enable_wait:
-            log.info(
-                f"Serving images for {server_alive_seconds} seconds before shutdown"
-            )
-        if enable_max_serves:
-            log.info(
-                f"Serving images for max {server_max_serves} times before shutdown"
-            )
-
-        start_wait_dt = dt.datetime.now()
-        diff = dt.datetime.now() - start_wait_dt
-        while (enable_max_serves and server_num_serves < server_max_serves) and (
-            enable_wait and diff.seconds < server_alive_seconds
-        ):
-            time.sleep(1)
-            diff = dt.datetime.now() - start_wait_dt
-
-        http_server.shutdown(timeout=10)
-
+    else:
+        success = produce_artifacts(
+            weather_svc,
+            current_temperature_svc,
+            weather_service_type,
+            weather_metric,
+            weather_publisher,
+            map_url,
+            output_profiles,
+            output_renderers,
+            artifact_store,
+        )
         if diagnostic_listener is not None:
             diagnostic_listener.stop()
-
-        log.info(f"Exiting")
-        sys.exit(0)
-
-
-def resolve_config_path():
-    env_config_path = os.environ.get("INKPLATE_CONFIG_FILE")
-    if env_config_path:
-        if os.path.isfile(env_config_path):
-            return env_config_path
-
-        print(
-            f"INKPLATE_CONFIG_FILE points to a missing config file: {env_config_path}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if os.path.isfile(default_config_dir_path):
-        return default_config_dir_path
-
-    if os.path.isfile(default_config_path):
-        return default_config_path
-
-    print(
-        "No config file found. Checked "
-        f"{default_config_dir_path} and {default_config_path}.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+        sys.exit(0 if success else 1)
 
 
 def build_current_temperature_service(config, metric):
@@ -371,23 +257,72 @@ def build_weather_snapshot(
     )
 
 
-def render_calendar_snapshot(
-    snapshot, image_width, image_height, map_url, store=artifact_store
+def build_output_renderers(profiles):
+    return {
+        name: build_renderer(profile.renderer)
+        for name, profile in profiles.items()
+    }
+
+
+def render_outputs(
+    snapshot,
+    map_url,
+    profiles,
+    renderers,
+    store=artifact_store,
 ):
-    page = CalendarPage(
-        image_width,
-        image_height,
-        output_path=store.output_path(
-            DEFAULT_OUTPUT_PROFILE,
-            "calendar.png",
-        ),
-    )
-    page.template(
-        map_url=map_url,
-        daily_summary=snapshot.daily_summary,
-        hourly_forecasts=snapshot.hourly_forecasts,
-    )
-    page.save()
+    for name, profile in profiles.items():
+        renderer = renderers[name]
+        renderer.render(
+            snapshot,
+            map_url,
+            store.output_path(profile.name, profile.filename),
+            profile.width,
+            profile.height,
+            profile.options,
+        )
+
+
+def produce_artifacts(
+    weather_svc,
+    current_temperature_svc,
+    weather_service_type,
+    weather_metric,
+    weather_publisher,
+    map_url,
+    profiles,
+    renderers,
+    store=artifact_store,
+):
+    log.info("Retrieving forecast data")
+    try:
+        snapshot = build_weather_snapshot(
+            weather_svc,
+            current_temperature_svc,
+            weather_service_type,
+            weather_metric,
+        )
+    except Exception as exc:
+        log.exception("An error occurred whilst getting weather data: %s", exc)
+        return False
+
+    try:
+        log.info("Generating output profiles")
+        render_outputs(
+            snapshot,
+            map_url,
+            profiles,
+            renderers,
+            store,
+        )
+        store.write_snapshot(snapshot)
+        store.write_ready(snapshot, profiles)
+    except Exception as exc:
+        log.exception("An error occurred whilst creating artifacts: %s", exc)
+        return False
+
+    publish_weather_snapshot(weather_publisher, snapshot)
+    return True
 
 
 def build_mqtt_weather_publisher(mqtt_config):
@@ -428,24 +363,6 @@ def publish_weather_snapshot(weather_publisher, snapshot):
         return
 
     weather_publisher.publish_snapshot(snapshot)
-
-
-class ServerThread(threading.Thread):
-    def __init__(self, app, port, max_serves=1):
-        threading.Thread.__init__(self)
-        self.server = make_server("0.0.0.0", port, app)
-        self.ctx = app.app_context()
-        self.ctx.push()
-        self.max_serves = max_serves
-
-    def run(self):
-        log.info("Starting http server")
-        self.server.serve_forever()
-
-    def shutdown(self, timeout=60):
-        log.info(f"Stopping http server in {timeout} seconds")
-        time.sleep(timeout)
-        self.server.shutdown()
 
 
 if __name__ == "__main__":

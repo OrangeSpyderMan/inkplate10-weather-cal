@@ -10,7 +10,8 @@ from unittest import mock
 SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
-from artifacts import ArtifactStore, DEFAULT_OUTPUT_PROFILE
+from artifacts import ArtifactStore
+from output_profiles import DEFAULT_OUTPUT_PROFILE, OutputProfile
 
 
 class ArtifactStoreTests(unittest.TestCase):
@@ -18,9 +19,28 @@ class ArtifactStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             store = ArtifactStore(temporary_dir)
             snapshot = mock.Mock()
+            snapshot.generated_at = mock.Mock()
+            snapshot.generated_at.isoformat.return_value = (
+                "2026-06-09T00:00:00+00:00"
+            )
             snapshot.to_payload.return_value = {"schema_version": "1.0"}
 
             store.write_snapshot(snapshot)
+            output_path = store.output_path(
+                DEFAULT_OUTPUT_PROFILE,
+                "calendar.png",
+            )
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"png")
+            profiles = {
+                DEFAULT_OUTPUT_PROFILE: OutputProfile(
+                    DEFAULT_OUTPUT_PROFILE,
+                    "firefox",
+                    825,
+                    1200,
+                )
+            }
+            store.write_ready(snapshot, profiles)
 
             self.assertEqual(
                 json.loads(store.snapshot_path.read_text(encoding="utf-8")),
@@ -33,6 +53,20 @@ class ArtifactStoreTests(unittest.TestCase):
                 / "inkplate10-portrait"
                 / "calendar.png",
             )
+            ready = json.loads(store.ready_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                ready["snapshot"]["path"],
+                "weather.json",
+            )
+            self.assertEqual(
+                ready["outputs"][DEFAULT_OUTPUT_PROFILE]["path"],
+                "outputs/inkplate10-portrait/calendar.png",
+            )
+            self.assertTrue(store.producer_cycle_complete(profiles))
+
+            output_path.write_bytes(b"new output")
+
+            self.assertFalse(store.producer_cycle_complete(profiles))
 
     def test_removes_only_stale_temporary_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary_dir:

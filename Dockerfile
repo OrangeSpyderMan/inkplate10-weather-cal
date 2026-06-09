@@ -62,4 +62,4 @@ ENV GECKODRIVER_PATH=/usr/local/bin/geckodriver
 
 EXPOSE 8080
 
-CMD ["python3", "server/server.py"]
+CMD ["python3", "server/container_entrypoint.py"]

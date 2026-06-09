@@ -1,27 +1,32 @@
+x-inkplate-service: &inkplate-service
+  init: true
+  image: inkplate10-weather-cal:local
+  build:
+    context: .
+    args:
+      GECKOVERSION: v0.37.0
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment:
+    WEATHER_API_KEY: ${WEATHER_API_KEY:?set WEATHER_API_KEY in .env or the shell}
+    GOOGLE_API_KEY: ${GOOGLE_API_KEY:?set GOOGLE_API_KEY in .env or the shell}
+    GOOGLE_STATICMAPS_MAPID: ${GOOGLE_STATICMAPS_MAPID:?set GOOGLE_STATICMAPS_MAPID in .env or the shell}
+    NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}
+    NETATMO_CLIENT_SECRET: ${NETATMO_CLIENT_SECRET:-}
+    NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
+    NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
+    NETATMO_MODULE_ID: ${NETATMO_MODULE_ID:-}
+  volumes:
+    - ./server/config:/srv/inkplate/server/config:ro
+    - inkplate-data:/srv/inkplate/server/data
+
 services:
   inkplate:
-    init: true
-    build:
-      context: .
-      args:
-        GECKOVERSION: v0.37.0
-    restart: unless-stopped
+    <<: *inkplate-service
+    command: ["python3", "server/web_server.py"]
     ports:
       - "8080:8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      WEATHER_API_KEY: ${WEATHER_API_KEY:?set WEATHER_API_KEY in .env or the shell}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?set GOOGLE_API_KEY in .env or the shell}
-      GOOGLE_STATICMAPS_MAPID: ${GOOGLE_STATICMAPS_MAPID:?set GOOGLE_STATICMAPS_MAPID in .env or the shell}
-      NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}
-      NETATMO_CLIENT_SECRET: ${NETATMO_CLIENT_SECRET:-}
-      NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
-      NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
-      NETATMO_MODULE_ID: ${NETATMO_MODULE_ID:-}
-    volumes:
-      - ./server/config:/srv/inkplate/server/config:ro
-      - inkplate-data:/srv/inkplate/server/data
     healthcheck:
       test:
         [
@@ -34,6 +39,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 2m
+
+  producer:
+    <<: *inkplate-service
+    command: ["python3", "server/server.py"]
 
 volumes:
   inkplate-data:

@@ -24,12 +24,15 @@ google:
   apikey: ${GOOGLE_API_KEY}
   staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}
 location: Landry, FR
-image:
-  # The renderer is tuned for Inkplate 10 portrait output. These values set the
-  # screenshot target, but arbitrary dimensions are not currently guaranteed to
-  # scale the full layout correctly.
-  width: 825
-  height: 1200
+outputs:
+  default: inkplate10-portrait
+  profiles:
+    inkplate10-portrait:
+      enabled: true
+      renderer: firefox
+      width: 825
+      height: 1200
+      filename: calendar.png
 mqtt:
   weather:
     # Optional weather data publisher for other local clients.

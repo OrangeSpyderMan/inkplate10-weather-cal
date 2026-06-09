@@ -27,6 +27,7 @@ INSTALL_DIR = Path("/srv/inkplate")
 VENV_DIR = INSTALL_DIR / "inkplate_venv"
 NATIVE_ENV_FILE = Path("/etc/inkplate/weather.env")
 SERVICE_FILE = Path("/etc/systemd/system/inkplate.service")
+PRODUCER_SERVICE_FILE = Path("/etc/systemd/system/inkplate-producer.service")
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
 LEGACY_SERVER_CONFIG = Path("server/config.yaml")
@@ -122,9 +123,11 @@ def configure_answers(path: Path | None, non_interactive: bool) -> None:
 def ensure_repo_root(repo_root: Path) -> None:
     required = [
         repo_root / "server" / "server.py",
+        repo_root / "server" / "web_server.py",
         repo_root / "server" / "requirements.txt",
         repo_root / "docker-compose.yml",
         repo_root / "bin" / "inkplate.service",
+        repo_root / "bin" / "inkplate-producer.service",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -177,7 +180,12 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
     existing = [
         path
-        for path in (INSTALL_DIR, NATIVE_ENV_FILE, SERVICE_FILE)
+        for path in (
+            INSTALL_DIR,
+            NATIVE_ENV_FILE,
+            SERVICE_FILE,
+            PRODUCER_SERVICE_FILE,
+        )
         if path.exists()
     ]
     action = choose_existing_action("systemd", existing)
@@ -222,13 +230,41 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             sudo=True,
             dry_run=dry_run,
         )
+        run(
+            [
+                "bin/install_service",
+                "--unit-file",
+                "bin/inkplate-producer.service",
+                "--service-name",
+                "inkplate-producer",
+                "--no-start",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
 
-    if prompt_yes_no("Start or restart the systemd service now?", default=True, key="start_now"):
-        run(["systemctl", "restart", "inkplate"], sudo=True, dry_run=dry_run)
-        run(["systemctl", "status", "inkplate", "--no-pager", "-l"], sudo=True, dry_run=dry_run, check=False)
-        print("Logs: sudo journalctl -u inkplate -f")
+    if prompt_yes_no("Start or restart the systemd services now?", default=True, key="start_now"):
+        run(
+            ["systemctl", "restart", "inkplate-producer", "inkplate"],
+            sudo=True,
+            dry_run=dry_run,
+        )
+        run(
+            [
+                "systemctl",
+                "status",
+                "inkplate-producer",
+                "inkplate",
+                "--no-pager",
+                "-l",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+            check=False,
+        )
+        print("Logs: sudo journalctl -u inkplate-producer -u inkplate -f")
     else:
-        print("Start later with: sudo systemctl start inkplate")
+        print("Start later with: sudo systemctl start inkplate-producer inkplate")
 
 
 def existing_config_path(base_dir: Path) -> Path:
@@ -436,9 +472,15 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  apikey: ${GOOGLE_API_KEY}",
         "  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}",
         f"location: {answers['location']}",
-        "image:",
-        f"  width: {DEFAULT_IMAGE_WIDTH}",
-        f"  height: {DEFAULT_IMAGE_HEIGHT}",
+        "outputs:",
+        "  default: inkplate10-portrait",
+        "  profiles:",
+        "    inkplate10-portrait:",
+        "      enabled: true",
+        "      renderer: firefox",
+        f"      width: {DEFAULT_IMAGE_WIDTH}",
+        f"      height: {DEFAULT_IMAGE_HEIGHT}",
+        "      filename: calendar.png",
         "mqtt:",
         "  weather:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",

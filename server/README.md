@@ -15,8 +15,25 @@ Example 1                  | Example 2                 | Example 3
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
 - Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
-- Uses [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images and
-  a browser/PWA viewer.
+- Uses [Gunicorn](https://gunicorn.org/) and
+  [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images, the
+  weather API, and a browser/PWA viewer independently from artifact generation.
+
+The runtime has two roles:
+
+- `server.py` retrieves weather, renders outputs, publishes MQTT data, and
+  atomically updates the shared artifact directory.
+- `web_server.py` launches Gunicorn, which serves only persisted artifacts and
+  does not load weather providers or Selenium.
+
+Docker Compose runs these roles as separate services sharing the
+`inkplate-data` volume. Native installs use `inkplate-producer.service` and
+`inkplate.service`. The standalone OCI image supervises both processes for
+single-container platforms such as Proxmox.
+
+Gunicorn defaults to one worker with two threads to keep the steady-state
+memory footprint suitable for small systems. `INKPLATE_WEB_WORKERS` and
+`INKPLATE_WEB_THREADS` can raise those values for larger deployments.
 
 ## Setup
 
@@ -74,7 +91,7 @@ Logs:
 
 ```bash
 docker compose logs -f
-sudo journalctl -u inkplate -f
+sudo journalctl -u inkplate-producer -u inkplate -f
 ```
 
 If Docker reports socket permission errors after adding a user to the `docker`
@@ -187,6 +204,33 @@ Generated display artifacts use named output profiles:
 GET /outputs/inkplate10-portrait/calendar.png
 ```
 
+Output profiles are configured independently:
+
+```yaml
+outputs:
+  default: inkplate10-portrait
+  profiles:
+    inkplate10-portrait:
+      enabled: true
+      renderer: firefox
+      width: 825
+      height: 1200
+      filename: calendar.png
+```
+
+Each enabled profile has its own URL, dimensions, renderer, and filename.
+Multiple profiles can be rendered in one producer cycle for different display
+types. The `default` profile backs `/calendar.png` and `/app/calendar.png`.
+Legacy `image.width` and `image.height` settings still configure the default
+Inkplate 10 profile when `outputs.profiles` is absent.
+
+Profiles may also contain an `options` mapping for renderer-specific layout or
+style settings. Unknown options are left to the selected renderer.
+
+Only the `firefox` renderer is implemented currently. The registry allows a
+future `pillow` or device-specific renderer without changing artifact storage,
+readiness, or HTTP routing.
+
 The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
 aliases for the same image. `/calendar.png` retains its attachment response for
 existing Inkplate firmware.
@@ -198,8 +242,10 @@ GET /api/v1/health
 GET /api/v1/ready
 ```
 
-Health reports whether the web application is running. Readiness returns `200`
-only after both the weather snapshot and Inkplate output image exist.
+Health reports whether the Gunicorn web application is running. Readiness
+returns `200` only when the snapshot and output signatures match the completion
+marker written at the end of a successful producer cycle. During an update or
+after an incomplete first cycle it returns `503`.
 
 Snapshots and rendered outputs use stable paths and are atomically replaced, so
 the data directory does not accumulate historical versions. On startup, the
@@ -238,13 +284,13 @@ Empty runtime values do not satisfy required config placeholders such as
 environment. Optional placeholders such as `${NETATMO_CLIENT_ID:-}` continue to
 expand to an empty string when unset.
 
-### Image dimensions
+### Output dimensions
 
-The `image.width` and `image.height` config values set the browser capture
-target for the generated PNG. The current HTML/CSS layout is tuned for Inkplate
-10 portrait output at `825x1200`; those options are not a general layout scaling
-system. Changing them may produce cropped, stretched, or poorly spaced output
-unless the layout is also retuned.
+Each profile's `width` and `height` values set its capture target. The current
+Firefox HTML/CSS layout is tuned for Inkplate 10 portrait output at `825x1200`;
+dimensions alone are not a general layout scaling system. A different device
+size may require its own renderer or renderer `options` to avoid cropped,
+stretched, or poorly spaced output.
 
 ### Browser and PWA viewer
 
@@ -268,28 +314,29 @@ The viewer refreshes the image every 15 minutes and whenever the browser tab or
 installed app becomes visible. It fetches the image from:
 
 ```text
-http://<server-host>:8080/outputs/inkplate10-portrait/calendar.png
+http://<server-host>:8080/app/calendar.png
 ```
 
-The compatibility routes preserve their previous response behavior:
+The compatibility routes preserve their response behavior:
 
-- `/calendar.png` keeps the existing attachment response and increments the
-  Inkplate serve counter used by one-shot server mode.
+- `/calendar.png` keeps the existing attachment response.
 - `/app/calendar.png` serves the same file inline for browsers and does not
-  increment the Inkplate serve counter. New clients should use the named output
-  route.
+  affect producer lifecycle. It follows the configured default output profile.
+  Other clients should use a named output route when they require a specific
+  profile.
 
-For the browser/PWA viewer, keep the server running continuously:
+For automatic weather refresh, keep the producer running continuously:
 
 ```yaml
 server:
   alwayson: true
 ```
 
-Without `server.alwayson: true`, the server can shut down after the configured
-one-shot lifetime or after the Inkplate has fetched `/calendar.png`. Docker
-Compose and the example Docker config already use `server.alwayson: true`;
-one-shot mode is mainly useful for scheduled Inkplate-only refresh workflows.
+Without `server.alwayson: true`, the producer generates one complete artifact
+set and exits. Gunicorn remains independent and continues serving the last
+successful artifact set. Docker Compose and the example Docker config use
+`server.alwayson: true`; one-shot producer mode is useful for scheduled refresh
+workflows.
 
 To use it like an app, open `/app` on the device and use the browser's install
 or "Add to Home Screen" action. The client is intentionally simple: it caches
@@ -360,9 +407,11 @@ mkdir -p server/config
 mv server/config.yaml server/config/config.yaml
 ```
 
-Run the server manually:
-```
+Run the producer and web service manually in separate terminals:
+
+```bash
 python3 server/server.py
+python3 server/web_server.py
 ```
 
 Run the server 9am each day:
@@ -373,7 +422,9 @@ Add this line:
 ```
 0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
-`/path/to/inkplate10-weather-cal` should be updated to the absolute path of your checkout.
+This scheduled form expects `server.alwayson: false`; keep
+`server/web_server.py` running separately. `/path/to/inkplate10-weather-cal`
+should be updated to the absolute path of your checkout.
 
 For a managed native service, prefer `./bin/install_server` unless you need to
 repair individual systemd pieces manually.
@@ -381,8 +432,8 @@ repair individual systemd pieces manually.
 ## Running in Docker
 
 The repository root contains the Dockerfile and `docker-compose.yml`. The image
-installs Firefox, Geckodriver, and the required Python modules, then runs the
-server as an unprivileged `inkplate` user.
+installs Firefox, Geckodriver, Gunicorn, and the required Python modules, then
+runs as an unprivileged `inkplate` user.
 
 ### Configure
 
@@ -392,9 +443,9 @@ Create a Docker server config from the example:
 cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 ```
 
-For Docker, keep `server.alwayson: true`. The compose file uses
-`restart: unless-stopped`; one-shot server mode exits after serving or timing
-out and would otherwise restart repeatedly.
+For Docker Compose, keep `server.alwayson: true`. The producer service uses
+`restart: unless-stopped`, so a successful one-shot producer would otherwise be
+started repeatedly.
 
 Create a local `.env` file in the repository root. Docker Compose reads this
 file and passes the values into the container:
@@ -418,8 +469,9 @@ NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
 ```
 
-The compose file mounts `server/config` read-only and stores mutable
-runtime data in the named `inkplate-data` volume. The Docker example sets the
+Compose runs separate `inkplate` web and `producer` services. Both mount
+`server/config` read-only and share mutable runtime data in the named
+`inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement. Compose requires explicit values for
 `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_STATICMAPS_MAPID`.
@@ -468,8 +520,8 @@ Or detach it:
 docker compose up --build -d
 ```
 
-To use the published image instead of building locally, replace the Compose
-service `build:` block with:
+To use the published image instead of building locally, change the shared
+`image:` value and remove its `build:` block:
 
 ```yaml
 image: ghcr.io/orangespyderman/inkplate10-weather-cal:main

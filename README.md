@@ -52,10 +52,12 @@ Both a server and client are required. The main workload is on the server, which
 1. Gets any relevant new data (ie. weather, maps).
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
-4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
+4. A separate Gunicorn/Flask web process serves the generated PNG and weather
+   API from the shared artifact directory.
 5. (Optional) The server publishes weather snapshots and listens for Inkplate diagnostics over MQTT.
-6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
-7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
+6. The producer either refreshes indefinitely or generates one artifact set and
+   exits; web serving has an independent lifecycle.
+7. A cronjob can run the producer before the client's configured refresh interval elapses.
 
 #### Features:
 
@@ -83,7 +85,7 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The server itself is lightweight with the only real work involved being Geckodriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
+  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The producer does the heavier PNG rendering work while the Gunicorn web process remains available independently. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -145,6 +147,10 @@ The server also exposes versioned data and output endpoints:
 `/calendar.png` remains available as a compatibility alias for existing
 Inkplate firmware.
 
+Named outputs are profile-driven. Additional display sizes and renderer
+implementations can be enabled as separate profiles while `/calendar.png`
+continues to serve the configured default.
+
 ## MQTT
 
 The server can optionally publish the normalized weather snapshot to MQTT for
@@ -159,8 +165,8 @@ and example clients such as the
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
-either Docker Compose from this checkout or a native systemd service under
-`/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
+either Docker Compose from this checkout or native producer and web systemd
+services under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
 
 Run it from the repository root:
 
@@ -207,7 +213,7 @@ For troubleshooting:
 
 ```bash
 docker compose logs -f
-sudo journalctl -u inkplate -f
+sudo journalctl -u inkplate-producer -u inkplate -f
 ```
 
 If Docker reports socket permission errors after adding a user to the `docker`
