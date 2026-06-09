@@ -125,7 +125,11 @@ This is the API that has had the most testing.
 
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-The server currently samples the hourly forecast at three-hour intervals. The number of forecast slots is configured with `weather.num_hourly_forecasts`; the example config uses 6. Larger values may need layout tuning so the forecast row remains readable on the Inkplate display.
+The server samples the hourly forecast at local three-hour boundaries. The
+number of forecast slots is configured with `weather.num_hourly_forecasts` and
+is treated as an exact count. The example config uses 6, which is the
+recommended maximum for the current Inkplate 10 portrait layout. Larger values
+need layout tuning so the forecast row remains readable.
 
 ### OpenWeatherMapv4 API
 

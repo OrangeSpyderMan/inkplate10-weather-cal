@@ -104,14 +104,24 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         self.assertEqual(len(forecasts), 6)
         self.assertEqual(
             [forecast["temperature"]["value"] for forecast in forecasts],
-            [15, 18, 21, 24, 27, 30],
+            [12, 15, 18, 21, 24, 27],
         )
         self.assertEqual(
             [forecast["rain_probability"] for forecast in forecasts],
-            [5, 8, 11, 14, 17, 50],
+            [2, 5, 8, 11, 14, 17],
         )
         self.assertTrue(
             all(forecast["wind"]["unit"] == "m/s" for forecast in forecasts)
+        )
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["12pm", "3pm", "6pm", "9pm", "12am", "3am"],
+        )
+        self.assertTrue(
+            all(
+                forecast["dt"].utcoffset().total_seconds() == 7200
+                for forecast in forecasts
+            )
         )
         second_page_call = self.get.call_args_list[-1]
         self.assertEqual(

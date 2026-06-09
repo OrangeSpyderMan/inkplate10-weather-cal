@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -6,7 +6,6 @@ from ..service import WeatherService
 
 
 class OpenWeatherMapv4Service(WeatherService):
-    HOURLY_START_OFFSET = 5
     HOURLY_STEP = 3
 
     def __init__(self, apikey, location, num_hours=6, metric=True, mock=False):
@@ -20,11 +19,15 @@ class OpenWeatherMapv4Service(WeatherService):
         self.lat, self.lon = self._get_location_coords(location)
 
     def get_daily_summary(self):
-        current = self._get_records("/data/4.0/onecall/current")[0]
-        daily = self._get_records(
+        current_records, _ = self._get_records(
+            "/data/4.0/onecall/current"
+        )
+        daily_records, _ = self._get_records(
             "/data/4.0/onecall/timeline/1day",
             required_records=1,
-        )[0]
+        )
+        current = current_records[0]
+        daily = daily_records[0]
 
         return {
             "icon": self.get_icon(current["weather"][0]["icon"]),
@@ -37,22 +40,35 @@ class OpenWeatherMapv4Service(WeatherService):
         }
 
     def get_hourly_forecast(self):
-        required_records = (
-            self.HOURLY_START_OFFSET
-            + self.HOURLY_STEP * (self.num_hours - 1)
-            + 1
-        )
-        records = self._get_records(
+        required_records = self.HOURLY_STEP * self.num_hours + 3
+        records, timezone_offset = self._get_records(
             "/data/4.0/onecall/timeline/1h",
             required_records=required_records,
         )
-        selected = records[
-            self.HOURLY_START_OFFSET:required_records:self.HOURLY_STEP
-        ]
+        location_timezone = timezone(timedelta(seconds=timezone_offset))
+        selected = [
+            entry
+            for entry in records
+            if datetime.fromtimestamp(
+                entry["dt"],
+                location_timezone,
+            ).hour
+            % self.HOURLY_STEP
+            == 0
+        ][: self.num_hours]
+        if len(selected) < self.num_hours:
+            raise ValueError(
+                "Unexpected response from weather api: "
+                f"needed {self.num_hours} forecast slots, "
+                f"received {len(selected)}"
+            )
 
         return [
             {
-                "dt": datetime.fromtimestamp(entry["dt"]),
+                "dt": datetime.fromtimestamp(
+                    entry["dt"],
+                    location_timezone,
+                ),
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
                 "temperature": {
                     "unit": self._temperature_unit(),
@@ -73,6 +89,7 @@ class OpenWeatherMapv4Service(WeatherService):
         params = self._weather_params()
         records = []
         visited = set()
+        timezone_offset = 0
 
         while url and len(records) < required_records:
             if url in visited:
@@ -81,6 +98,9 @@ class OpenWeatherMapv4Service(WeatherService):
 
             data = self._get_json(url, params=params)
             params = None
+            timezone_offset = int(
+                data.get("timezone_offset", timezone_offset)
+            )
             records.extend(data.get("data") or [])
             url = data.get("next")
 
@@ -90,7 +110,7 @@ class OpenWeatherMapv4Service(WeatherService):
                 f"needed {required_records} records, received {len(records)}"
             )
 
-        return records
+        return records, timezone_offset
 
     def _get_location_coords(self, location):
         data = self._get_json(
