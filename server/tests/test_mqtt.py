@@ -9,6 +9,7 @@ SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
 import mqtt_diagnostics
+import mqtt_diagnostics_server
 import mqtt_publisher
 
 
@@ -91,6 +92,69 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
             "broker", 1884, 60
         )
         client_class.return_value.loop_start.assert_called_once_with()
+
+
+class MqttDiagnosticServerTests(unittest.TestCase):
+    def test_disabled_listener_returns_none(self):
+        self.assertIsNone(
+            mqtt_diagnostics_server.build_listener(
+                {"mqtt": {"diagnostics": {"enabled": False}}}
+            )
+        )
+
+    @mock.patch("mqtt_diagnostics_server.MqttDiagnosticListener")
+    def test_builds_enabled_listener_from_config(self, listener_class):
+        listener = mqtt_diagnostics_server.build_listener(
+            {
+                "mqtt": {
+                    "diagnostics": {
+                        "enabled": True,
+                        "broker": "broker",
+                        "port": 1884,
+                        "topic": "inkplate/diagnostics",
+                        "qos": 1,
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(listener, listener_class.return_value)
+        listener_class.assert_called_once_with(
+            broker="broker",
+            port=1884,
+            topic="inkplate/diagnostics",
+            qos=1,
+        )
+
+    @mock.patch("mqtt_diagnostics_server.load_config")
+    @mock.patch("mqtt_diagnostics_server.configure_logging")
+    def test_disabled_server_exits_successfully(
+        self,
+        configure_logging,
+        load_config,
+    ):
+        configure_logging.return_value = mock.Mock()
+        load_config.return_value = (
+            "/config.yaml",
+            {"mqtt": {"diagnostics": {"enabled": False}}},
+        )
+
+        self.assertEqual(mqtt_diagnostics_server.main(), 0)
+
+    @mock.patch("mqtt_diagnostics_server.load_config")
+    @mock.patch("mqtt_diagnostics_server.configure_logging")
+    @mock.patch("mqtt_diagnostics_server.build_listener")
+    def test_listener_start_failure_exits_nonzero(
+        self,
+        build_listener,
+        configure_logging,
+        load_config,
+    ):
+        configure_logging.return_value = mock.Mock()
+        load_config.return_value = ("/config.yaml", {})
+        build_listener.return_value.start.return_value = False
+
+        self.assertEqual(mqtt_diagnostics_server.main(), 1)
 
 
 class MqttWeatherPublisherTests(unittest.TestCase):

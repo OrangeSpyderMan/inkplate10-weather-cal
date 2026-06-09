@@ -24,7 +24,10 @@ def terminate(processes):
 def main():
     producer = subprocess.Popen([sys.executable, str(SERVER_DIR / "server.py")])
     web = subprocess.Popen([sys.executable, str(SERVER_DIR / "web_server.py")])
-    processes = [producer, web]
+    diagnostics = subprocess.Popen(
+        [sys.executable, str(SERVER_DIR / "mqtt_diagnostics_server.py")]
+    )
+    processes = [producer, web, diagnostics]
 
     def stop(signum, frame):
         terminate(processes)
@@ -35,6 +38,7 @@ def main():
     while True:
         web_status = web.poll()
         producer_status = producer.poll()
+        diagnostics_status = diagnostics.poll()
         if web_status is not None:
             terminate(processes)
             return web_status
@@ -43,6 +47,9 @@ def main():
                 terminate(processes)
                 return producer_status
             return web.wait()
+        if diagnostics_status not in (None, 0):
+            terminate(processes)
+            return diagnostics_status
         try:
             producer.wait(timeout=1)
         except subprocess.TimeoutExpired:

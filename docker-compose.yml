@@ -49,5 +49,10 @@ services:
     <<: *inkplate-service
     command: ["python3", "server/server.py"]
 
+  diagnostics:
+    <<: *inkplate-service
+    command: ["python3", "server/mqtt_diagnostics_server.py"]
+    restart: on-failure
+
 volumes:
   inkplate-data:

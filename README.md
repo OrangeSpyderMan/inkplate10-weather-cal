@@ -54,7 +54,8 @@ Both a server and client are required. The main workload is on the server, which
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
 4. A separate Gunicorn/Flask web process serves the generated PNG and weather
    API from the shared artifact directory.
-5. (Optional) The server publishes weather snapshots and listens for Inkplate diagnostics over MQTT.
+5. (Optional) Separate server processes publish weather snapshots and listen
+   for Inkplate diagnostics over MQTT.
 6. The producer either refreshes indefinitely or generates one artifact set and
    exits; web serving has an independent lifecycle.
 7. A cronjob can run the producer before the client's configured refresh interval elapses.
@@ -221,7 +222,7 @@ For troubleshooting:
 
 ```bash
 docker compose logs -f
-sudo journalctl -u inkplate-producer -u inkplate -f
+sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
 If Docker reports socket permission errors after adding a user to the `docker`

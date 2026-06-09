@@ -19,17 +19,20 @@ Example 1                  | Example 2                 | Example 3
   [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images, the
   weather API, and a browser/PWA viewer independently from artifact generation.
 
-The runtime has two roles:
+The runtime has three roles:
 
 - `server.py` retrieves weather, renders outputs, publishes MQTT data, and
   atomically updates the shared artifact directory.
 - `web_server.py` launches Gunicorn, which serves only persisted artifacts and
   does not load weather providers or Selenium.
+- `mqtt_diagnostics_server.py` independently subscribes to Inkplate diagnostic
+  messages when that feature is enabled.
 
 Docker Compose runs these roles as separate services sharing the
-`inkplate-data` volume. Native installs use `inkplate-producer.service` and
-`inkplate.service`. The standalone OCI image supervises both processes for
-single-container platforms such as Proxmox.
+`inkplate-data` volume. Native installs use `inkplate-producer.service`,
+`inkplate.service`, and `inkplate-diagnostics.service`. The standalone OCI
+image supervises all three processes for single-container platforms such as
+Proxmox.
 
 Gunicorn defaults to one worker with two threads to keep the steady-state
 memory footprint suitable for small systems. `INKPLATE_WEB_WORKERS` and
@@ -91,7 +94,7 @@ Logs:
 
 ```bash
 docker compose logs -f
-sudo journalctl -u inkplate-producer -u inkplate -f
+sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
 If Docker reports socket permission errors after adding a user to the `docker`
@@ -252,11 +255,13 @@ the data directory does not accumulate historical versions. On startup, the
 producer removes temporary artifact files older than 24 hours that may remain
 after an interrupted write. Valid snapshots and outputs are never age-pruned.
 
-The diagnostic listener is independent from weather publishing. It records
-non-retained messages from the Inkplate through the `MQTT` logger and
-resubscribes after reconnecting. The matching firmware topic is configured in
-the Inkplate `mqtt_logger` section, either on the SD card or in an embedded
-firmware configuration.
+The diagnostic listener runs as an independent process from weather production
+and publishing. It records non-retained messages from the Inkplate through the
+`MQTT` logger and resubscribes after reconnecting. Native installations use
+`inkplate-diagnostics.service`; Compose uses the `diagnostics` service. When
+diagnostics are disabled, that process exits successfully. The matching
+firmware topic is configured in the Inkplate `mqtt_logger` section, either on
+the SD card or in an embedded firmware configuration.
 
 ### Secrets
 
@@ -469,8 +474,8 @@ NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
 ```
 
-Compose runs separate `inkplate` web and `producer` services. Both mount
-`server/config` read-only and share mutable runtime data in the named
+Compose runs separate `inkplate` web, `producer`, and `diagnostics` services.
+They mount `server/config` read-only and share mutable runtime data in the named
 `inkplate-data` volume. The Docker example sets the
 Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement. Compose requires explicit values for

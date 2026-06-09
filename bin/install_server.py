@@ -28,6 +28,9 @@ VENV_DIR = INSTALL_DIR / "inkplate_venv"
 NATIVE_ENV_FILE = Path("/etc/inkplate/weather.env")
 SERVICE_FILE = Path("/etc/systemd/system/inkplate.service")
 PRODUCER_SERVICE_FILE = Path("/etc/systemd/system/inkplate-producer.service")
+DIAGNOSTICS_SERVICE_FILE = Path(
+    "/etc/systemd/system/inkplate-diagnostics.service"
+)
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
 LEGACY_SERVER_CONFIG = Path("server/config.yaml")
@@ -128,6 +131,7 @@ def ensure_repo_root(repo_root: Path) -> None:
         repo_root / "docker-compose.yml",
         repo_root / "bin" / "inkplate.service",
         repo_root / "bin" / "inkplate-producer.service",
+        repo_root / "bin" / "inkplate-diagnostics.service",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -185,6 +189,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             NATIVE_ENV_FILE,
             SERVICE_FILE,
             PRODUCER_SERVICE_FILE,
+            DIAGNOSTICS_SERVICE_FILE,
         )
         if path.exists()
     ]
@@ -242,10 +247,28 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             sudo=True,
             dry_run=dry_run,
         )
+        run(
+            [
+                "bin/install_service",
+                "--unit-file",
+                "bin/inkplate-diagnostics.service",
+                "--service-name",
+                "inkplate-diagnostics",
+                "--no-start",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
 
     if prompt_yes_no("Start or restart the systemd services now?", default=True, key="start_now"):
         run(
-            ["systemctl", "restart", "inkplate-producer", "inkplate"],
+            [
+                "systemctl",
+                "restart",
+                "inkplate-producer",
+                "inkplate",
+                "inkplate-diagnostics",
+            ],
             sudo=True,
             dry_run=dry_run,
         )
@@ -257,6 +280,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
                 "status",
                 "inkplate-producer",
                 "inkplate",
+                "inkplate-diagnostics",
                 "--no-pager",
                 "-l",
             ],
@@ -264,9 +288,15 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             dry_run=dry_run,
             check=False,
         )
-        print("Logs: sudo journalctl -u inkplate-producer -u inkplate -f")
+        print(
+            "Logs: sudo journalctl -u inkplate-producer -u inkplate "
+            "-u inkplate-diagnostics -f"
+        )
     else:
-        print("Start later with: sudo systemctl start inkplate-producer inkplate")
+        print(
+            "Start later with: sudo systemctl start inkplate-producer "
+            "inkplate inkplate-diagnostics"
+        )
 
 
 def existing_config_path(base_dir: Path) -> Path:

@@ -53,6 +53,7 @@ jobs:
             server/server.py \
             server/web.py \
             server/web_server.py \
+            server/mqtt_diagnostics_server.py \
             server/container_entrypoint.py \
             server/configuration.py \
             server/artifacts.py \

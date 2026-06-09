@@ -6,7 +6,6 @@ import sys
 import time
 import logging.config
 from utils import get_prop, get_prop_by_keys
-from mqtt_diagnostics import MqttDiagnosticListener
 from mqtt_publisher import MqttWeatherPublisher
 from artifacts import ArtifactStore
 from configuration import load_config
@@ -94,9 +93,6 @@ def main():
     weather_publisher = build_mqtt_weather_publisher(
         mqtt_config.get("weather", {}) or {}
     )
-    diagnostic_listener = build_mqtt_diagnostic_listener(
-        mqtt_config.get("diagnostics", {}) or {}
-    )
 
     gapi = GoogleAPIService(google_apikey)
     map_file = os.path.join(cwd, "views", "html", "map.png")
@@ -140,9 +136,6 @@ def main():
     if not server_enabled:
         sys.exit(0)
 
-    if diagnostic_listener is not None and not diagnostic_listener.start():
-        diagnostic_listener = None
-
     if server_always_on:
         while True:
             if not produce_artifacts(
@@ -174,8 +167,6 @@ def main():
             output_renderers,
             artifact_store,
         )
-        if diagnostic_listener is not None:
-            diagnostic_listener.stop()
         sys.exit(0 if success else 1)
 
 
@@ -348,20 +339,6 @@ def build_mqtt_weather_publisher(mqtt_config):
         base_topic=base_topic,
         retain=retain,
         qos=qos,
-    )
-
-
-def build_mqtt_diagnostic_listener(mqtt_config):
-    if not mqtt_config.get("enabled", False):
-        return None
-
-    return MqttDiagnosticListener(
-        broker=mqtt_config.get("broker", "localhost"),
-        port=mqtt_config.get("port", 1883),
-        topic=mqtt_config.get(
-            "topic", "inkplate/weather-calendar/diagnostics"
-        ),
-        qos=mqtt_config.get("qos", 0),
     )
 
 
