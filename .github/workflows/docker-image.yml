@@ -6,7 +6,9 @@ permissions:
 on:
   push:
     paths:
+      - 'bin/install_server.py'
       - 'server/**'
+      - 'tests/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
@@ -14,7 +16,9 @@ on:
       - '.github/workflows/docker-image.yml'
   pull_request:
     paths:
+      - 'bin/install_server.py'
       - 'server/**'
+      - 'tests/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
@@ -27,6 +31,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Test installer helpers
+        run: python3 -m unittest discover -s tests -v
 
       - name: Validate Docker Compose config
         env:

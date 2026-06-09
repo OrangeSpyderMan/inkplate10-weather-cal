@@ -710,8 +710,6 @@ def install_copy_ignore(repo_root: Path):
         "__pycache__",
         "*.pyc",
         "*.log",
-        "*.png",
-        "*.bmp",
         "netatmo-token.json",
     )
 
@@ -725,6 +723,10 @@ def install_copy_ignore(repo_root: Path):
             ignored.add("config.yaml")
         if relative == Path("server/config"):
             ignored.add("config.yaml")
+        if relative == Path("server/views"):
+            ignored.update({"calendar.png", "calendar.bmp"})
+        if relative == Path("server/views/html"):
+            ignored.update({"calendar.html", "map.png", "map.bmp"})
         return ignored
 
     return ignore
