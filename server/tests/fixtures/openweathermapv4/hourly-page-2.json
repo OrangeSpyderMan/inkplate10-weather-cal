@@ -1,0 +1,20 @@
+{
+  "lat": 45.572,
+  "lon": 6.739,
+  "timezone": "Europe/Paris",
+  "timezone_offset": 7200,
+  "data": [
+    {
+      "dt": 1781064000,
+      "temp": 30,
+      "humidity": 70,
+      "wind_speed": 3.0,
+      "pop": 0.5,
+      "weather": [
+        {
+          "icon": "11d"
+        }
+      ]
+    }
+  ]
+}

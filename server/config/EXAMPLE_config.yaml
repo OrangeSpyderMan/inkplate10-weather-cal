@@ -7,6 +7,7 @@ server:
   alwayson: true
   refreshhours: 3
 weather:
+  # openweathermapv3, openweathermapv4, or accuweather
   service: openweathermapv3
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6

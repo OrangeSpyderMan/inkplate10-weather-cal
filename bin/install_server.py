@@ -356,6 +356,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     answers["weather_service"] = prompt_choice(
         "Weather provider",
         [
+            ("openweathermapv4", "OpenWeatherMap One Call 4.0"),
             ("openweathermapv3", "OpenWeatherMap One Call 3.0"),
             ("accuweather", "AccuWeather"),
         ],

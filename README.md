@@ -160,6 +160,10 @@ Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`
 continues to serve the configured default.
 
+The server supports AccuWeather and OpenWeatherMap One Call 3.0. One Call 4.0
+is also available as the opt-in `openweathermapv4` provider; it requires
+OpenWeather's separate One Call by Call subscription.
+
 ## MQTT
 
 The server can optionally publish the normalized weather snapshot to MQTT for

@@ -55,6 +55,7 @@ def main():
         "accuweather",
         "openweathermap",
         "openweathermapv3",
+        "openweathermapv4",
     ]:
         log.error(f"not a supported weather service {weather_service_type}")
         sys.exit(1)
@@ -119,6 +120,17 @@ def main():
         from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
 
         weather_svc = OpenWeatherMapv3Service(
+            weather_apikey,
+            location,
+            metric=weather_metric,
+            num_hours=weather_num_hourly_forecasts,
+        )
+    elif weather_service_type == "openweathermapv4":
+        from weather.openweathermapv4.openweathermapv4 import (
+            OpenWeatherMapv4Service,
+        )
+
+        weather_svc = OpenWeatherMapv4Service(
             weather_apikey,
             location,
             metric=weather_metric,

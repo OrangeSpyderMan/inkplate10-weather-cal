@@ -65,6 +65,7 @@ jobs:
             server/mqtt_diagnostics.py \
             server/mqtt_publisher.py \
             server/utils.py \
+            server/weather/openweathermapv4/openweathermapv4.py \
             server/views/page.py \
             server/views/calendar.py
           docker run --rm inkplate10-weather-cal:ci \

@@ -115,7 +115,9 @@ Make sure you update the config `weather.apikey` with your generated api key and
 ### OpenWeatherMap API
 
 [DEPRECATED]
-This provider is no longer supported in this version.  Please use [OpenWeatherMapv3](#openweathermapv3-api) that works with the OneCall V3 API [described here](https://openweathermap.org/api/one-call-3).
+This provider is no longer supported in this version. Use
+[OpenWeatherMapv3](#openweathermapv3-api) or
+[OpenWeatherMapv4](#openweathermapv4-api) instead.
 
 ### OpenWeatherMapv3 API
 
@@ -124,6 +126,27 @@ This is the API that has had the most testing.
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
 The server currently samples the hourly forecast at three-hour intervals. The number of forecast slots is configured with `weather.num_hourly_forecasts`; the example config uses 6. Larger values may need layout tuning so the forecast row remains readable on the Inkplate display.
+
+### OpenWeatherMapv4 API
+
+One Call API 4.0 is available as an opt-in provider:
+
+```yaml
+weather:
+  service: openweathermapv4
+  apikey: ${WEATHER_API_KEY}
+  num_hourly_forecasts: 6
+  metric: true
+```
+
+The provider uses the v4 current, one-day timeline, and one-hour timeline
+endpoints. It follows hourly `next` links when necessary so the default six
+three-hour forecast slots are complete. OpenWeather requires a separate
+One Call by Call subscription for API 4.0; check its current pricing and free
+allowance before enabling this provider.
+
+OpenWeatherMap v3 remains the default while v4 output is compared on real
+servers.
 
 ### Current temperature source
 
