@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -97,12 +98,13 @@ class OpenWeatherMapv4Service(WeatherService):
             visited.add(url)
 
             data = self._get_json(url, params=params)
-            params = {"units": self.units}
+            params = None
             timezone_offset = int(
                 data.get("timezone_offset", timezone_offset)
             )
             records.extend(data.get("data") or [])
-            url = data.get("next")
+            next_url = data.get("next")
+            url = self._url_with_units(next_url) if next_url else None
 
         if len(records) < required_records:
             raise ValueError(
@@ -111,6 +113,16 @@ class OpenWeatherMapv4Service(WeatherService):
             )
 
         return records, timezone_offset
+
+    def _url_with_units(self, url):
+        parts = urlsplit(url)
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if key != "units"
+        ]
+        query.append(("units", self.units))
+        return urlunsplit(parts._replace(query=urlencode(query)))
 
     def _get_location_coords(self, location):
         data = self._get_json(
