@@ -249,6 +249,8 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             sudo=True,
             dry_run=dry_run,
         )
+        if action in ("fresh", "update"):
+            remove_legacy_application_logs(dry_run)
         run(
             [
                 "systemctl",
@@ -695,6 +697,24 @@ def refresh_dependencies(dry_run: bool) -> None:
         dry_run=dry_run,
     )
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
+
+
+def remove_legacy_application_logs(dry_run: bool) -> None:
+    run(
+        [
+            "find",
+            str(INSTALL_DIR),
+            "-maxdepth",
+            "1",
+            "-type",
+            "f",
+            "-name",
+            "eink-cal-server.log*",
+            "-delete",
+        ],
+        sudo=True,
+        dry_run=dry_run,
+    )
 
 
 def install_copy_ignore(repo_root: Path):

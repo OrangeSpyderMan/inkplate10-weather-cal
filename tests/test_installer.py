@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -42,3 +43,23 @@ class InstallerCopyTests(unittest.TestCase):
                 "calendar.html",
                 ignore(str(html_dir), ["calendar.html", "styles.css"]),
             )
+
+    @mock.patch.object(install_server, "run")
+    def test_removes_only_legacy_application_logs(self, run):
+        install_server.remove_legacy_application_logs(dry_run=False)
+
+        run.assert_called_once_with(
+            [
+                "find",
+                "/srv/inkplate",
+                "-maxdepth",
+                "1",
+                "-type",
+                "f",
+                "-name",
+                "eink-cal-server.log*",
+                "-delete",
+            ],
+            sudo=True,
+            dry_run=False,
+        )

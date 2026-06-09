@@ -23,6 +23,31 @@ class ProducerTests(unittest.TestCase):
     def tearDown(self):
         self.log.stop()
 
+    @mock.patch("server.logging.config.fileConfig")
+    @mock.patch("server.logging.getLogger")
+    def test_service_logging_config_overrides_local_profiles(
+        self,
+        get_logger,
+        file_config,
+    ):
+        with mock.patch.dict(
+            server.os.environ,
+            {"INKPLATE_LOG_CONFIG": "/tmp/logging.service.ini"},
+        ):
+            configured_logger = server.configure_logging(debug=True)
+
+        file_config.assert_called_once_with("/tmp/logging.service.ini")
+        self.assertEqual(configured_logger, get_logger.return_value)
+
+    @mock.patch("server.logging.config.fileConfig")
+    def test_debug_logging_uses_console_only_development_profile(self, file_config):
+        with mock.patch.dict(server.os.environ, {}, clear=True):
+            server.configure_logging(debug=True)
+
+        file_config.assert_called_once_with(
+            str(SERVER_DIR / "logging.dev.ini"),
+        )
+
     def test_rejects_unregistered_renderer_before_production(self):
         profiles = {
             "future": OutputProfile(

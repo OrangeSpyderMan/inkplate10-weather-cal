@@ -23,18 +23,25 @@ artifact_store = ArtifactStore(
 )
 
 
+def configure_logging(debug):
+    configured_path = os.environ.get("INKPLATE_LOG_CONFIG")
+    if configured_path:
+        log_config_path = configured_path
+    elif debug:
+        log_config_path = os.path.join(cwd, "logging.dev.ini")
+    else:
+        log_config_path = os.path.join(cwd, "logging.ini")
+    logging.config.fileConfig(log_config_path)
+    return logging.getLogger("server")
+
+
 def main():
     global log
 
     config_path, config = load_config()
 
     debug = get_prop(config, "debug", default=False)
-    # Create and configure logger
-    log_ini_path = os.path.join(cwd, "logging.ini")
-    if debug:
-        logging.config.fileConfig(os.path.join(cwd, "logging.dev.ini"))
-    logging.config.fileConfig(log_ini_path)
-    log = logging.getLogger("server")
+    log = configure_logging(debug)
     log.info(f"Loaded config from {config_path}")
     removed_temporary_files = artifact_store.cleanup_stale_temporary_files()
     if removed_temporary_files:

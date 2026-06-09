@@ -59,6 +59,7 @@ RUN mkdir -p ${HOMEDIR}/server/config ${HOMEDIR}/server/data \
 USER ${USERNAME}
 
 ENV GECKODRIVER_PATH=/usr/local/bin/geckodriver
+ENV INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 
 EXPOSE 8080
 

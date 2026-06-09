@@ -6,6 +6,11 @@ x-inkplate-service: &inkplate-service
     args:
       GECKOVERSION: v0.37.0
   restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
   extra_hosts:
     - "host.docker.internal:host-gateway"
   environment:

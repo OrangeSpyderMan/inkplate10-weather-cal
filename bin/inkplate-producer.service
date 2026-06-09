@@ -11,6 +11,7 @@ User=inkplate
 Group=inkplate
 WorkingDirectory=/srv/inkplate
 EnvironmentFile=/etc/inkplate/weather.env
+Environment=INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 ExecStartPre=/usr/bin/test -x /srv/inkplate/inkplate_venv/bin/python3
 ExecStartPre=/usr/bin/test -d /srv/inkplate
 ExecStartPre=/usr/bin/test -f /etc/inkplate/weather.env
