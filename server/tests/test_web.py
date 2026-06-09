@@ -75,7 +75,12 @@ class WebAppTests(unittest.TestCase):
         payload = {
             "schema_version": "1.0",
             "generated_at": "2026-06-08T08:46:24+00:00",
-            "current": {},
+            "current": {
+                "alerts": {
+                    "active": True,
+                    "ids": ["alert-id"],
+                }
+            },
             "hourly": [],
         }
         ArtifactStore.write_json(self.store.snapshot_path, payload)

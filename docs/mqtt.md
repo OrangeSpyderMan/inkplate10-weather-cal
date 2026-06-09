@@ -192,6 +192,10 @@ Full snapshot:
   "units": "metric",
   "current": {
     "icon": "icon/cloudy.png",
+    "alerts": {
+      "active": true,
+      "ids": ["alert-id"]
+    },
     "temperature": {
       "unit": "\u00b0C",
       "value": 11,
@@ -215,14 +219,18 @@ Full snapshot:
 
 The exact weather fields can vary slightly by provider, but `current`,
 `hourly`, `temperature`, `icon`, and `rain_probability` are the fields intended
-for lightweight display clients.
+for lightweight display clients. With OpenWeatherMap v4, `current.alerts` is
+also present. Its `active` value indicates whether the current record contains
+alert IDs, and `ids` contains those OpenWeather alert identifiers. Other
+providers may omit this field.
 
 The same canonical payload is available over HTTP at `/api/v1/weather`.
 
 ### `inkplate/weather-calendar/current`
 
 Current conditions only. This is the simplest topic for character LCDs or
-single-screen microcontroller displays.
+single-screen microcontroller displays. For OpenWeatherMap v4 this includes the
+optional `alerts` object described above.
 
 ### `inkplate/weather-calendar/hourly`
 

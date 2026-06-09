@@ -149,6 +149,25 @@ three-hour forecast slots are complete. OpenWeather requires a separate
 One Call by Call subscription for API 4.0; check its current pricing and free
 allowance before enabling this provider.
 
+When the v4 current response contains weather alert IDs, the display shows a
+warning indicator and the normalized snapshot includes:
+
+```json
+{
+  "current": {
+    "alerts": {
+      "active": true,
+      "ids": ["alert-id"]
+    }
+  }
+}
+```
+
+This is provider-specific optional data. It is available from
+`GET /api/v1/weather`, the base MQTT weather topic, and the MQTT `/current`
+topic. The IDs identify alerts active for the current record; alert detail
+lookup is not currently performed.
+
 OpenWeatherMap v3 remains the default while v4 output is compared on real
 servers.
 
@@ -226,7 +245,9 @@ GET /api/v1/weather
 
 The response uses the same payload as the base MQTT weather topic and includes
 `schema_version`. It provides `ETag` and `Last-Modified` validators. The
-endpoint returns `503` until a snapshot is available.
+endpoint returns `503` until a snapshot is available. Provider-specific
+optional fields are preserved; for example, OpenWeatherMap v4 active alert IDs
+are exposed under `current.alerts`.
 
 Generated display artifacts use named output profiles:
 
