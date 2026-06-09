@@ -6,7 +6,7 @@
   "data": [
     {
       "dt": 1781064000,
-      "temp": 294,
+      "temp": 30,
       "humidity": 70,
       "wind_speed": 3.0,
       "pop": 0.5,
@@ -15,30 +15,6 @@
           "icon": "11d"
         }
       ]
-    },
-    {
-      "dt": 1781067600,
-      "temp": 294,
-      "humidity": 71,
-      "wind_speed": 3.1,
-      "pop": 0.51,
-      "weather": [{"icon": "11d"}]
-    },
-    {
-      "dt": 1781071200,
-      "temp": 294,
-      "humidity": 72,
-      "wind_speed": 3.2,
-      "pop": 0.52,
-      "weather": [{"icon": "11d"}]
-    },
-    {
-      "dt": 1781074800,
-      "temp": 294,
-      "humidity": 73,
-      "wind_speed": 3.3,
-      "pop": 0.53,
-      "weather": [{"icon": "11d"}]
     }
   ]
 }
