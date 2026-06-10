@@ -19,13 +19,18 @@ on:
       - 'bin/generate_firmware_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
+  release:
+    types:
+      - published
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FIRMWARE_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
     steps:
       - name: Checkout repository
@@ -54,11 +59,11 @@ jobs:
         run: |
           # No CONFIG is supplied: release firmware remains the generic
           # SD-card-configured variant.
-          make firmware-compile
+          make firmware-compile FIRMWARE_VERSION="$FIRMWARE_VERSION"
 
       - name: Compile embedded-config firmware
         run: |
-          make firmware-compile CONFIG=firmware-config.example.yaml
+          make firmware-compile CONFIG=firmware-config.example.yaml FIRMWARE_VERSION="$FIRMWARE_VERSION"
 
       - name: Collect firmware binaries
         run: |
@@ -73,17 +78,27 @@ jobs:
           name: inkplate10-firmware
           path: firmware_binaries/*
 
-      - name: Commit and push firmware binaries
-        if: github.event_name == 'push'
+  publish-release:
+    if: github.event_name == 'release'
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: inkplate10-firmware
+          path: firmware_binaries
+
+      - name: Upload firmware release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add firmware_binaries/
-
-          if ! git diff-index --quiet HEAD; then
-            git commit -m "chore: update compiled Arduino firmware [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          else
-            echo "No changes to the firmware binaries detected."
-          fi
+          gh release upload \
+            "${{ github.event.release.tag_name }}" \
+            firmware_binaries/* \
+            --clobber \
+            --repo "${{ github.repository }}"
