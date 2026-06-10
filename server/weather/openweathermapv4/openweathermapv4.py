@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -38,9 +39,9 @@ class OpenWeatherMapv4Service(WeatherService):
             },
             "temperature": {
                 "unit": self._temperature_unit(),
-                "value": round(current["temp"]),
-                "min": round(daily["temp"]["min"]),
-                "max": round(daily["temp"]["max"]),
+                "value": round(self._temperature_value(current["temp"])),
+                "min": round(self._temperature_value(daily["temp"]["min"])),
+                "max": round(self._temperature_value(daily["temp"]["max"])),
             },
         }
 
@@ -77,7 +78,7 @@ class OpenWeatherMapv4Service(WeatherService):
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
                 "temperature": {
                     "unit": self._temperature_unit(),
-                    "value": round(entry["temp"]),
+                    "value": round(self._temperature_value(entry["temp"])),
                 },
                 "wind": {
                     "unit": "m/s" if self.units == "metric" else "mph",
@@ -107,7 +108,8 @@ class OpenWeatherMapv4Service(WeatherService):
                 data.get("timezone_offset", timezone_offset)
             )
             records.extend(data.get("data") or [])
-            url = data.get("next")
+            next_url = data.get("next")
+            url = self._url_with_units(next_url) if next_url else None
 
         if len(records) < required_records:
             raise ValueError(
@@ -116,6 +118,16 @@ class OpenWeatherMapv4Service(WeatherService):
             )
 
         return records, timezone_offset
+
+    def _url_with_units(self, url):
+        parts = urlsplit(url)
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if key != "units"
+        ]
+        query.append(("units", self.units))
+        return urlunsplit(parts._replace(query=urlencode(query)))
 
     def _get_location_coords(self, location):
         data = self._get_json(
@@ -159,3 +171,12 @@ class OpenWeatherMapv4Service(WeatherService):
             if self.units == "metric"
             else "\N{DEGREE SIGN}F"
         )
+
+    def _temperature_value(self, value):
+        if value < 170:
+            return value
+
+        celsius = value - 273.15
+        if self.units == "metric":
+            return celsius
+        return celsius * 9 / 5 + 32

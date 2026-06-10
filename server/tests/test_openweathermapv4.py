@@ -2,6 +2,7 @@ import json
 import pathlib
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 
@@ -61,7 +62,7 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             payload = fixture("daily.json")
         elif url.endswith("/data/4.0/onecall/timeline/1h"):
             payload = fixture("hourly-page-1.json")
-        elif url.endswith("timeline/1h?page=2"):
+        elif url.endswith("timeline/1h?page=2&units=metric"):
             payload = fixture("hourly-page-2.json")
         else:
             raise AssertionError(f"unexpected URL {url}")
@@ -132,11 +133,63 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             second_page_call,
             mock.call(
                 "https://api.openweathermap.org/data/4.0/onecall/"
-                "timeline/1h?page=2",
+                "timeline/1h?page=2&units=metric",
                 params=None,
                 timeout=20,
             ),
         )
+
+    def test_preserves_units_when_midnight_is_on_the_next_page(self):
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 10, 9, tzinfo=location_timezone)
+
+        def entry(hour_offset, temperature):
+            return {
+                "dt": int((start + timedelta(hours=hour_offset)).timestamp()),
+                "temp": temperature,
+                "humidity": 50,
+                "wind_speed": 1,
+                "pop": 0,
+                "weather": [{"icon": "01d"}],
+            }
+
+        first_page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 15 + offset) for offset in range(15)],
+            "next": (
+                "https://api.openweathermap.org/data/4.0/onecall/"
+                "timeline/1h?start=1781042400&appid=weather-key"
+            ),
+        }
+        second_page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 12 + offset - 15) for offset in range(15, 21)],
+        }
+
+        def request(url, params=None, timeout=None):
+            if url.endswith("/data/4.0/onecall/timeline/1h"):
+                return FakeResponse(first_page)
+            if url.endswith(
+                "timeline/1h?start=1781042400&appid=weather-key&units=metric"
+            ):
+                return FakeResponse(second_page)
+            raise AssertionError(f"unexpected URL {url}")
+
+        self.get.side_effect = request
+
+        forecasts = self.service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["9am", "12pm", "3pm", "6pm", "9pm", "12am"],
+        )
+        self.assertEqual(
+            [forecast["temperature"]["value"] for forecast in forecasts],
+            [15, 18, 21, 24, 27, 12],
+        )
+
+    def test_normalizes_kelvin_temperature_from_malformed_page(self):
+        self.assertEqual(self.service._temperature_value(285.15), 12)
 
     def test_closes_all_http_responses(self):
         self.service.get_daily_summary()
