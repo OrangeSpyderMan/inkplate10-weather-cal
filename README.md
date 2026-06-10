@@ -78,7 +78,13 @@ See the [server](/server) for more features.
 
 - **3000mAh LiPo battery pack ~€10**
 
-  Any Lithium-Ion/Polymer battery will do as long as they have a JST connector for hooking up to the Inkplate board. Some Inkplate 10's are sold with a 3000mAh battery which should give approximately 6 months of life. Here is [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf). See section on [power consumption](#power-consumption) for more info on real-world calculations.
+  Any Lithium-Ion/Polymer battery will do as long as it has a compatible JST
+  connector for the Inkplate board. A 3000mAh battery should provide battery
+  life measured in months, but actual runtime depends heavily on the refresh
+  interval, WiFi connection time and retries, battery condition, and
+  self-discharge. The client's typical deep-sleep and awake current figures are
+  listed under [Client features](#features). Here is
+  [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
 - **CR2032 3V coin cell ~€1**
 
