@@ -38,8 +38,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Arduino CLI
-        uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      - name: Install Arduino CLI
+        run: make firmware-install-cli
 
       - name: Cache Arduino packages and libraries
         uses: actions/cache@v5
