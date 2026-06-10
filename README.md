@@ -356,6 +356,7 @@ The following libraries should be installed in your Arduino IDE. They are availa
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)
 - [ezTime](https://github.com/ropg/ezTime)
+- [SdFat](https://github.com/greiman/SdFat)
 
 ## License
 
