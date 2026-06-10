@@ -7,6 +7,7 @@ on:
       - 'Makefile'
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
+      - 'bin/generate_firmware_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'Makefile'
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
+      - 'bin/generate_firmware_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
 
@@ -28,6 +30,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0

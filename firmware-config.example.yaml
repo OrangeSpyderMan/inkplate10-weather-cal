@@ -1,3 +1,6 @@
+display:
+  # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
+  rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
   refresh_interval: 3
@@ -11,6 +14,7 @@ ntp:
   timezone: Europe/Paris
 mqtt_logger:
   enabled: false
+  debug: false
   broker: <mqtt-broker-host>
   port: 1883
   clientId: inkplate10-weather-cal

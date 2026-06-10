@@ -1,0 +1,28 @@
+{
+  "lat": 45.572,
+  "lon": 6.739,
+  "timezone": "Europe/Paris",
+  "timezone_offset": 7200,
+  "data": [
+    {
+      "dt": 1781028000,
+      "temp": {
+        "day": 20.2,
+        "min": 9.6,
+        "max": 23.7,
+        "night": 12.1,
+        "eve": 18.4,
+        "morn": 10.3
+      },
+      "weather": [
+        {
+          "id": 801,
+          "main": "Clouds",
+          "description": "few clouds",
+          "icon": "02d"
+        }
+      ],
+      "pop": 0.15
+    }
+  ]
+}

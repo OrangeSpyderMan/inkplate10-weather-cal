@@ -1,0 +1,25 @@
+{
+  "lat": 45.572,
+  "lon": 6.739,
+  "timezone": "Europe/Paris",
+  "timezone_offset": 7200,
+  "data": [
+    {
+      "dt": 1780992000,
+      "temp": 16.4,
+      "humidity": 58,
+      "wind_speed": 2.3,
+      "alerts": [
+        "8B46C632-DCA7-44D7-8BDF-02445621BAFF"
+      ],
+      "weather": [
+        {
+          "id": 801,
+          "main": "Clouds",
+          "description": "few clouds",
+          "icon": "02d"
+        }
+      ]
+    }
+  ]
+}

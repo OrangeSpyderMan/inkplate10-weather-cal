@@ -41,6 +41,8 @@ Both a server and client are required. The main workload is on the server, which
   - approx 30 seconds awake time daily
 - Real-time clock is synchronized from NTP after wake.
 - Daylight savings time handled automatically.
+- Battery voltage is checked before WiFi starts; low readings are confirmed
+  before a refresh is skipped.
 - Can publish diagnostic logs to MQTT while retaining serial output.
 - Renders messages on the e-ink display for critical errors (eg. battery low, wifi connect timeout etc.).
 - Supports SD-card configuration or configuration embedded during compilation.
@@ -50,10 +52,13 @@ Both a server and client are required. The main workload is on the server, which
 1. Gets any relevant new data (ie. weather, maps).
 2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
 3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
-4. A [Flask](https://flask.palletsprojects.com/en/2.3.x/) server is then started to serve the generated PNG image to the client.
-5. (Optional) The server publishes weather snapshots and listens for Inkplate diagnostics over MQTT.
-6. Depending on configuration the server will either shutdown, run indefinitely, or shutdown after a certain number of times the image is served.
-7. A cronjob ensures the server is refreshed before the client's configured refresh interval elapses.
+4. A separate Gunicorn/Flask web process serves the generated PNG and weather
+   API from the shared artifact directory.
+5. (Optional) Separate server processes publish weather snapshots and listen
+   for Inkplate diagnostics over MQTT.
+6. The producer either refreshes indefinitely or generates one artifact set and
+   exits; web serving has an independent lifecycle.
+7. A cronjob can run the producer before the client's configured refresh interval elapses.
 
 #### Features:
 
@@ -73,7 +78,13 @@ See the [server](/server) for more features.
 
 - **3000mAh LiPo battery pack ~€10**
 
-  Any Lithium-Ion/Polymer battery will do as long as they have a JST connector for hooking up to the Inkplate board. Some Inkplate 10's are sold with a 3000mAh battery which should give approximately 6 months of life. Here is [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf). See section on [power consumption](#power-consumption) for more info on real-world calculations.
+  Any Lithium-Ion/Polymer battery will do as long as it has a compatible JST
+  connector for the Inkplate board. A 3000mAh battery should provide battery
+  life measured in months, but actual runtime depends heavily on the refresh
+  interval, WiFi connection time and retries, battery condition, and
+  self-discharge. The client's typical deep-sleep and awake current figures are
+  listed under [Client features](#features). Here is
+  [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
 - **CR2032 3V coin cell ~€1**
 
@@ -81,7 +92,7 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The server itself is lightweight with the only real work involved being Geckodriver generating a PNG image before serving it to the client. It can also be configured to auto-shutdown when it has successfully served the image to the client. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
+  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The producer does the heavier PNG rendering work while the Gunicorn web process remains available independently. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -92,6 +103,9 @@ See the [server](/server) for more features.
 The generic release firmware reads `config.yaml` from the root of an SD card:
 
 ```
+display:
+  # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
+  rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
   refresh_interval: 3
@@ -105,6 +119,7 @@ ntp:
   timezone: Europe/Dublin
 mqtt_logger:
   enabled: false
+  debug: false
   broker: <mqtt-broker-host>
   port: 1883
   clientId: inkplate10-weather-cal
@@ -114,12 +129,18 @@ mqtt_logger:
 
 Likely parameters you'll need to change are:
 
+- `display.rotation` - physical display orientation from `0` to `3`, in
+  clockwise 90-degree steps. It defaults to `1`, preserving the existing
+  Inkplate 10 portrait orientation. Use `3` for the opposite portrait
+  orientation when the enclosure is mounted upside down relative to that
+  default.
 - `wifi.ssid` - the SSID of your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
+- `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.
 
 See the [server](/server) for info on server setup.
 
@@ -128,6 +149,26 @@ viewer at `http://<server-host>:8080/app`. Use `server.alwayson: true` for this
 mode so the server keeps refreshing and serving the PNG continuously. The
 browser viewer uses a separate inline image route and does not interfere with
 the Inkplate client's `/calendar.png` download route.
+
+The server also exposes versioned data and output endpoints:
+
+```text
+/api/v1/weather
+/api/v1/health
+/api/v1/ready
+/outputs/inkplate10-portrait/calendar.png
+```
+
+`/calendar.png` remains available as a compatibility alias for existing
+Inkplate firmware.
+
+Named outputs are profile-driven. Additional display sizes and renderer
+implementations can be enabled as separate profiles while `/calendar.png`
+continues to serve the configured default.
+
+The server supports AccuWeather and OpenWeatherMap One Call 3.0. One Call 4.0
+is also available as the opt-in `openweathermapv4` provider; it requires
+OpenWeather's separate One Call by Call subscription.
 
 ## MQTT
 
@@ -143,8 +184,8 @@ and example clients such as the
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
-either Docker Compose from this checkout or a native systemd service under
-`/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
+either Docker Compose from this checkout or native producer and web systemd
+services under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
 
 Run it from the repository root:
 
@@ -191,7 +232,7 @@ For troubleshooting:
 
 ```bash
 docker compose logs -f
-sudo journalctl -u inkplate -f
+sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
 If Docker reports socket permission errors after adding a user to the `docker`
@@ -230,6 +271,18 @@ Compile the firmware:
 make firmware-compile
 ```
 
+The build embeds a firmware identity based on the repository's highest release
+tag. Exact tagged builds use the release tag; development builds append the
+short commit SHA, for example `v3.0.1+g0b15863`. Dirty local builds also include
+`.dirty`. Override the detected identity when packaging a specific build:
+
+```bash
+make firmware-compile FIRMWARE_VERSION=v3.1.0
+```
+
+The version is printed in serial boot diagnostics and included in the MQTT
+`WAKE` event.
+
 This is the generic build used by CI and release binaries. It expects
 `/config.yaml` on an SD card but renders the calendar image directly from HTTP.
 
@@ -244,10 +297,17 @@ The generated header and build output stay under ignored `build/` paths. The
 resulting binary contains the WiFi password and any MQTT details in recoverable
 form, so do not publish it.
 
-To clean build artifacts and local libraries:
+To clean generated firmware and embedded configuration artifacts:
 
 ```bash
 make firmware-clean
+```
+
+The locally installed Arduino libraries are preserved. To remove those
+dependencies as well:
+
+```bash
+make firmware-distclean
 ```
 
 Upload to a connected Inkplate 10:
@@ -292,11 +352,11 @@ The following libraries should be installed in your Arduino IDE. They are availa
 
 - [InkplateLibrary](https://github.com/SolderedElectronics/Inkplate-Arduino-library)
 - [ArduinoJson](https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
-- [MQTTLogger](https://github.com/androbi-com/MqttLogger)
 - [Queue](https://github.com/SMFSW/Queue)
 - [StreamUtils](https://github.com/bblanchon/ArduinoStreamUtils)
 - [YAMLDuino](https://github.com/tobozo/YAMLDuino)
 - [ezTime](https://github.com/ropg/ezTime)
+- [SdFat](https://github.com/greiman/SdFat)
 
 ## License
 

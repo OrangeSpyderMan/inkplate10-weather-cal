@@ -1,5 +1,5 @@
 [Unit]
-Description=Inkplate weather calendar web service
+Description=Inkplate MQTT diagnostic listener
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=60
@@ -11,10 +11,11 @@ User=inkplate
 Group=inkplate
 WorkingDirectory=/srv/inkplate
 EnvironmentFile=/etc/inkplate/weather.env
+Environment=INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 ExecStartPre=/usr/bin/test -x /srv/inkplate/inkplate_venv/bin/python3
 ExecStartPre=/usr/bin/test -d /srv/inkplate
 ExecStartPre=/usr/bin/test -f /etc/inkplate/weather.env
-ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/web_server.py
+ExecStart=/srv/inkplate/inkplate_venv/bin/python3 /srv/inkplate/server/mqtt_diagnostics_server.py
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
@@ -22,7 +23,6 @@ StandardOutput=journal
 StandardError=journal
 UMask=0077
 
-# Security hardening - adjust if your service needs broader access
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -36,7 +36,6 @@ RestrictSUIDSGID=true
 LockPersonality=true
 SystemCallArchitectures=native
 
-# Resource limits (tweak as needed)
 LimitNOFILE=4096
 LimitNPROC=512
 

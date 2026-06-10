@@ -29,8 +29,8 @@ void setup()
     Serial.begin(115200);
     // Init inkplate board.
     board.begin();
-    // Set board to portait mode.
-    board.setRotation(1);
+    // Keep startup/configuration errors readable for existing installations.
+    board.setRotation(CONFIG_DEFAULT_DISPLAY_ROTATION);
 
     // Set clock from RTC
     board.rtc.getRtcData();
@@ -38,24 +38,31 @@ void setup()
     setTime(bootTime);
 
     logf(LOG_DEBUG, "boot time: %s", dateTime(bootTime, RFC3339).c_str());
+    logf(LOG_DEBUG, "firmware version: %s", FIRMWARE_VERSION);
 
+    const char *wakeCause = "reset";
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     switch (wakeup_reason)
     {
     case ESP_SLEEP_WAKEUP_EXT0:
+        wakeCause = "rtc_io";
         logf(LOG_DEBUG, "wakeup caused by external signal using RTC_IO.");
         board.rtc.clearAlarmFlag();
         break;
     case ESP_SLEEP_WAKEUP_EXT1:
+        wakeCause = "rtc_control";
         logf(LOG_DEBUG, "wakeup caused by external signal using RTC_CNTL.");
         break;
     case ESP_SLEEP_WAKEUP_TIMER:
+        wakeCause = "timer";
         logf(LOG_DEBUG, "wakeup caused by timer.");
         break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        wakeCause = "touchpad";
         logf(LOG_DEBUG, "wakeup caused by touchpad.");
         break;
     case ESP_SLEEP_WAKEUP_ULP:
+        wakeCause = "ulp";
         logf(LOG_DEBUG, "wakeup caused by ULP program.");
         break;
     default:
@@ -109,6 +116,15 @@ void setup()
     board.sdCardSleep();
 #endif
 
+    JsonObject displayCfg = doc["display"];
+    int displayRotation =
+        displayCfg["rotation"] | CONFIG_DEFAULT_DISPLAY_ROTATION;
+    if (displayRotation < 0 || displayRotation > 3)
+    {
+        failConfig("Invalid display.rotation");
+    }
+    board.setRotation(displayRotation);
+
     // Assign config values.
     JsonObject calendarCfg = doc["calendar"];
     const char *calendarUrl = calendarCfg["url"];
@@ -134,6 +150,7 @@ void setup()
     const char *mqttLoggerClientID = mqttLoggerCfg["clientId"];
     const char *mqttLoggerTopic = mqttLoggerCfg["topic"];
     int mqttLoggerRetries = mqttLoggerCfg["retries"] | 3;
+    mqttDebugEnabled = mqttLoggerCfg["debug"] | false;
 
     if (isMissingConfigValue(calendarUrl))
     {
@@ -187,6 +204,40 @@ void setup()
         }
     }
 
+    logTagged(
+        LOG_INFO, "WAKE", "cause=%s firmware=%s",
+        wakeCause, FIRMWARE_VERSION);
+
+    // Check the battery before starting the radio or other network work.
+    float bvolt = readBatteryVoltage();
+    if (bvolt <= 0.0F)
+    {
+        log(LOG_WARNING, "battery voltage reading is invalid");
+    }
+    else
+    {
+        logTagged(LOG_INFO, "BATTERY", "voltage=%.2fV", bvolt);
+        if (bvolt < BATTERY_CRITICAL_VOLTAGE)
+        {
+            log(LOG_NOTICE, "battery critical; skipping network refresh");
+            if (!batteryLowWarningDisplayed)
+            {
+                displayError(
+                    "Battery low",
+                    "Battery empty, please charge!",
+                    batteryDiagnostics(bvolt));
+                batteryLowWarningDisplayed = true;
+            }
+            sleep(calendarRefreshInterval);
+        }
+
+        batteryLowWarningDisplayed = false;
+        if (bvolt < BATTERY_WARNING_VOLTAGE)
+        {
+            log(LOG_WARNING, "battery low, charge soon");
+        }
+    }
+
     // Attempt to connect to WiFi.
     err = configureWiFi(wifiSSID, wifiPass, wifiRetries);
     if (err == ESP_ERR_TIMEOUT)
@@ -204,7 +255,7 @@ void setup()
     {
         err = configureMQTT(mqttLoggerBroker, mqttLoggerPort, mqttLoggerTopic,
                             mqttLoggerClientID, mqttLoggerRetries);
-        if (err == ESP_ERR_TIMEOUT)
+        if (err != ESP_OK)
         {
             log(LOG_WARNING,
                 "failed to connect remote diagnostics, fallback to serial");
@@ -230,37 +281,6 @@ void setup()
     {
         logf(LOG_INFO, "last sleep time: %s",
              dateTime(lastSleepTime, RFC3339).c_str());
-    }
-
-    // Read battery voltage.
-    float bvolt = board.readBattery();
-    logf(LOG_INFO, "battery voltage: %sv", String(bvolt, 2).c_str());
-
-    if (bvolt > 0.0)
-    {
-        if (bvolt < 3.1)
-        {
-            log(LOG_NOTICE, "battery near empty! - sleeping until charged");
-            displayError(
-                "Battery low",
-                "Battery empty, please charge!",
-                batteryDiagnostics(bvolt));
-            // Sleep instead of proceeding when battery is too low.
-            sleep(calendarRefreshInterval);
-        }
-        else if (bvolt < 3.3)
-        {
-            log(LOG_WARNING, "battery low, charge soon!");
-        }
-        else
-        {
-            const char *bstat = (bvolt < 3.6) ? "below" : "above";
-            logf(LOG_INFO, "battery approx %s 50%% capacity", bstat);
-        }
-    }
-    else
-    {
-        log(LOG_WARNING, "problem detecting battery voltage");
     }
 
     // Reset err state.

@@ -47,6 +47,7 @@ Enable diagnostic publishing in the Inkplate configuration, either the SD-card
 ```yaml
 mqtt_logger:
   enabled: true
+  debug: false
   broker: mqtt.example.net
   port: 1883
   clientId: inkplate10-weather-cal
@@ -56,6 +57,23 @@ mqtt_logger:
 
 Diagnostic messages are not retained. If the broker cannot be reached, the
 firmware continues with serial-only logging.
+
+`mqtt_logger.debug` defaults to `false`. Normal MQTT output contains the tagged
+`WAKE`, `BATTERY`, and `REFRESH` lifecycle events, plus all warnings and errors.
+For example:
+
+```text
+2026-06-08T17:14:38+02:00 - WAKE - cause=timer firmware=v3.1.0
+2026-06-08T17:14:38+02:00 - BATTERY - voltage=4.26V
+2026-06-08T17:14:45+02:00 - REFRESH - status=ready
+```
+
+`REFRESH status=ready` means that the image has been downloaded and decoded.
+The firmware then acknowledges outstanding MQTT messages and turns off the
+network before driving the e-paper panel.
+
+Set `debug: true` to also publish detailed connection, timing, retry, and sleep
+messages. Serial logging remains verbose in both modes.
 
 ## Example Broker
 
@@ -168,11 +186,16 @@ Full snapshot:
 
 ```json
 {
+  "schema_version": "1.0",
   "generated_at": "2026-06-04T09:00:00+00:00",
   "source": "openweathermapv3",
   "units": "metric",
   "current": {
     "icon": "icon/cloudy.png",
+    "alerts": {
+      "active": true,
+      "ids": ["alert-id"]
+    },
     "temperature": {
       "unit": "\u00b0C",
       "value": 11,
@@ -196,12 +219,18 @@ Full snapshot:
 
 The exact weather fields can vary slightly by provider, but `current`,
 `hourly`, `temperature`, `icon`, and `rain_probability` are the fields intended
-for lightweight display clients.
+for lightweight display clients. With OpenWeatherMap v4, `current.alerts` is
+also present. Its `active` value indicates whether the current record contains
+alert IDs, and `ids` contains those OpenWeather alert identifiers. Other
+providers may omit this field.
+
+The same canonical payload is available over HTTP at `/api/v1/weather`.
 
 ### `inkplate/weather-calendar/current`
 
 Current conditions only. This is the simplest topic for character LCDs or
-single-screen microcontroller displays.
+single-screen microcontroller displays. For OpenWeatherMap v4 this includes the
+optional `alerts` object described above.
 
 ### `inkplate/weather-calendar/hourly`
 

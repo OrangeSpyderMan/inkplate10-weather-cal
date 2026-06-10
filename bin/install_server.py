@@ -27,6 +27,10 @@ INSTALL_DIR = Path("/srv/inkplate")
 VENV_DIR = INSTALL_DIR / "inkplate_venv"
 NATIVE_ENV_FILE = Path("/etc/inkplate/weather.env")
 SERVICE_FILE = Path("/etc/systemd/system/inkplate.service")
+PRODUCER_SERVICE_FILE = Path("/etc/systemd/system/inkplate-producer.service")
+DIAGNOSTICS_SERVICE_FILE = Path(
+    "/etc/systemd/system/inkplate-diagnostics.service"
+)
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
 LEGACY_SERVER_CONFIG = Path("server/config.yaml")
@@ -122,9 +126,12 @@ def configure_answers(path: Path | None, non_interactive: bool) -> None:
 def ensure_repo_root(repo_root: Path) -> None:
     required = [
         repo_root / "server" / "server.py",
+        repo_root / "server" / "web_server.py",
         repo_root / "server" / "requirements.txt",
         repo_root / "docker-compose.yml",
         repo_root / "bin" / "inkplate.service",
+        repo_root / "bin" / "inkplate-producer.service",
+        repo_root / "bin" / "inkplate-diagnostics.service",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -177,7 +184,13 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
     existing = [
         path
-        for path in (INSTALL_DIR, NATIVE_ENV_FILE, SERVICE_FILE)
+        for path in (
+            INSTALL_DIR,
+            NATIVE_ENV_FILE,
+            SERVICE_FILE,
+            PRODUCER_SERVICE_FILE,
+            DIAGNOSTICS_SERVICE_FILE,
+        )
         if path.exists()
     ]
     action = choose_existing_action("systemd", existing)
@@ -222,13 +235,68 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             sudo=True,
             dry_run=dry_run,
         )
+        run(
+            [
+                "bin/install_service",
+                "--unit-file",
+                "bin/inkplate-producer.service",
+                "--service-name",
+                "inkplate-producer",
+                "--no-start",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
+        run(
+            [
+                "bin/install_service",
+                "--unit-file",
+                "bin/inkplate-diagnostics.service",
+                "--service-name",
+                "inkplate-diagnostics",
+                "--no-start",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
 
-    if prompt_yes_no("Start or restart the systemd service now?", default=True, key="start_now"):
-        run(["systemctl", "restart", "inkplate"], sudo=True, dry_run=dry_run)
-        run(["systemctl", "status", "inkplate", "--no-pager", "-l"], sudo=True, dry_run=dry_run, check=False)
-        print("Logs: sudo journalctl -u inkplate -f")
+    if prompt_yes_no("Start or restart the systemd services now?", default=True, key="start_now"):
+        run(
+            [
+                "systemctl",
+                "restart",
+                "inkplate-producer",
+                "inkplate",
+                "inkplate-diagnostics",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
+        if action in ("fresh", "update"):
+            remove_legacy_application_logs(dry_run)
+        run(
+            [
+                "systemctl",
+                "status",
+                "inkplate-producer",
+                "inkplate",
+                "inkplate-diagnostics",
+                "--no-pager",
+                "-l",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+            check=False,
+        )
+        print(
+            "Logs: sudo journalctl -u inkplate-producer -u inkplate "
+            "-u inkplate-diagnostics -f"
+        )
     else:
-        print("Start later with: sudo systemctl start inkplate")
+        print(
+            "Start later with: sudo systemctl start inkplate-producer "
+            "inkplate inkplate-diagnostics"
+        )
 
 
 def existing_config_path(base_dir: Path) -> Path:
@@ -288,6 +356,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     answers["weather_service"] = prompt_choice(
         "Weather provider",
         [
+            ("openweathermapv4", "OpenWeatherMap One Call 4.0"),
             ("openweathermapv3", "OpenWeatherMap One Call 3.0"),
             ("accuweather", "AccuWeather"),
         ],
@@ -436,9 +505,15 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  apikey: ${GOOGLE_API_KEY}",
         "  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}",
         f"location: {answers['location']}",
-        "image:",
-        f"  width: {DEFAULT_IMAGE_WIDTH}",
-        f"  height: {DEFAULT_IMAGE_HEIGHT}",
+        "outputs:",
+        "  default: inkplate10-portrait",
+        "  profiles:",
+        "    inkplate10-portrait:",
+        "      enabled: true",
+        "      renderer: firefox",
+        f"      width: {DEFAULT_IMAGE_WIDTH}",
+        f"      height: {DEFAULT_IMAGE_HEIGHT}",
+        "      filename: calendar.png",
         "mqtt:",
         "  weather:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",
@@ -655,6 +730,24 @@ def refresh_dependencies(dry_run: bool) -> None:
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
 
 
+def remove_legacy_application_logs(dry_run: bool) -> None:
+    run(
+        [
+            "find",
+            str(INSTALL_DIR),
+            "-maxdepth",
+            "1",
+            "-type",
+            "f",
+            "-name",
+            "eink-cal-server.log*",
+            "-delete",
+        ],
+        sudo=True,
+        dry_run=dry_run,
+    )
+
+
 def install_copy_ignore(repo_root: Path):
     base_ignore = shutil.ignore_patterns(
         ".git",
@@ -668,8 +761,6 @@ def install_copy_ignore(repo_root: Path):
         "__pycache__",
         "*.pyc",
         "*.log",
-        "*.png",
-        "*.bmp",
         "netatmo-token.json",
     )
 
@@ -683,6 +774,10 @@ def install_copy_ignore(repo_root: Path):
             ignored.add("config.yaml")
         if relative == Path("server/config"):
             ignored.add("config.yaml")
+        if relative == Path("server/views"):
+            ignored.update({"calendar.png", "calendar.bmp"})
+        if relative == Path("server/views/html"):
+            ignored.update({"calendar.html", "map.png", "map.bmp"})
         return ignored
 
     return ignore

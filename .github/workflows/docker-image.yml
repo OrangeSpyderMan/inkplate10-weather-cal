@@ -6,7 +6,9 @@ permissions:
 on:
   push:
     paths:
+      - 'bin/install_server.py'
       - 'server/**'
+      - 'tests/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
@@ -14,7 +16,9 @@ on:
       - '.github/workflows/docker-image.yml'
   pull_request:
     paths:
+      - 'bin/install_server.py'
       - 'server/**'
+      - 'tests/**'
       - 'Dockerfile'
       - 'docker-compose.yml'
       - '.dockerignore'
@@ -28,6 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Test installer helpers
+        run: python3 -m unittest discover -s tests -v
+
       - name: Validate Docker Compose config
         env:
           WEATHER_API_KEY: dummy-weather-key
@@ -40,14 +47,87 @@ jobs:
 
       - name: Smoke test Docker image
         run: |
+          test "$(docker image inspect inkplate10-weather-cal:ci \
+            --format '{{json .Config.Cmd}}')" = \
+            '["/srv/inkplate/server/container_entrypoint.py"]'
           docker run --rm inkplate10-weather-cal:ci geckodriver --version
           docker run --rm inkplate10-weather-cal:ci firefox --version
           docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
             server/server.py \
+            server/web.py \
+            server/web_server.py \
+            server/mqtt_diagnostics_server.py \
+            server/container_entrypoint.py \
+            server/configuration.py \
+            server/artifacts.py \
+            server/output_profiles.py \
+            server/renderers.py \
             server/mqtt_diagnostics.py \
             server/mqtt_publisher.py \
             server/utils.py \
+            server/weather/openweathermapv4/openweathermapv4.py \
             server/views/page.py \
             server/views/calendar.py
           docker run --rm inkplate10-weather-cal:ci \
             python3 -m unittest discover -s server/tests -v
+
+      - name: Smoke test Gunicorn web service
+        run: |
+          mkdir -p "$RUNNER_TEMP/inkplate-data"
+          cat > "$RUNNER_TEMP/inkplate-config.yaml" <<'EOF'
+          server:
+            enabled: true
+            port: 8080
+          EOF
+          cat > "$RUNNER_TEMP/inkplate-data/weather.json" <<'EOF'
+          {"schema_version":"1.0","generated_at":"2026-06-09T00:00:00+00:00","current":{},"hourly":[]}
+          EOF
+          mkdir -p "$RUNNER_TEMP/inkplate-data/outputs/inkplate10-portrait"
+          printf '\211PNG\r\n\032\n' > "$RUNNER_TEMP/inkplate-data/outputs/inkplate10-portrait/calendar.png"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "inkplate-data"
+
+          def artifact(path):
+              stat = path.stat()
+              return {
+                  "path": str(path.relative_to(root)),
+                  "signature": {
+                      "mtime_ns": stat.st_mtime_ns,
+                      "size": stat.st_size,
+                  },
+              }
+
+          ready = {
+              "generated_at": "2026-06-09T00:00:00+00:00",
+              "snapshot": artifact(root / "weather.json"),
+              "outputs": {
+                  "inkplate10-portrait": artifact(
+                      root / "outputs/inkplate10-portrait/calendar.png"
+                  )
+              },
+          }
+          (root / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+          PY
+          docker run --rm -d --name inkplate-web-ci \
+            -p 18080:8080 \
+            -e INKPLATE_CONFIG_FILE=/config.yaml \
+            -v "$RUNNER_TEMP/inkplate-config.yaml:/config.yaml:ro" \
+            -v "$RUNNER_TEMP/inkplate-data:/srv/inkplate/server/data:ro" \
+            inkplate10-weather-cal:ci \
+            python3 server/web_server.py
+          trap 'docker rm -f inkplate-web-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/api/v1/ready >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:18080/api/v1/health
+          curl --fail http://127.0.0.1:18080/api/v1/ready
+          curl --fail http://127.0.0.1:18080/api/v1/weather
+          curl --fail http://127.0.0.1:18080/outputs/inkplate10-portrait/calendar.png
+          curl --fail http://127.0.0.1:18080/calendar.png

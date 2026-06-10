@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-ARG GECKOVERSION=v0.36.0
+ARG GECKOVERSION=v0.37.0
 ARG TARGETPLATFORM
 ARG USERNAME=inkplate
 ARG HOMEDIR=/srv/inkplate
@@ -54,12 +54,14 @@ RUN pip install --upgrade pip setuptools wheel \
 
 COPY --chown=${USERNAME}:${USERNAME} ./server ${HOMEDIR}/server
 RUN mkdir -p ${HOMEDIR}/server/config ${HOMEDIR}/server/data \
+    && chmod 0755 ${HOMEDIR}/server/container_entrypoint.py \
     && chown -R ${USERNAME}:${USERNAME} ${HOMEDIR}/server
 
 USER ${USERNAME}
 
 ENV GECKODRIVER_PATH=/usr/local/bin/geckodriver
+ENV INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 
 EXPOSE 8080
 
-CMD ["python3", "server/server.py"]
+CMD ["/srv/inkplate/server/container_entrypoint.py"]

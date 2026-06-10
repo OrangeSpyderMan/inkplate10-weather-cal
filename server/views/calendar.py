@@ -7,8 +7,9 @@ class CalendarPage(Page):
         self,
         width,
         height,
+        output_path=None,
     ):
-        super().__init__("calendar", width, height)
+        super().__init__("calendar", width, height, output_path=output_path)
 
     def template(
         self,
@@ -101,6 +102,12 @@ class CalendarPage(Page):
 
                         with a.div(id="icon-container", klass="numcircle"):
                             a.img(src=daily_summary["icon"])
+                            if daily_summary.get("alerts", {}).get("active"):
+                                with a.div(
+                                    id="weather-alert",
+                                    title="Active weather alert",
+                                ):
+                                    a.span(_t="!")
 
                 with a.div(id="map-container"):
                     a.img(src=map_url, id="map")

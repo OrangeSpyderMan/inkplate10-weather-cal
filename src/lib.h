@@ -6,9 +6,14 @@
 #include <cppQueue.h>
 #include <driver/rtc_io.h>
 #include <ezTime.h>
+#include <mqtt_client.h>
 #include <rom/rtc.h>
 
-#include "MqttLogger.h"
+#if __has_include("firmware_version.h")
+#include "firmware_version.h"
+#else
+#define FIRMWARE_VERSION "unversioned"
+#endif
 
 #define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
@@ -19,6 +24,8 @@
 #define LOG_QUEUE_MAX_ENTRIES 10
 // log message maximum length
 #define LOG_MSG_MAX_LEN 128
+// Maximum time to wait for QoS 1 MQTT acknowledgements before sleeping.
+#define MQTT_ACK_TIMEOUT_MS 1500
 // The file path on SD card to load config.
 #define CONFIG_FILE_PATH "/config.yaml"
 #if defined(EMBEDDED_CONFIG)
@@ -28,6 +35,14 @@
 #endif
 // Fallback time to refresh.
 #define CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL 3
+// Preserve the original Inkplate 10 portrait orientation when unspecified.
+#define CONFIG_DEFAULT_DISPLAY_ROTATION 1
+// Battery voltage thresholds for a single-cell LiPo.
+#define BATTERY_VALID_MIN_VOLTAGE 2.5F
+#define BATTERY_VALID_MAX_VOLTAGE 4.4F
+#define BATTERY_CRITICAL_VOLTAGE 3.1F
+#define BATTERY_WARNING_VOLTAGE 3.3F
+#define BATTERY_CONFIRMATION_SAMPLES 5
 
 // Enum of errors that might be encountered.
 #define ESP_ERR_ERRNO_BASE (0)
@@ -51,8 +66,10 @@
 extern RTC_DATA_ATTR time_t lastBootTime;
 // RTC epoch of the last time deep sleep was initiated.
 extern RTC_DATA_ATTR time_t lastSleepTime;
-// The remote logging instance.
-extern MqttLogger mqttLogger;
+// Whether the retained e-ink display already shows the critical battery warning.
+extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
+// Whether routine debug and informational messages should be sent over MQTT.
+extern bool mqttDebugEnabled;
 // The log message queue.
 extern cppQueue logQ;
 // The Inkplate board driver instance.
@@ -82,6 +99,19 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
   - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
 esp_err_t displayImage(const char *url);
+
+/**
+  Stop MQTT and WiFi after delivering any outstanding diagnostics.
+*/
+void shutdownNetwork();
+
+/**
+  Read the battery voltage. Normal readings use one sample; low readings are
+  confirmed with a median of multiple samples.
+
+  @returns the measured battery voltage, or 0 if the reading is implausible.
+*/
+float readBatteryVoltage();
 
 /**
   Draw a high-contrast error screen to the display.
@@ -161,6 +191,16 @@ void log(uint16_t pri, const char *msg);
 void logf(uint16_t pri, const char *fmt, ...);
 
 /**
+  Log an event with a stable tag. Tagged events are always sent over MQTT when
+  remote diagnostics are enabled.
+
+  @param pri the log level / priority of the message.
+  @param tag stable event tag such as WAKE, BATTERY, or REFRESH.
+  @param fmt the event detail format.
+*/
+void logTagged(uint16_t pri, const char *tag, const char *fmt, ...);
+
+/**
   Converts a priority into a log level prefix.
 
   @param pri the log level / priority of the message, see LOG_LEVEL.
@@ -169,10 +209,12 @@ void logf(uint16_t pri, const char *fmt, ...);
 String msgPrefix(uint16_t pri);
 
 /**
-  Queue or publish a diagnostic log message based on MQTT connection state.
+  Write a diagnostic message to serial and optionally queue or publish it over
+  MQTT.
 
   @param msg the log message
+  @param mqttEligible whether the message should be sent over MQTT
 */
-void ensureQueue(const char *msg);
+void ensureQueue(const char *msg, bool mqttEligible);
 
 #endif

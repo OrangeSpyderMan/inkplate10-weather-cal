@@ -19,6 +19,7 @@ class WeatherSnapshot:
 
     def to_payload(self):
         return {
+            "schema_version": "1.0",
             "generated_at": self.generated_at.isoformat(),
             "source": self.weather_source,
             "units": "metric" if self.metric else "imperial",

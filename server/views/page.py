@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 
 from time import sleep
 from airium import Airium
@@ -14,10 +15,12 @@ class Page:
         name,
         width,
         height,
+        output_path=None,
     ):
         self.name = name
         self.image_width = width
         self.image_height = height
+        self.output_path = Path(output_path) if output_path else None
         self.log = logging.getLogger(self.name)
 
         self.airium = Airium()
@@ -32,7 +35,11 @@ class Page:
     def save(self):
         cwd = os.path.dirname(os.path.realpath(__file__))
         html_fp = os.path.join(cwd, "html", self.name + ".html")
-        png_fp = os.path.join(cwd, self.name + ".png")
+        png_fp = self.output_path or Path(cwd, self.name + ".png")
+        png_fp.parent.mkdir(parents=True, exist_ok=True)
+        temporary_png_fp = png_fp.with_name(
+            f".{png_fp.stem}.tmp{png_fp.suffix}"
+        )
 
         with open(html_fp, "wb") as f:
             f.write(bytes(self.airium))
@@ -52,13 +59,19 @@ class Page:
             self._resize_viewport(driver)
             sleep(2)  # Wait for the page to load completely
             self._resize_viewport(driver)
-            driver.save_screenshot(png_fp)
+            if not driver.save_screenshot(str(temporary_png_fp)):
+                raise RuntimeError("WebDriver did not save the screenshot")
+            os.replace(temporary_png_fp, png_fp)
             self.log.info("Screenshot captured and saved to file.")
         except Exception as e:
             self.log.error("Screenshot failed to capture. Error: " + str(e))
             raise
         finally:
             driver.quit()
+            try:
+                temporary_png_fp.unlink()
+            except FileNotFoundError:
+                pass
 
     def _resize_viewport(self, driver):
         viewport = driver.execute_script(

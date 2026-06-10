@@ -6,24 +6,30 @@ export ARDUINO_DIRECTORIES_USER := $(CURDIR)/$(FIRMWARE_SKETCHBOOK_DIR)
 FIRMWARE_FQBN ?= Inkplate_Boards:esp32:Inkplate10V2
 FIRMWARE_CORE ?= Inkplate_Boards:esp32@8.1.0
 FIRMWARE_BOARD_URL ?= https://github.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
-FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson MQTTLogger Queue StreamUtils YAMLDuino ezTime SdFat
+FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson Queue StreamUtils YAMLDuino ezTime SdFat
 FIRMWARE_UPLOAD_SPEED ?= 115200
+FIRMWARE_VERSION ?=
+FIRMWARE_VERSION_DIR := build/firmware-version
+FIRMWARE_VERSION_HEADER := $(FIRMWARE_VERSION_DIR)/firmware_version.h
+FIRMWARE_COMMON_BUILD_FLAGS := -I$(abspath $(FIRMWARE_VERSION_DIR))
 
 ifeq ($(strip $(CONFIG)),)
 FIRMWARE_CONFIG_MODE := sd
 FIRMWARE_BUILD_DIR ?= build/arduino-sd
 FIRMWARE_CONFIG_DEPS :=
-FIRMWARE_BUILD_PROPERTIES :=
+FIRMWARE_MODE_BUILD_FLAGS :=
 else
 FIRMWARE_CONFIG_MODE := embedded
 FIRMWARE_BUILD_DIR ?= build/arduino-embedded
 FIRMWARE_GENERATED_DIR := build/firmware-config
 FIRMWARE_GENERATED_HEADER := $(FIRMWARE_GENERATED_DIR)/embedded_config.h
 FIRMWARE_CONFIG_DEPS := firmware-generate-config
-FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=-DEMBEDDED_CONFIG -I$(abspath $(FIRMWARE_GENERATED_DIR))"
+FIRMWARE_MODE_BUILD_FLAGS := -DEMBEDDED_CONFIG -I$(abspath $(FIRMWARE_GENERATED_DIR))
 endif
 
-.PHONY: firmware-install-cli firmware-setup firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-board-list
+FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=$(FIRMWARE_COMMON_BUILD_FLAGS) $(FIRMWARE_MODE_BUILD_FLAGS)"
+
+.PHONY: firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
 
 firmware-install-cli:
 	bash bin/install_arduino_cli.sh
@@ -35,12 +41,15 @@ firmware-setup:
 		$(ARDUINO_CLI) lib install "$$lib"; \
 	done
 
+firmware-generate-version:
+	python3 bin/generate_firmware_version.py "$(FIRMWARE_VERSION_HEADER)" "$(FIRMWARE_VERSION)"
+
 ifneq ($(strip $(CONFIG)),)
 firmware-generate-config:
 	python3 bin/generate_firmware_config.py "$(CONFIG)" "$(FIRMWARE_GENERATED_HEADER)"
 endif
 
-firmware-compile: $(FIRMWARE_CONFIG_DEPS)
+firmware-compile: firmware-generate-version $(FIRMWARE_CONFIG_DEPS)
 	@echo "Compiling $(FIRMWARE_CONFIG_MODE) firmware"
 	$(ARDUINO_CLI) compile \
 		--fqbn $(FIRMWARE_FQBN) \
@@ -60,7 +69,10 @@ endif
 		$(FIRMWARE_SKETCH)
 
 firmware-clean:
-	rm -rf build/arduino-sd build/arduino-embedded build/firmware-config $(FIRMWARE_SKETCHBOOK_DIR)
+	rm -rf build/arduino-sd build/arduino-embedded build/firmware-config $(FIRMWARE_VERSION_DIR)
+
+firmware-distclean: firmware-clean
+	rm -rf $(FIRMWARE_SKETCHBOOK_DIR)
 
 firmware-board-list:
 	$(ARDUINO_CLI) board list
