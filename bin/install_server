@@ -23,6 +23,10 @@ Usage:
 Useful first run:
   ./bin/install_server --dry-run
 
+Remote deployment:
+  ./bin/install_remote HOST --mode proxmox
+  ./bin/install_remote HOST --mode systemd
+
 Run this command from the repository root.
 EOF
 }

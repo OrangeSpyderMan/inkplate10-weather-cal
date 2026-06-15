@@ -261,6 +261,20 @@ The Proxmox option directs you to the dedicated fresh-install-only preview:
 sudo ./bin/install_proxmox --dry-run
 ```
 
+To deploy from this checkout to another machine over SSH, use the remote
+wrapper. It currently supports Proxmox and systemd targets:
+
+```bash
+./bin/install_remote root@pve1 --mode proxmox
+./bin/install_remote admin@server1 --mode systemd
+```
+
+The wrapper uploads only Git-tracked files plus an explicitly supplied answers
+file, runs the normal installer on the target, and removes its temporary remote
+workspace after success. It preserves the workspace after a failure and prints
+its location for diagnosis. `--dry-run` previews locally without connecting;
+`--remote-dry-run` connects and runs the selected installer's own dry-run.
+
 For troubleshooting:
 
 ```bash

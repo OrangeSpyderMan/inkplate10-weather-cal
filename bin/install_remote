@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ ! -f "bin/install_remote.py" ] || [ ! -f "bin/install_server.py" ]; then
+  echo "ERROR: run this installer from the repository root." >&2
+  exit 1
+fi
+
+exec python3 bin/install_remote.py "$@"

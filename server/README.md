@@ -78,6 +78,36 @@ Use dry-run mode to preview actions:
 ./bin/install_server --dry-run
 ```
 
+### Remote installation
+
+`bin/install_remote` can run the Proxmox or systemd installer on another host
+over SSH without keeping a permanent repository checkout there:
+
+```bash
+./bin/install_remote root@pve1 --mode proxmox
+./bin/install_remote admin@server1 --mode systemd
+```
+
+It uses normal SSH host-key verification, streams a temporary archive containing
+only Git-tracked files, and never copies local `.env` or generated server
+configuration. An answers file can be included as a protected `0600` file:
+
+```bash
+./bin/install_remote root@pve1 \
+  --mode proxmox \
+  --answers deployment.json \
+  --non-interactive \
+  --yes
+```
+
+Interactive runs allocate a remote TTY. Non-interactive systemd deployments
+therefore need passwordless privilege elevation if the remote account is not
+root. Proxmox deployment either logs in as root or requires non-interactive
+`sudo`. A successful run removes the temporary remote workspace; a failed run
+retains it and prints the path. Use `--dry-run` for a connection-free local
+preview, or `--remote-dry-run` to connect and exercise the target installer's
+own dry-run checks.
+
 For CI or repeatable testing, use the example JSON answers file:
 
 ```bash
