@@ -48,6 +48,25 @@ class ProducerTests(unittest.TestCase):
             str(SERVER_DIR / "logging.dev.ini"),
         )
 
+    @mock.patch("server.ProducerConfig.from_config")
+    @mock.patch("server.configure_logging")
+    @mock.patch("server.load_config")
+    def test_disabled_producer_exits_before_loading_provider_configuration(
+        self,
+        load_config,
+        configure_logging,
+        from_config,
+    ):
+        load_config.return_value = (
+            "/config.yaml",
+            {"server": {"enabled": False}},
+        )
+        configure_logging.return_value = mock.Mock()
+
+        self.assertEqual(server.run(), 0)
+
+        from_config.assert_not_called()
+
     def test_rejects_unregistered_renderer_before_production(self):
         profiles = {
             "future": OutputProfile(
