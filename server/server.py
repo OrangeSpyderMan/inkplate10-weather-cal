@@ -66,6 +66,11 @@ def run():
         return 0
 
     settings = ProducerConfig.from_config(config)
+    log.info(
+        "Producer refresh interval: %s seconds (from %s)",
+        settings.refresh_seconds,
+        settings.refresh_source,
+    )
     removed_temporary_files = artifact_store.cleanup_stale_temporary_files()
     if removed_temporary_files:
         log.info(

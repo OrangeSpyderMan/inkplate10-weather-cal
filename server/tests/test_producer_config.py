@@ -30,6 +30,7 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertFalse(settings.debug)
         self.assertFalse(settings.always_on)
         self.assertEqual(settings.refresh_seconds, 3 * 3600)
+        self.assertEqual(settings.refresh_source, "server.refreshminutes")
         self.assertTrue(settings.weather_metric)
         self.assertEqual(settings.hourly_forecasts, 6)
         self.assertEqual(settings.location, "Landry, FR")
@@ -83,6 +84,7 @@ class ProducerConfigTests(unittest.TestCase):
 
         self.assertTrue(settings.always_on)
         self.assertEqual(settings.refresh_seconds, 15 * 60)
+        self.assertEqual(settings.refresh_source, "server.refreshminutes")
 
     def test_legacy_fractional_hours_remain_supported(self):
         settings = ProducerConfig.from_config(
@@ -104,6 +106,7 @@ class ProducerConfigTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.refresh_seconds, 18 * 60)
+        self.assertEqual(settings.refresh_source, "server.refreshhours")
 
     def test_refresh_minutes_take_precedence_over_legacy_hours(self):
         settings = ProducerConfig.from_config(

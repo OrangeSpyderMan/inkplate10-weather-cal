@@ -11,6 +11,7 @@ class ProducerConfig:
     debug: bool
     always_on: bool
     refresh_seconds: int
+    refresh_source: str
     weather_service: str
     weather_api_key: str
     weather_metric: bool
@@ -82,6 +83,7 @@ class ProducerConfig:
             ),
             always_on=always_on,
             refresh_seconds=refresh_seconds,
+            refresh_source=refresh_key,
             weather_service=str(
                 get_prop_by_keys(
                     config,
