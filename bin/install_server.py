@@ -21,6 +21,20 @@ import time
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SERVER_DIR = REPO_ROOT / "server"
+sys.path.insert(0, str(SERVER_DIR))
+
+from output_profiles import (  # noqa: E402
+    DEFAULT_HEIGHT as DEFAULT_IMAGE_HEIGHT,
+    DEFAULT_OUTPUT_FILENAME,
+    DEFAULT_OUTPUT_PROFILE,
+    DEFAULT_RENDERER,
+    DEFAULT_WIDTH as DEFAULT_IMAGE_WIDTH,
+)
+from weather.providers import FORECAST_PROVIDERS  # noqa: E402
+
+
 APP_USER = "inkplate"
 APP_GROUP = "inkplate"
 INSTALL_DIR = Path("/srv/inkplate")
@@ -39,8 +53,11 @@ DEFAULT_REFRESH_HOURS = 3
 DEFAULT_FORECASTS = 6
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
-DEFAULT_IMAGE_WIDTH = 825
-DEFAULT_IMAGE_HEIGHT = 1200
+WEATHER_PROVIDER_LABELS = {
+    "openweathermapv4": "OpenWeatherMap One Call 4.0",
+    "openweathermapv3": "OpenWeatherMap One Call 3.0",
+    "accuweather": "AccuWeather",
+}
 PRIVILEGE_PREFIX: list[str] = []
 INSTALLER_ANSWERS: dict[str, object] = {}
 NON_INTERACTIVE = False
@@ -355,11 +372,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     )
     answers["weather_service"] = prompt_choice(
         "Weather provider",
-        [
-            ("openweathermapv4", "OpenWeatherMap One Call 4.0"),
-            ("openweathermapv3", "OpenWeatherMap One Call 3.0"),
-            ("accuweather", "AccuWeather"),
-        ],
+        weather_provider_choices(),
         default=config.get("weather.service", DEFAULT_WEATHER),
         key="weather_service",
     )
@@ -475,6 +488,19 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     return answers
 
 
+def weather_provider_choices() -> list[tuple[str, str]]:
+    ordered_names = [
+        name for name in WEATHER_PROVIDER_LABELS if name in FORECAST_PROVIDERS
+    ]
+    ordered_names.extend(
+        sorted(set(FORECAST_PROVIDERS) - set(ordered_names))
+    )
+    return [
+        (name, WEATHER_PROVIDER_LABELS.get(name, name))
+        for name in ordered_names
+    ]
+
+
 def render_config(answers: dict[str, object], mode: str) -> str:
     token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
     alwayson = "true"
@@ -515,14 +541,14 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}",
         f"location: {answers['location']}",
         "outputs:",
-        "  default: inkplate10-portrait",
+        f"  default: {DEFAULT_OUTPUT_PROFILE}",
         "  profiles:",
-        "    inkplate10-portrait:",
+        f"    {DEFAULT_OUTPUT_PROFILE}:",
         "      enabled: true",
-        "      renderer: firefox",
+        f"      renderer: {DEFAULT_RENDERER}",
         f"      width: {DEFAULT_IMAGE_WIDTH}",
         f"      height: {DEFAULT_IMAGE_HEIGHT}",
-        "      filename: calendar.png",
+        f"      filename: {DEFAULT_OUTPUT_FILENAME}",
         "mqtt:",
         "  weather:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",
