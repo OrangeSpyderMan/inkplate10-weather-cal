@@ -1,5 +1,7 @@
 import pathlib
 import sys
+import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -95,6 +97,78 @@ class NetatmoRealtimeServiceTests(unittest.TestCase):
         self.assertEqual(conditions["wind"]["value"], 11.2)
         self.assertEqual(conditions["rain"]["unit"], "in")
         self.assertEqual(conditions["rain"]["last_24_hours"], 0.19)
+
+    @mock.patch("weather.netatmo.netatmo.requests.post")
+    @mock.patch("weather.netatmo.netatmo.requests.get")
+    def test_unauthorized_request_uses_persisted_rotated_refresh_token(
+        self,
+        get,
+        post,
+    ):
+        unauthorized = mock.Mock(status_code=401)
+        successful = mock.Mock(
+            status_code=200,
+            json=mock.Mock(return_value=self.stations_data()),
+        )
+        get.side_effect = [unauthorized, successful]
+        post.return_value = mock.Mock(
+            status_code=200,
+            json=mock.Mock(
+                return_value={
+                    "access_token": "replacement-access",
+                    "refresh_token": "replacement-refresh",
+                    "expires_in": 3600,
+                }
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            token_file = pathlib.Path(temporary_dir) / "token.json"
+            token_file.write_text(
+                '{"access_token": "stale", "refresh_token": "rotated", '
+                f'"expires_at": {time.time() + 3600}}}',
+                encoding="utf-8",
+            )
+            service = self.service()
+            service.token_file = str(token_file)
+
+            self.assertEqual(service._get_stations_data(), self.stations_data())
+
+            saved_token = token_file.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            post.call_args.kwargs["data"]["refresh_token"],
+            "rotated",
+        )
+        self.assertIn('"refresh_token": "replacement-refresh"', saved_token)
+        post.return_value.close.assert_called_once_with()
+        unauthorized.close.assert_called_once_with()
+        successful.close.assert_called_once_with()
+
+    @mock.patch("weather.netatmo.netatmo.requests.post")
+    def test_refresh_preserves_refresh_token_when_response_omits_it(self, post):
+        post.return_value = mock.Mock(
+            status_code=200,
+            json=mock.Mock(
+                return_value={
+                    "access_token": "replacement-access",
+                    "expires_in": 3600,
+                }
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            token_file = pathlib.Path(temporary_dir) / "token.json"
+            service = self.service()
+            service.token_file = str(token_file)
+
+            service._refresh_access_token("rotated")
+
+            self.assertIn(
+                '"refresh_token": "rotated"',
+                token_file.read_text(encoding="utf-8"),
+            )
+        post.return_value.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

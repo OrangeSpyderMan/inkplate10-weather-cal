@@ -114,6 +114,26 @@ class ProducerTests(unittest.TestCase):
             {"layout": "compact"},
         )
 
+    def test_realtime_failure_preserves_forecast_conditions(self):
+        daily_summary = {
+            "temperature": {
+                "unit": "\N{DEGREE SIGN}C",
+                "value": 10,
+                "min": 5,
+                "max": 15,
+            }
+        }
+        realtime = mock.Mock()
+        realtime.get_current_conditions.side_effect = RuntimeError("offline")
+
+        server.apply_current_conditions(daily_summary, realtime)
+
+        self.assertEqual(daily_summary["temperature"]["value"], 10)
+        server.log.warning.assert_called_once_with(
+            "Realtime conditions unavailable; using forecast conditions: %s",
+            mock.ANY,
+        )
+
     @mock.patch("server.render_outputs")
     @mock.patch("server.publish_weather_snapshot")
     @mock.patch("server.build_weather_snapshot")

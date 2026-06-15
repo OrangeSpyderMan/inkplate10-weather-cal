@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 import time
 
 import requests
@@ -126,27 +127,34 @@ class NetatmoRealtimeService(RealtimeProvider):
         )
 
         if response.status_code in [401, 403]:
-            token = self._refresh_access_token()
+            response.close()
+            token_data = self._load_token_data()
+            token = self._refresh_access_token(token_data.get("refresh_token"))
             response = requests.get(
                 f"{self.baseurl}/api/getstationsdata",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=20,
             )
 
-        if response.status_code != 200:
-            raise ValueError(
-                "Non-200 response from Netatmo api: {}".format(response.status_code)
-            )
-
-        data = response.json()
-        if data.get("status") and data["status"] != "ok":
-            raise ValueError(
-                "Unexpected response status from Netatmo api: {}".format(
-                    data["status"]
+        try:
+            if response.status_code != 200:
+                raise ValueError(
+                    "Non-200 response from Netatmo api: {}".format(
+                        response.status_code
+                    )
                 )
-            )
 
-        return data
+            data = response.json()
+            if data.get("status") and data["status"] != "ok":
+                raise ValueError(
+                    "Unexpected response status from Netatmo api: {}".format(
+                        data["status"]
+                    )
+                )
+
+            return data
+        finally:
+            response.close()
 
     def _get_device(self, data):
         body = data.get("body", {})
@@ -208,14 +216,19 @@ class NetatmoRealtimeService(RealtimeProvider):
             timeout=20,
         )
 
-        if response.status_code != 200:
-            raise ValueError(
-                "Non-200 response from Netatmo token api: {}".format(
-                    response.status_code
+        try:
+            if response.status_code != 200:
+                raise ValueError(
+                    "Non-200 response from Netatmo token api: {}".format(
+                        response.status_code
+                    )
                 )
-            )
 
-        token_data = response.json()
+            token_data = response.json()
+        finally:
+            response.close()
+
+        token_data.setdefault("refresh_token", token)
         token_data["expires_at"] = time.time() + token_data.get("expires_in", 0)
         self._save_token_data(token_data)
         return token_data["access_token"]
@@ -235,8 +248,25 @@ class NetatmoRealtimeService(RealtimeProvider):
         if token_dir:
             os.makedirs(token_dir, exist_ok=True)
 
-        with open(self.token_file, "w") as f:
-            json.dump(token_data, f)
+        directory = token_dir or "."
+        fd, temporary_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(self.token_file)}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(token_data, f)
+                f.write("\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary_path, self.token_file)
+        except Exception:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
+            raise
 
 
 # Preserve imports used by existing installations and third-party code.

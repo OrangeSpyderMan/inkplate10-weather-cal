@@ -203,7 +203,16 @@ def apply_current_conditions(daily_summary, realtime_svc):
     if realtime_svc is None:
         return
 
-    for key, value in realtime_svc.get_current_conditions().items():
+    try:
+        current_conditions = realtime_svc.get_current_conditions()
+    except Exception as exc:
+        log.warning(
+            "Realtime conditions unavailable; using forecast conditions: %s",
+            exc,
+        )
+        return
+
+    for key, value in current_conditions.items():
         if isinstance(value, dict) and isinstance(daily_summary.get(key), dict):
             daily_summary[key].update(value)
         else:
