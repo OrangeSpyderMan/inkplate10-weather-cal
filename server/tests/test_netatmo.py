@@ -68,10 +68,10 @@ class NetatmoRealtimeServiceTests(unittest.TestCase):
 
         conditions = service.get_current_conditions()
 
-        self.assertEqual(conditions["temperature"]["value"], 12)
-        self.assertEqual(conditions["humidity"], 67)
+        self.assertEqual(conditions.temperature.value, 12)
+        self.assertEqual(conditions.humidity, 67)
         self.assertEqual(
-            conditions["wind"],
+            conditions.wind.to_dict(),
             {
                 "source": "netatmo",
                 "live": True,
@@ -81,9 +81,9 @@ class NetatmoRealtimeServiceTests(unittest.TestCase):
                 "direction": 245,
             },
         )
-        self.assertEqual(conditions["rain"]["value"], 0.4)
-        self.assertEqual(conditions["rain"]["last_hour"], 1.2)
-        self.assertEqual(conditions["rain"]["last_24_hours"], 4.8)
+        self.assertEqual(conditions.rain.value, 0.4)
+        self.assertEqual(conditions.rain.last_hour, 1.2)
+        self.assertEqual(conditions.rain.last_24_hours, 4.8)
 
     def test_converts_measurements_to_imperial(self):
         service = self.service(metric=False)
@@ -91,12 +91,12 @@ class NetatmoRealtimeServiceTests(unittest.TestCase):
 
         conditions = service.get_current_conditions()
 
-        self.assertEqual(conditions["temperature"]["unit"], "\N{DEGREE SIGN}F")
-        self.assertEqual(conditions["temperature"]["value"], 54)
-        self.assertEqual(conditions["wind"]["unit"], "mph")
-        self.assertEqual(conditions["wind"]["value"], 11.2)
-        self.assertEqual(conditions["rain"]["unit"], "in")
-        self.assertEqual(conditions["rain"]["last_24_hours"], 0.19)
+        self.assertEqual(conditions.temperature.unit, "\N{DEGREE SIGN}F")
+        self.assertEqual(conditions.temperature.value, 54)
+        self.assertEqual(conditions.wind.unit, "mph")
+        self.assertEqual(conditions.wind.value, 11.2)
+        self.assertEqual(conditions.rain.unit, "in")
+        self.assertEqual(conditions.rain.last_24_hours, 0.19)
 
     @mock.patch("weather.netatmo.netatmo.requests.post")
     @mock.patch("weather.netatmo.netatmo.requests.get")

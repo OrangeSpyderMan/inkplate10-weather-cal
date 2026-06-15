@@ -6,6 +6,7 @@ import time
 import requests
 
 from ..service import RealtimeProvider
+from ..models import CurrentConditions, Rain, Temperature, Wind
 
 
 class NetatmoRealtimeService(RealtimeProvider):
@@ -38,14 +39,14 @@ class NetatmoRealtimeService(RealtimeProvider):
         device = self._get_device(data)
         primary_source = self._measurement_source(device, self.module_id)
         dashboard_data = primary_source.get("dashboard_data", {})
-        conditions = {}
+        conditions = CurrentConditions()
 
         if "Temperature" in dashboard_data:
-            conditions["temperature"] = self._temperature(
+            conditions.temperature = self._temperature(
                 dashboard_data["Temperature"]
             )
         if "Humidity" in dashboard_data:
-            conditions["humidity"] = dashboard_data["Humidity"]
+            conditions.humidity = dashboard_data["Humidity"]
 
         wind_data = self._module_dashboard(
             device,
@@ -54,7 +55,7 @@ class NetatmoRealtimeService(RealtimeProvider):
             "WindStrength",
         )
         if wind_data:
-            conditions["wind"] = self._wind(wind_data)
+            conditions.wind = self._wind(wind_data)
 
         rain_data = self._module_dashboard(
             device,
@@ -63,9 +64,9 @@ class NetatmoRealtimeService(RealtimeProvider):
             "Rain",
         )
         if rain_data:
-            conditions["rain"] = self._rain(rain_data)
+            conditions.rain = self._rain(rain_data)
 
-        if not conditions:
+        if not conditions.to_dict():
             source_id = primary_source.get("_id", "unknown")
             raise ValueError(
                 f"No supported measurements found for Netatmo source {source_id}"
@@ -75,48 +76,52 @@ class NetatmoRealtimeService(RealtimeProvider):
 
     def get_current_temperature(self):
         conditions = self.get_current_conditions()
-        if "temperature" not in conditions:
+        if conditions.temperature is None:
             raise ValueError("No Temperature measurement found for Netatmo source")
-        return conditions["temperature"]
+        return conditions.temperature.to_dict()
 
     def _temperature(self, temperature_c):
         value = temperature_c if self.metric else (temperature_c * 9 / 5) + 32
-        return {
-            "source": "netatmo",
-            "live": True,
-            "unit": "\N{DEGREE SIGN}C" if self.metric else "\N{DEGREE SIGN}F",
-            "value": round(value),
-        }
+        return Temperature(
+            source="netatmo",
+            live=True,
+            unit="\N{DEGREE SIGN}C" if self.metric else "\N{DEGREE SIGN}F",
+            value=round(value),
+        )
 
     def _wind(self, data):
         factor = 1 if self.metric else 0.621371
-        wind = {
-            "source": "netatmo",
-            "live": True,
-            "unit": "kmh" if self.metric else "mph",
-            "value": round(data["WindStrength"] * factor, 1),
-        }
-        if "GustStrength" in data:
-            wind["gust"] = round(data["GustStrength"] * factor, 1)
-        if "WindAngle" in data:
-            wind["direction"] = data["WindAngle"]
-        return wind
+        return Wind(
+            source="netatmo",
+            live=True,
+            unit="kmh" if self.metric else "mph",
+            value=round(data["WindStrength"] * factor, 1),
+            gust=(
+                round(data["GustStrength"] * factor, 1)
+                if "GustStrength" in data
+                else None
+            ),
+            direction=data.get("WindAngle"),
+        )
 
     def _rain(self, data):
         factor = 1 if self.metric else 0.0393701
-        rain = {
-            "source": "netatmo",
-            "live": True,
-            "unit": "mm" if self.metric else "in",
-            "value": round(data["Rain"] * factor, 2),
-        }
-        for source_key, output_key in (
-            ("sum_rain_1", "last_hour"),
-            ("sum_rain_24", "last_24_hours"),
-        ):
-            if source_key in data:
-                rain[output_key] = round(data[source_key] * factor, 2)
-        return rain
+        return Rain(
+            source="netatmo",
+            live=True,
+            unit="mm" if self.metric else "in",
+            value=round(data["Rain"] * factor, 2),
+            last_hour=(
+                round(data["sum_rain_1"] * factor, 2)
+                if "sum_rain_1" in data
+                else None
+            ),
+            last_24_hours=(
+                round(data["sum_rain_24"] * factor, 2)
+                if "sum_rain_24" in data
+                else None
+            ),
+        )
 
     def _get_stations_data(self):
         token = self._get_access_token()

@@ -2,6 +2,8 @@ import os
 import json
 from abc import ABC, abstractmethod
 
+from .models import CurrentConditions, ForecastData
+
 
 class ForecastProvider(ABC):
     def __init__(
@@ -31,17 +33,13 @@ class ForecastProvider(ABC):
         return f"icon/{icon_map[icon_key]}"
 
     @abstractmethod
-    def get_daily_summary(self):
-        """Return normalized current conditions and today's forecast."""
-
-    @abstractmethod
-    def get_hourly_forecast(self):
-        """Return normalized hourly forecast records."""
+    def fetch(self) -> ForecastData:
+        """Return a complete normalized forecast."""
 
 
 class RealtimeProvider(ABC):
     @abstractmethod
-    def get_current_conditions(self):
+    def get_current_conditions(self) -> CurrentConditions:
         """Return a partial normalized current-conditions overlay."""
 
 

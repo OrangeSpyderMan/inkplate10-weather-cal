@@ -12,6 +12,7 @@ from configuration import load_config
 from output_profiles import load_output_profiles
 from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
+from weather.models import CurrentConditions
 from weather.providers import (
     ConfigurationError,
     build_forecast_provider,
@@ -200,8 +201,14 @@ def build_current_conditions_service(config, metric):
 
 
 def apply_current_conditions(daily_summary, realtime_svc):
+    legacy_dict = isinstance(daily_summary, dict)
+    conditions = (
+        CurrentConditions.from_dict(daily_summary)
+        if legacy_dict
+        else daily_summary
+    )
     if realtime_svc is None:
-        return
+        return conditions
 
     try:
         current_conditions = realtime_svc.get_current_conditions()
@@ -210,27 +217,32 @@ def apply_current_conditions(daily_summary, realtime_svc):
             "Realtime conditions unavailable; using forecast conditions: %s",
             exc,
         )
-        return
+        return conditions
 
-    for key, value in current_conditions.items():
-        if isinstance(value, dict) and isinstance(daily_summary.get(key), dict):
-            daily_summary[key].update(value)
-        else:
-            daily_summary[key] = value
+    if isinstance(current_conditions, dict):
+        current_conditions = CurrentConditions.from_dict(current_conditions)
+    result = conditions.overlay(current_conditions)
+    if legacy_dict:
+        daily_summary.clear()
+        daily_summary.update(result.to_dict())
+    return result
 
 
 def build_weather_snapshot(
     weather_svc, realtime_svc, weather_service_type, weather_metric
 ):
-    daily_summary = weather_svc.get_daily_summary()
-    hourly_forecasts = weather_svc.get_hourly_forecast()
-    apply_current_conditions(daily_summary, realtime_svc)
+    forecast = weather_svc.fetch().validate()
+    forecast.current = apply_current_conditions(
+        forecast.current,
+        realtime_svc,
+    )
 
     return WeatherSnapshot(
-        daily_summary=daily_summary,
-        hourly_forecasts=hourly_forecasts,
+        daily_summary=None,
+        hourly_forecasts=None,
         weather_source=weather_service_type,
         metric=weather_metric,
+        forecast=forecast,
     )
 
 

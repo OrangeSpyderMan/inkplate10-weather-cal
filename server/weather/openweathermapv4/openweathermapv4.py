@@ -4,6 +4,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import requests
 
 from ..service import WeatherService
+from ..models import ForecastData
 
 
 class OpenWeatherMapv4Service(WeatherService):
@@ -44,6 +45,12 @@ class OpenWeatherMapv4Service(WeatherService):
                 "max": round(self._temperature_value(daily["temp"]["max"])),
             },
         }
+
+    def fetch(self):
+        return ForecastData.from_dicts(
+            self.get_daily_summary(),
+            self.get_hourly_forecast(),
+        ).validate()
 
     def get_hourly_forecast(self):
         required_records = self.HOURLY_STEP * self.num_hours + 3

@@ -1,6 +1,8 @@
 import copy
 import datetime as dt
 
+from .models import ForecastData
+
 
 SCHEMA_VERSION = "2.0"
 
@@ -13,9 +15,12 @@ class WeatherSnapshot:
         weather_source,
         metric=True,
         generated_at=None,
+        forecast=None,
     ):
-        self.daily_summary = daily_summary
-        self.hourly_forecasts = hourly_forecasts
+        self.forecast = forecast or ForecastData.from_dicts(
+            daily_summary,
+            hourly_forecasts,
+        )
         self.weather_source = weather_source
         self.metric = metric
         self.generated_at = generated_at or dt.datetime.now(dt.timezone.utc)
@@ -29,6 +34,14 @@ class WeatherSnapshot:
             "current": _serializable(self.daily_summary),
             "hourly": _serializable(self.hourly_forecasts),
         }
+
+    @property
+    def daily_summary(self):
+        return self.forecast.current_dict()
+
+    @property
+    def hourly_forecasts(self):
+        return self.forecast.hourly_dicts()
 
 
 def _serializable(value):

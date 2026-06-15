@@ -2,6 +2,7 @@ import requests
 from utils import even_select
 from datetime import datetime
 from ..service import WeatherService
+from ..models import ForecastData
 
 
 class AccuweatherService(WeatherService):
@@ -14,6 +15,12 @@ class AccuweatherService(WeatherService):
             metric,
         )
         self.location_key = self._get_location_key(location)
+
+    def fetch(self):
+        return ForecastData.from_dicts(
+            self.get_daily_summary(),
+            self.get_hourly_forecast(),
+        ).validate()
 
     def get_daily_summary(self):
         is_metric = self.units == "metric"

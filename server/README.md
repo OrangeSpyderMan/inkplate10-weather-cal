@@ -202,11 +202,15 @@ configurations should use `current_conditions`.
 
 Forecast providers implement the normalized `ForecastProvider` interface:
 
-- `get_daily_summary()`
-- `get_hourly_forecast()`
+- `fetch() -> ForecastData`
 
 Realtime providers implement `RealtimeProvider.get_current_conditions()` and
-return a partial current-conditions overlay. Providers are registered in
+return a partial `CurrentConditions` overlay. The supported provider boundary
+uses dataclasses for temperature, wind, rain, current conditions, hourly
+forecasts, and the complete forecast. Renderers and external API clients still
+receive the normalized schema `2.0` dictionary representation.
+
+Providers are registered in
 `weather/providers.py`, which keeps construction, supported names, and lazy
 imports in one place. OpenWeatherMap v2 is no longer registered; supported
 OpenWeatherMap providers are v3 and v4.

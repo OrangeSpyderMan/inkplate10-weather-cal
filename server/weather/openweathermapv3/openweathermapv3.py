@@ -1,7 +1,8 @@
 import requests
 import itertools
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from ..service import WeatherService
+from ..models import ForecastData
 
 
 class OpenWeatherMapv3Service(WeatherService):
@@ -15,26 +16,37 @@ class OpenWeatherMapv3Service(WeatherService):
         )
         self.lat, self.lon = self._get_location_coords(location)
 
-    def get_daily_summary(self):
-        data = None
+    def fetch(self):
         res = requests.get(
             self.baseurl
             + "/data/3.0/onecall?lat={}&lon={}&appid={}&units={}".format(
                 self.lat, self.lon, self.apikey, self.units
-            )
+            ),
+            timeout=20,
         )
-        if res.status_code != 200:
-            raise ValueError("Non-200 response from weather api: {}".format(res.history))
-                
-        data = res.json()
+        try:
+            if res.status_code != 200:
+                raise ValueError(
+                    "Non-200 response from weather api: {}".format(
+                        res.status_code
+                    )
+                )
+            data = res.json()
+        finally:
+            res.close()
 
+        return ForecastData.from_dicts(
+            self._daily_summary(data),
+            self._hourly_forecast(data),
+        ).validate()
+
+    def _daily_summary(self, data):
         if self.units == "metric":
             units = "\N{DEGREE SIGN}C"
         else:
             units = "\N{DEGREE SIGN}F"
 
         forecast = {
-            
             "icon": self.get_icon(data["current"]["weather"][0]["icon"]),
             "temperature": {
                 "unit": units,
@@ -44,23 +56,9 @@ class OpenWeatherMapv3Service(WeatherService):
             },
         }
 
-        res.close()
         return forecast
 
-    def get_hourly_forecast(self):
-        data = None
-        res = requests.get(
-            self.baseurl
-            + "/data/3.0/onecall?cnt={}&lat={}&lon={}&appid={}&units={}".format(
-                self.num_hours, self.lat, self.lon, self.apikey, self.units
-            )
-        )
-        
-        if res.status_code != 200:
-            raise ValueError("Non-200 response from weather api: {}".format(res.history))
-        
-        data = res.json()
-
+    def _hourly_forecast(self, data):
         if self.units == "metric":
             temp_units = "\N{DEGREE SIGN}C"
             speed_units = "m/s"
@@ -68,10 +66,21 @@ class OpenWeatherMapv3Service(WeatherService):
             temp_units = "\N{DEGREE SIGN}F"
             speed_units = "mph"
 
+        location_timezone = timezone(
+            timedelta(seconds=int(data.get("timezone_offset", 0)))
+        )
         forecasts = []
-        for entry in itertools.islice(data["hourly"],5 , self.num_hours*3, 3):
+        for entry in itertools.islice(
+            data["hourly"],
+            5,
+            5 + self.num_hours * 3,
+            3,
+        ):
             forecast = {
-                "dt": datetime.fromtimestamp(entry["dt"]),
+                "dt": datetime.fromtimestamp(
+                    entry["dt"],
+                    location_timezone,
+                ),
                 "icon": self.get_icon(entry["weather"][0]["icon"]),
                 "temperature": {
                     "unit": temp_units,
@@ -81,32 +90,48 @@ class OpenWeatherMapv3Service(WeatherService):
                     "unit": speed_units,
                     "value": entry["wind_speed"],
                 },
-                "humidity": (entry["humidity"]),
+                "humidity": entry["humidity"],
                 "rain_probability": round(entry["pop"] * 100),
             }
 
             forecasts.append(forecast)
-        res.close()
+        if len(forecasts) < self.num_hours:
+            raise ValueError(
+                "Unexpected response from weather api: "
+                f"needed {self.num_hours} forecast slots, "
+                f"received {len(forecasts)}"
+            )
         return forecasts
 
-    def _get_location_coords(self, location):
-        data = None
+    def get_daily_summary(self):
+        return self.fetch().current_dict()
 
+    def get_hourly_forecast(self):
+        return self.fetch().hourly_dicts()
+
+    def _get_location_coords(self, location):
         res = requests.get(
             self.baseurl
-            + "/geo/1.0/direct?q={}&limit=1&appid={}".format(location, self.apikey)
+            + "/geo/1.0/direct?q={}&limit=1&appid={}".format(
+                location,
+                self.apikey,
+            ),
+            timeout=20,
         )
-        data = res.json()
+        try:
+            if res.status_code != 200:
+                raise ValueError(
+                    "Non-200 response from weather api: {}".format(
+                        res.status_code
+                    )
+                )
+            data = res.json()
+        finally:
+            res.close()
 
-        if res.status_code != 200:
-            raise ValueError("Non-200 response from weather api: {}".format(res.history))
+        if len(data) != 1:
+            raise ValueError(
+                "Unexpected response from weather api: {}".format(data)
+            )
 
-        if len(data) == 0 or len(data) > 1:
-            raise ValueError("Unexpected response from weather api: {}".format(data))
-
-        data = data[0]
-        lat = data["lat"]
-        lon = data["lon"]
-
-        res.close()
-        return lat, lon
+        return data[0]["lat"], data[0]["lon"]
