@@ -48,27 +48,28 @@ From the repository root, run:
 ./bin/install_server
 ```
 
-The installer walks through Docker Compose or native systemd installation. It
-uses the same defaults as the server code and example config: OpenWeatherMap v3,
-port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
-images, and MQTT disabled.
+The installer walks through Docker Compose, Podman Compose, or native systemd
+installation. It uses the same defaults as the server code and example config:
+OpenWeatherMap v3, port `8080`, six forecast slots, a three-hour refresh
+interval, `825x1200` images, and MQTT disabled.
 
 It prompts for the location, weather API key, Google Static Maps API key, Google
 Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
 publishing, optional MQTT diagnostic listening, and whether to start the service
 or container. Secrets are written outside committed YAML:
 
-- Docker: `.env` plus `server/config/config.yaml`
+- Docker or Podman: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
   `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
-Docker mode runs as the current user and expects that user to be able to run
-`docker compose`. Native systemd mode needs root privileges for package
-installation, `/srv/inkplate`, `/etc/inkplate/weather.env`, Geckodriver, and
-systemd service management. Run it as root or as a user that can elevate with
-`sudo`, `doas`, or `run0`; the installer checks this before making system
-changes. Docker mode checks that `docker compose` is available and that the
-current user can talk to the Docker daemon before starting the container.
+Docker and Podman modes run as the current user. Docker expects `docker compose`
+and daemon access. Podman expects either `podman compose` or `podman-compose`
+and supports rootless operation. Native systemd mode needs root privileges for
+package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
+Geckodriver, and systemd service management. Run it as root or as a user that
+can elevate with `sudo`, `doas`, or `run0`; the installer checks this before
+making system changes. Container modes validate their selected runtime before
+starting.
 
 Use dry-run mode to preview actions:
 
@@ -87,15 +88,16 @@ dry-run testing. Copy it and replace those values before using it for a real
 non-interactive install.
 
 Re-run the installer to update an existing install. It will detect existing
-Docker or systemd files and offer to update the application while preserving
-config/secrets, update and reconfigure together, reconfigure config/secrets
-only, or abort. Use the combined option when a release changes both application
-code and configuration keys.
+Docker, Podman, or systemd files and offer to update the application while
+preserving config/secrets, update and reconfigure together, reconfigure
+config/secrets only, or abort. Use the combined option when a release changes
+both application code and configuration keys.
 
 Logs:
 
 ```bash
 docker compose logs -f
+podman compose logs -f
 sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
@@ -535,26 +537,27 @@ should be updated to the absolute path of your checkout.
 For a managed native service, prefer `./bin/install_server` unless you need to
 repair individual systemd pieces manually.
 
-## Running in Docker
+## Running with Docker or Podman
 
-The repository root contains the Dockerfile and `docker-compose.yml`. The image
-installs Firefox, Geckodriver, Gunicorn, and the required Python modules, then
-runs as an unprivileged `inkplate` user.
+The repository root contains the Dockerfile and a Compose file that works with
+Docker Compose or Podman Compose. The image installs Firefox, Geckodriver,
+Gunicorn, and the required Python modules, then runs as an unprivileged
+`inkplate` user.
 
 ### Configure
 
-Create a Docker server config from the example:
+Create a container server config from the example:
 
 ```bash
 cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 ```
 
-For Docker Compose, keep `server.alwayson: true`. The producer service uses
-`restart: unless-stopped`, so a successful one-shot producer would otherwise be
-started repeatedly.
+For either Compose runtime, keep `server.alwayson: true`. The producer service
+uses `restart: unless-stopped`, so a successful one-shot producer would
+otherwise be started repeatedly.
 
-Create a local `.env` file in the repository root. Docker Compose reads this
-file and passes the values into the container:
+Create a local `.env` file in the repository root. Compose reads this file and
+passes the values into the container:
 
 ```bash
 cp .env.example .env
@@ -584,15 +587,15 @@ Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement. Compose requires explicit values for
 `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_STATICMAPS_MAPID`.
 
-### Docker MQTT broker
+### Container MQTT broker
 
 If either MQTT feature is enabled, the server needs a reachable MQTT broker.
 Configure `mqtt.weather.broker` and `mqtt.diagnostics.broker` independently; they
 may point to the same broker.
 
-For a simple local Docker broker, this repository includes an optional Compose
-override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the broker command,
-matching server config, and security notes.
+For a simple local container broker, this repository includes an optional
+Compose override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the
+broker command, matching server config, and security notes.
 
 The published OCI images are:
 
@@ -620,12 +623,16 @@ Run from the root of your cloned repository:
 
 ```bash
 docker compose up --build
+# or
+podman compose up --build
 ```
 
 Or detach it:
 
 ```bash
 docker compose up --build -d
+# or
+podman compose up --build -d
 ```
 
 To use the published image instead of building locally, change the shared
@@ -647,13 +654,13 @@ The browser/PWA viewer is available from:
 http://localhost:8080/app
 ```
 
-`localhost` is correct when testing from the Docker host. The Inkplate firmware
-must use the host's LAN hostname or IP address in `calendar.url`.
+`localhost` is correct when testing from the container host. The Inkplate
+firmware must use the host's LAN hostname or IP address in `calendar.url`.
 
-Set each enabled MQTT broker to an address reachable from inside the container. On
-Docker Desktop, `host.docker.internal` usually points to the host. On Linux, you
-may prefer to run the MQTT broker as another Compose service or use the host's
-LAN IP.
+Set each enabled MQTT broker to an address reachable from inside the container.
+The installer defaults to `host.docker.internal` for Docker and
+`host.containers.internal` for Podman. On Linux, you may prefer to run the MQTT
+broker as another Compose service or use the host's LAN IP.
 
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
 used to check the Docker logs for ERROR messages. By default that runs every

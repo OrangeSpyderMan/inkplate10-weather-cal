@@ -75,7 +75,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("docker", "systemd"),
+        choices=("docker", "podman", "systemd"),
         help="install mode; prompts when omitted",
     )
     parser.add_argument(
@@ -104,16 +104,19 @@ def main() -> int:
         "Install type",
         [
             ("docker", "Docker Compose install from this checkout"),
+            ("podman", "Podman Compose install from this checkout"),
             ("systemd", "Native systemd install under /srv/inkplate"),
         ],
         default="docker",
     )
 
-    if mode not in ("docker", "systemd"):
-        raise SystemExit("ERROR: install mode must be 'docker' or 'systemd'.")
+    if mode not in ("docker", "podman", "systemd"):
+        raise SystemExit(
+            "ERROR: install mode must be 'docker', 'podman', or 'systemd'."
+        )
 
-    if mode == "docker":
-        install_docker(repo_root, args.dry_run)
+    if mode in ("docker", "podman"):
+        install_compose(repo_root, args.dry_run, mode)
     else:
         install_systemd(repo_root, args.dry_run)
 
@@ -159,7 +162,8 @@ def ensure_repo_root(repo_root: Path) -> None:
         raise SystemExit(1)
 
 
-def install_docker(repo_root: Path, dry_run: bool) -> None:
+def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
+    label = "Docker" if mode == "docker" else "Podman"
     existing = [
         path
         for path in (
@@ -169,7 +173,7 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
         )
         if path.exists()
     ]
-    action = choose_existing_action("Docker", existing)
+    action = choose_existing_action(label, existing)
     if action == "abort":
         print("No changes made.")
         return
@@ -177,10 +181,10 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(repo_root))
-        answers = collect_answers(current_env, current_config, mode="docker")
+        answers = collect_answers(current_env, current_config, mode=mode)
         write_text_atomic(
             repo_root / SERVER_CONFIG,
-            render_config(answers, mode="docker"),
+            render_config(answers, mode=mode),
             dry_run=dry_run,
             mode=0o600,
         )
@@ -191,12 +195,16 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
             mode=0o600,
         )
 
-    check_docker_compose(dry_run)
-    if prompt_yes_no("Start or update the Docker container now?", default=True, key="start_now"):
-        run(["docker", "compose", "up", "--build", "-d"], dry_run=dry_run)
-        print("Logs: docker compose logs -f")
+    compose_command = check_compose_runtime(mode, dry_run)
+    if prompt_yes_no(
+        f"Start or update the {label} containers now?",
+        default=True,
+        key="start_now",
+    ):
+        run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+        print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
-        print("Start later with: docker compose up --build -d")
+        print(f"Start later with: {' '.join(compose_command)} up --build -d")
 
 
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
@@ -439,9 +447,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         default=parse_bool(config.get("mqtt.weather.enabled", "false")),
         key="mqtt_weather_enabled",
     )
-    default_mqtt_broker = (
-        "host.docker.internal" if mode == "docker" else "localhost"
-    )
+    default_mqtt_broker = container_host_alias(mode)
     answers["mqtt_weather_broker"] = prompt_text(
         "MQTT weather publisher broker",
         default=config.get("mqtt.weather.broker", default_mqtt_broker),
@@ -521,11 +527,13 @@ def configured_refresh_minutes(
 
 
 def render_config(answers: dict[str, object], mode: str) -> str:
-    token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
-    alwayson = "true"
-    default_mqtt_broker = (
-        "host.docker.internal" if mode == "docker" else "localhost"
+    token_file = (
+        "data/netatmo-token.json"
+        if mode in ("docker", "podman")
+        else "netatmo-token.json"
     )
+    alwayson = "true"
+    default_mqtt_broker = container_host_alias(mode)
     mqtt_weather_broker = (
         answers["mqtt_weather_broker"] or default_mqtt_broker
     )
@@ -615,6 +623,21 @@ def render_env(answers: dict[str, object], include_optional: bool) -> str:
     return "\n".join(lines)
 
 
+def container_host_alias(mode: str) -> str:
+    if mode == "docker":
+        return "host.docker.internal"
+    if mode == "podman":
+        return "host.containers.internal"
+    return "localhost"
+
+
+def check_compose_runtime(mode: str, dry_run: bool) -> list[str]:
+    if mode == "docker":
+        check_docker_compose(dry_run)
+        return ["docker", "compose"]
+    return check_podman_compose(dry_run)
+
+
 def check_docker_compose(dry_run: bool) -> None:
     if dry_run:
         print("Would check: docker compose version")
@@ -639,6 +662,51 @@ def check_docker_compose(dry_run: bool) -> None:
             f"daemon. {socket_hint}\nDocker error: {docker_info.stderr.strip()}"
         )
     print("Docker check: docker compose and daemon access are available.")
+
+
+def check_podman_compose(dry_run: bool) -> list[str]:
+    if dry_run:
+        print("Would check: podman info")
+        print("Would check: podman compose version or podman-compose version")
+        return ["podman", "compose"]
+    if not shutil.which("podman"):
+        raise SystemExit("ERROR: podman was not found on PATH.")
+    podman_info = subprocess.run(
+        ["podman", "info"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if podman_info.returncode != 0:
+        raise SystemExit(
+            "ERROR: Podman is installed but is not usable by this user.\n"
+            f"Podman error: {podman_info.stderr.strip()}"
+        )
+
+    native_compose = subprocess.run(
+        ["podman", "compose", "version"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if native_compose.returncode == 0:
+        print("Podman check: podman compose is available.")
+        return ["podman", "compose"]
+
+    if shutil.which("podman-compose"):
+        external_compose = subprocess.run(
+            ["podman-compose", "version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if external_compose.returncode == 0:
+            print("Podman check: podman-compose is available.")
+            return ["podman-compose"]
+
+    raise SystemExit(
+        "ERROR: neither 'podman compose' nor 'podman-compose' is available."
+    )
 
 
 def docker_socket_hint() -> str:

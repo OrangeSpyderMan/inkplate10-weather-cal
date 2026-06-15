@@ -211,8 +211,8 @@ and example clients such as the
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
-either Docker Compose from this checkout or native producer and web systemd
-services under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
+Docker Compose, Podman Compose, or native producer and web systemd services
+under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
 
 Run it from the repository root:
 
@@ -225,7 +225,7 @@ Map ID, location, optional Netatmo details, optional MQTT weather publishing,
 optional MQTT diagnostic listening, and whether to start the service/container.
 It keeps secrets out of committed YAML files:
 
-- Docker installs write secrets to `.env` and config to
+- Docker and Podman installs write secrets to `.env` and config to
   `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
@@ -252,13 +252,14 @@ For CI or repeatable testing, use a JSON answers file:
 ```
 
 Re-run the installer later to update an existing install. It will detect
-existing Docker or systemd files and offer to update the application while
-preserving config/secrets, reconfigure config/secrets, or abort.
+existing Docker, Podman, or systemd files and offer to update the application
+while preserving config/secrets, reconfigure config/secrets, or abort.
 
 For troubleshooting:
 
 ```bash
 docker compose logs -f
+podman compose logs -f
 sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 

@@ -13,6 +13,50 @@ SPEC.loader.exec_module(install_server)
 
 
 class InstallerCopyTests(unittest.TestCase):
+    def test_container_host_aliases_match_runtime(self):
+        self.assertEqual(
+            install_server.container_host_alias("docker"),
+            "host.docker.internal",
+        )
+        self.assertEqual(
+            install_server.container_host_alias("podman"),
+            "host.containers.internal",
+        )
+        self.assertEqual(
+            install_server.container_host_alias("systemd"),
+            "localhost",
+        )
+
+    @mock.patch.object(install_server.shutil, "which")
+    @mock.patch.object(install_server.subprocess, "run")
+    def test_podman_compose_prefers_native_provider(self, run, which):
+        which.return_value = "/usr/bin/podman"
+        run.side_effect = [
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=0),
+        ]
+
+        command = install_server.check_podman_compose(dry_run=False)
+
+        self.assertEqual(command, ["podman", "compose"])
+
+    @mock.patch.object(install_server.shutil, "which")
+    @mock.patch.object(install_server.subprocess, "run")
+    def test_podman_compose_falls_back_to_external_provider(self, run, which):
+        which.side_effect = lambda command: {
+            "podman": "/usr/bin/podman",
+            "podman-compose": "/usr/bin/podman-compose",
+        }.get(command)
+        run.side_effect = [
+            mock.Mock(returncode=0, stderr=""),
+            mock.Mock(returncode=1),
+            mock.Mock(returncode=0),
+        ]
+
+        command = install_server.check_podman_compose(dry_run=False)
+
+        self.assertEqual(command, ["podman-compose"])
+
     def test_weather_choices_match_registered_forecast_providers(self):
         choices = install_server.weather_provider_choices()
 
@@ -81,6 +125,30 @@ class InstallerCopyTests(unittest.TestCase):
         config = install_server.render_config(answers, mode="systemd")
 
         self.assertIn("  refreshminutes: 15", config)
+
+    def test_podman_config_uses_container_data_path(self):
+        answers = {
+            "port": 8080,
+            "refresh_minutes": 15,
+            "weather_service": "openweathermapv3",
+            "num_hourly_forecasts": 6,
+            "metric": True,
+            "netatmo_enabled": False,
+            "location": "Landry, FR",
+            "mqtt_weather_enabled": False,
+            "mqtt_weather_broker": "",
+            "mqtt_weather_port": 1883,
+            "mqtt_weather_base_topic": "",
+            "mqtt_diagnostics_enabled": False,
+            "mqtt_diagnostics_broker": "",
+            "mqtt_diagnostics_port": 1883,
+            "mqtt_diagnostics_topic": "",
+        }
+
+        config = install_server.render_config(answers, mode="podman")
+
+        self.assertIn("    token_file: data/netatmo-token.json", config)
+        self.assertIn("    broker: host.containers.internal", config)
 
     def test_legacy_refresh_hours_are_converted_for_reconfiguration(self):
         self.assertEqual(
