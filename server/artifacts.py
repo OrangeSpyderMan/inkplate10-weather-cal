@@ -44,6 +44,7 @@ class ArtifactStore:
                 "snapshot": {
                     "path": self.snapshot_path.name,
                     "signature": self.file_signature(self.snapshot_path),
+                    "sha256": self.file_sha256(self.snapshot_path),
                 },
                 "outputs": outputs,
             },
@@ -58,6 +59,8 @@ class ArtifactStore:
             snapshot_matches = (
                 snapshot["signature"]
                 == self.file_signature(self.root / snapshot["path"])
+                and snapshot["sha256"]
+                == self.file_sha256(self.root / snapshot["path"])
             )
             for name, profile in profiles.items():
                 output = ready["outputs"][name]
@@ -66,6 +69,7 @@ class ArtifactStore:
                     snapshot_matches
                     and self.root / output["path"] == expected_path
                     and output["signature"] == self.file_signature(expected_path)
+                    and output["sha256"] == self.file_sha256(expected_path)
                 )
         except (KeyError, OSError, TypeError, json.JSONDecodeError):
             pass

@@ -67,9 +67,47 @@ class ArtifactStoreTests(unittest.TestCase):
                 "8f8cbb7dcf46e0bc7d53265749a6c17d"
                 "116093a6ba95e442764060c76fd4a86c",
             )
+            self.assertEqual(
+                ready["snapshot"]["sha256"],
+                ArtifactStore.file_sha256(store.snapshot_path),
+            )
             self.assertTrue(store.producer_cycle_complete(profiles))
 
             output_path.write_bytes(b"new output")
+
+            self.assertFalse(store.producer_cycle_complete(profiles))
+
+    def test_detects_content_changes_when_file_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            snapshot = mock.Mock()
+            snapshot.generated_at.isoformat.return_value = (
+                "2026-06-09T00:00:00+00:00"
+            )
+            snapshot.to_payload.return_value = {"value": "old"}
+            profile = OutputProfile(
+                DEFAULT_OUTPUT_PROFILE,
+                "firefox",
+                825,
+                1200,
+            )
+            profiles = {DEFAULT_OUTPUT_PROFILE: profile}
+
+            store.write_snapshot(snapshot)
+            output_path = store.output_path(
+                DEFAULT_OUTPUT_PROFILE,
+                profile.filename,
+            )
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"old")
+            store.write_ready(snapshot, profiles)
+            original_stat = output_path.stat()
+
+            output_path.write_bytes(b"new")
+            os.utime(
+                output_path,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
 
             self.assertFalse(store.producer_cycle_complete(profiles))
 
