@@ -24,6 +24,15 @@ class ProducerConfig:
 
     @classmethod
     def from_config(cls, config):
+        always_on = bool(
+            get_prop_by_keys(
+                config,
+                "server",
+                "alwayson",
+                default=False,
+                required=False,
+            )
+        )
         hourly_forecasts = int(
             get_prop_by_keys(
                 config,
@@ -47,9 +56,14 @@ class ProducerConfig:
                 required=False,
             )
         )
-        if refresh_hours <= 0:
+        if refresh_hours < 0:
             raise ConfigurationError(
-                f"server.refreshhours {refresh_hours} must be positive"
+                f"server.refreshhours {refresh_hours} must be non-negative"
+            )
+        if always_on and refresh_hours == 0:
+            raise ConfigurationError(
+                "server.refreshhours must be positive when "
+                "server.alwayson is true"
             )
 
         realtime_config = get_prop(
@@ -78,15 +92,7 @@ class ProducerConfig:
             debug=bool(
                 get_prop(config, "debug", default=False, required=False)
             ),
-            always_on=bool(
-                get_prop_by_keys(
-                    config,
-                    "server",
-                    "alwayson",
-                    default=False,
-                    required=False,
-                )
-            ),
+            always_on=always_on,
             refresh_seconds=refresh_hours * 3600,
             weather_service=str(
                 get_prop_by_keys(

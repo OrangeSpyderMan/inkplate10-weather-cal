@@ -40,14 +40,62 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertTrue(producer_enabled({}))
         self.assertFalse(producer_enabled({"server": {"enabled": False}}))
 
-    def test_rejects_non_positive_refresh_interval(self):
+    def test_accepts_zero_refresh_interval_in_one_shot_mode(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {
+                    "alwayson": False,
+                    "refreshhours": 0,
+                },
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertFalse(settings.always_on)
+        self.assertEqual(settings.refresh_seconds, 0)
+
+    def test_rejects_zero_refresh_interval_in_always_on_mode(self):
         with self.assertRaisesRegex(
             ConfigurationError,
-            "server.refreshhours 0 must be positive",
+            "server.refreshhours must be positive",
         ):
             ProducerConfig.from_config(
                 {
-                    "server": {"refreshhours": 0},
+                    "server": {
+                        "alwayson": True,
+                        "refreshhours": 0,
+                    },
+                    "weather": {
+                        "service": "openweathermapv3",
+                        "apikey": "weather-key",
+                    },
+                    "google": {
+                        "apikey": "google-key",
+                        "staticmaps_mapid": "map-id",
+                    },
+                    "location": "Landry, FR",
+                }
+            )
+
+    def test_rejects_negative_refresh_interval_in_one_shot_mode(self):
+        with self.assertRaisesRegex(
+            ConfigurationError,
+            "server.refreshhours -1 must be non-negative",
+        ):
+            ProducerConfig.from_config(
+                {
+                    "server": {
+                        "alwayson": False,
+                        "refreshhours": -1,
+                    },
                     "weather": {
                         "service": "openweathermapv3",
                         "apikey": "weather-key",
