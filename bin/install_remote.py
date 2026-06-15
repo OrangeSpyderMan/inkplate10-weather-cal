@@ -43,8 +43,19 @@ def main() -> int:
 
     validate_local_checkout()
     remote_uid = remote_output(ssh, "id -u").strip()
-    privilege_prefix = remote_privilege_prefix(ssh, args.mode, remote_uid)
-    check_remote_requirements(ssh, args.mode)
+    privilege_prefix = remote_privilege_prefix(
+        ssh,
+        args.mode,
+        remote_uid,
+        non_interactive=args.non_interactive,
+    )
+    check_remote_requirements(
+        ssh,
+        args.mode,
+        remote_uid,
+        privilege_prefix,
+        non_interactive=args.non_interactive,
+    )
     remote_dir = remote_output(ssh, "mktemp -d /tmp/inkplate-install.XXXXXXXX").strip()
     if not remote_dir.startswith("/tmp/inkplate-install."):
         raise SystemExit(
@@ -229,35 +240,64 @@ def remote_privilege_prefix(
     ssh: list[str],
     mode: str,
     remote_uid: str,
+    non_interactive: bool,
 ) -> list[str]:
     if mode != "proxmox" or remote_uid == "0":
         return []
+    sudo_check = "command -v sudo >/dev/null"
+    if non_interactive:
+        sudo_check += " && sudo -n true"
     result = subprocess.run(
-        [*ssh, "command -v sudo >/dev/null && sudo -n true"],
+        [*ssh, sudo_check],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if result.returncode != 0:
+        requirement = (
+            "non-interactive sudo"
+            if non_interactive
+            else "sudo access"
+        )
         raise SystemExit(
             "ERROR: Proxmox mode requires root. Log in as root or configure "
-            "non-interactive sudo for the remote account."
+            f"{requirement} for the remote account."
         )
     return ["sudo", "-H"]
 
 
-def check_remote_requirements(ssh: list[str], mode: str) -> None:
+def check_remote_requirements(
+    ssh: list[str],
+    mode: str,
+    remote_uid: str,
+    privilege_prefix: list[str],
+    non_interactive: bool,
+) -> None:
     commands = ["python3", "tar"]
-    if mode == "proxmox":
+    if mode == "proxmox" and remote_uid == "0":
         commands.extend(["pct", "pveversion"])
+    remote_output(ssh, requirement_script(commands))
+
+    if (
+        mode == "proxmox"
+        and remote_uid != "0"
+        and non_interactive
+    ):
+        elevated_script = requirement_script(["pct", "pveversion"])
+        command = shlex.join(
+            [*privilege_prefix, "sh", "-c", elevated_script]
+        )
+        remote_output(ssh, command)
+
+
+def requirement_script(commands: list[str]) -> str:
     quoted = " ".join(shlex.quote(command) for command in commands)
-    script = (
+    return (
         "set -eu; "
         f"for command in {quoted}; do "
         'command -v "$command" >/dev/null || '
         '{ echo "missing remote command: $command" >&2; exit 1; }; '
         "done"
     )
-    remote_output(ssh, script)
 
 
 def tracked_files() -> list[Path]:

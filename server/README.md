@@ -102,11 +102,12 @@ configuration. An answers file can be included as a protected `0600` file:
 
 Interactive runs allocate a remote TTY. Non-interactive systemd deployments
 therefore need passwordless privilege elevation if the remote account is not
-root. Proxmox deployment either logs in as root or requires non-interactive
-`sudo`. A successful run removes the temporary remote workspace; a failed run
-retains it and prints the path. Use `--dry-run` for a connection-free local
-preview, or `--remote-dry-run` to connect and exercise the target installer's
-own dry-run checks.
+root. Proxmox deployment either logs in as root or uses `sudo`; interactive
+runs can prompt for the sudo password, while `--non-interactive` requires
+passwordless sudo. A successful run removes the temporary remote workspace; a
+failed run retains it and prints the path. Use `--dry-run` for a connection-free
+local preview, or `--remote-dry-run` to connect and exercise the target
+installer's own dry-run checks.
 
 For CI or repeatable testing, use the example JSON answers file:
 
