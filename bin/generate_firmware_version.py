@@ -8,25 +8,45 @@ def c_string(value):
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def git(*args):
+def git(*args, cwd=None):
     result = subprocess.run(
         ["git", *args],
         check=False,
         capture_output=True,
         text=True,
+        cwd=cwd,
     )
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def detected_version():
-    exact_tags = git("tag", "--points-at", "HEAD", "--sort=-version:refname")
-    if exact_tags:
-        return exact_tags.splitlines()[0]
+def detected_version(cwd=None):
+    exact = git(
+        "describe",
+        "--tags",
+        "--exact-match",
+        "--match",
+        "v[0-9]*",
+        "HEAD",
+        cwd=cwd,
+    )
+    if exact:
+        return exact
 
-    release_tags = git("tag", "--sort=-version:refname")
-    release = release_tags.splitlines()[0] if release_tags else "v0.0.0"
-    commit = git("rev-parse", "--short", "HEAD") or "unknown"
-    dirty = ".dirty" if git("status", "--porcelain", "--untracked-files=no") else ""
+    release = git(
+        "describe",
+        "--tags",
+        "--abbrev=0",
+        "--match",
+        "v[0-9]*",
+        "HEAD",
+        cwd=cwd,
+    ) or "v0.0.0"
+    commit = git("rev-parse", "--short", "HEAD", cwd=cwd) or "unknown"
+    dirty = (
+        ".dirty"
+        if git("status", "--porcelain", "--untracked-files=no", cwd=cwd)
+        else ""
+    )
     return f"{release}+g{commit}{dirty}"
 
 

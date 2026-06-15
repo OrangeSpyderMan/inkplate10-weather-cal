@@ -283,6 +283,9 @@ make firmware-compile FIRMWARE_VERSION=v3.1.0
 The version is printed in serial boot diagnostics and included in the MQTT
 `WAKE` event.
 
+Maintainer release steps are documented in
+[docs/releasing.md](docs/releasing.md).
+
 This is the generic build used by CI and release binaries. It expects
 `/config.yaml` on an SD card but renders the calendar image directly from HTTP.
 
