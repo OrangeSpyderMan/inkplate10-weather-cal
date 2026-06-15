@@ -56,21 +56,41 @@ class ArtifactStore:
             with self.ready_path.open(encoding="utf-8") as ready_file:
                 ready = json.load(ready_file)
             snapshot = ready["snapshot"]
+            snapshot_path = self.root / snapshot["path"]
+            snapshot_signature = self.file_signature(snapshot_path)
             snapshot_matches = (
                 snapshot["signature"]
-                == self.file_signature(self.root / snapshot["path"])
-                and snapshot["sha256"]
-                == self.file_sha256(self.root / snapshot["path"])
+                == snapshot_signature
+            )
+            upgraded = False
+            if snapshot_matches and "sha256" not in snapshot:
+                snapshot["sha256"] = self.file_sha256(snapshot_path)
+                upgraded = True
+            snapshot_matches = (
+                snapshot_matches
+                and snapshot["sha256"] == self.file_sha256(snapshot_path)
             )
             for name, profile in profiles.items():
                 output = ready["outputs"][name]
                 expected_path = self.output_path(name, profile.filename)
+                output_signature = self.file_signature(expected_path)
+                output_matches = (
+                    self.root / output["path"] == expected_path
+                    and output["signature"] == output_signature
+                )
+                if output_matches and "sha256" not in output:
+                    output["sha256"] = self.file_sha256(expected_path)
+                    upgraded = True
                 status[name] = (
                     snapshot_matches
-                    and self.root / output["path"] == expected_path
-                    and output["signature"] == self.file_signature(expected_path)
+                    and output_matches
                     and output["sha256"] == self.file_sha256(expected_path)
                 )
+            if upgraded:
+                try:
+                    self.write_json(self.ready_path, ready)
+                except OSError:
+                    pass
         except (KeyError, OSError, TypeError, json.JSONDecodeError):
             pass
         return status
