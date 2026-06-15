@@ -82,7 +82,7 @@ class OpenWeatherMapv4Service(WeatherService):
                 },
                 "wind": {
                     "unit": "m/s" if self.units == "metric" else "mph",
-                    "real": entry["wind_speed"],
+                    "value": entry["wind_speed"],
                 },
                 "humidity": entry["humidity"],
                 "rain_probability": round(entry.get("pop", 0) * 100),

@@ -112,13 +112,6 @@ In order to obtain an API Key, you will need to:
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `accuweather`.
 
-### OpenWeatherMap API
-
-[DEPRECATED]
-This provider is no longer supported in this version. Use
-[OpenWeatherMapv3](#openweathermapv3-api) or
-[OpenWeatherMapv4](#openweathermapv4-api) instead.
-
 ### OpenWeatherMapv3 API
 
 This is the API that has had the most testing.
@@ -171,19 +164,20 @@ lookup is not currently performed.
 OpenWeatherMap v3 remains the default while v4 output is compared on real
 servers.
 
-### Current temperature source
+### Realtime conditions source
 
-By default the current temperature shown on the display comes from the configured weather provider:
+By default current conditions come from the configured forecast provider:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: weather
 ```
 
-You can optionally use a Netatmo Weather Station for only the current temperature while keeping the configured weather provider for the icon, min/max temperature, hourly forecast, and rain chart:
+You can overlay realtime Netatmo measurements while keeping the configured
+provider for icons, min/max temperature, and hourly forecasts:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: netatmo
   netatmo:
     client_id: ${NETATMO_CLIENT_ID:-}
@@ -191,10 +185,35 @@ current_temperature:
     refresh_token: ${NETATMO_REFRESH_TOKEN:-}
     token_file: netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
-    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
+    module_id: ${NETATMO_MODULE_ID:-} # optional temperature/humidity module
+    wind_module_id: ${NETATMO_WIND_MODULE_ID:-} # optional wind gauge
+    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-} # optional rain gauge
 ```
 
-The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
+The Netatmo integration uses the refresh token to request access tokens and
+stores refreshed token data in `token_file`. Temperature and humidity are read
+from `module_id`, or from the station when it is omitted. Optional wind and rain
+modules add normalized wind speed, gust, direction, current rain, one-hour
+rainfall, and 24-hour rainfall to the API and MQTT snapshot. The existing
+`current_temperature` configuration key remains accepted for migration, but new
+configurations should use `current_conditions`.
+
+### Provider interfaces
+
+Forecast providers implement the normalized `ForecastProvider` interface:
+
+- `get_daily_summary()`
+- `get_hourly_forecast()`
+
+Realtime providers implement `RealtimeProvider.get_current_conditions()` and
+return a partial current-conditions overlay. Providers are registered in
+`weather/providers.py`, which keeps construction, supported names, and lazy
+imports in one place. OpenWeatherMap v2 is no longer registered; supported
+OpenWeatherMap providers are v3 and v4.
+
+Normalized wind measurements use `value` and `unit`, with optional `gust` and
+`direction`. Normalized rain measurements use `value` and `unit`, with optional
+`last_hour` and `last_24_hours`.
 
 ### MQTT weather publishing
 
@@ -330,6 +349,8 @@ NETATMO_CLIENT_SECRET
 NETATMO_REFRESH_TOKEN
 NETATMO_DEVICE_ID
 NETATMO_MODULE_ID
+NETATMO_WIND_MODULE_ID
+NETATMO_RAIN_MODULE_ID
 ```
 
 Empty runtime values do not satisfy required config placeholders such as
@@ -514,12 +535,14 @@ WEATHER_API_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_STATICMAPS_MAPID=...
 
-# Optional, only when current_temperature.source is netatmo
+# Optional, only when current_conditions.source is netatmo
 NETATMO_CLIENT_ID=
 NETATMO_CLIENT_SECRET=
 NETATMO_REFRESH_TOKEN=
 NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
+NETATMO_WIND_MODULE_ID=
+NETATMO_RAIN_MODULE_ID=
 ```
 
 Compose runs separate `inkplate` web, `producer`, and `diagnostics` services.
@@ -653,7 +676,7 @@ Configure the container with:
 
 Fill in at least `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and
 `GOOGLE_STATICMAPS_MAPID`; leave Netatmo values empty unless
-`current_temperature.source` is set to `netatmo`. The supported variable names
+`current_conditions.source` is set to `netatmo`. The supported variable names
 are listed in `.env.example`.
 
 Do not mount a directory over `/srv/inkplate/server`; that path contains the

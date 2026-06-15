@@ -118,6 +118,9 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         self.assertTrue(
             all(forecast["wind"]["unit"] == "m/s" for forecast in forecasts)
         )
+        self.assertTrue(
+            all("value" in forecast["wind"] for forecast in forecasts)
+        )
         self.assertEqual(
             [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
             ["12pm", "3pm", "6pm", "9pm", "12am", "3am"],

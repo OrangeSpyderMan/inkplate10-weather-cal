@@ -1,8 +1,9 @@
 import os
 import json
+from abc import ABC, abstractmethod
 
 
-class WeatherService:
+class ForecastProvider(ABC):
     def __init__(
         self, apikey, baseurl, service_name, num_hours=6, metric=True
     ):
@@ -29,8 +30,20 @@ class WeatherService:
 
         return f"icon/{icon_map[icon_key]}"
 
+    @abstractmethod
     def get_daily_summary(self):
-        raise NotImplementedError("get_current_conditions not implemented")
+        """Return normalized current conditions and today's forecast."""
 
+    @abstractmethod
     def get_hourly_forecast(self):
-        raise NotImplementedError("get_forecast not implemented")
+        """Return normalized hourly forecast records."""
+
+
+class RealtimeProvider(ABC):
+    @abstractmethod
+    def get_current_conditions(self):
+        """Return a partial normalized current-conditions overlay."""
+
+
+# Backwards-compatible name for existing forecast provider implementations.
+WeatherService = ForecastProvider

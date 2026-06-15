@@ -390,9 +390,12 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     )
     answers["metric"] = prompt_yes_no("Use metric units?", default=parse_bool(config.get("weather.metric", "true")), key="metric")
 
-    current_source = config.get("current_temperature.source", "weather")
+    current_source = config.get(
+        "current_conditions.source",
+        config.get("current_temperature.source", "weather"),
+    )
     answers["netatmo_enabled"] = prompt_yes_no(
-        "Use Netatmo for live current temperature?",
+        "Use Netatmo for live current conditions?",
         default=current_source == "netatmo",
         key="netatmo_enabled",
     )
@@ -401,13 +404,17 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         answers["netatmo_client_secret"] = prompt_secret("Netatmo client secret", default=env.get("NETATMO_CLIENT_SECRET", ""), required=True, key="netatmo_client_secret")
         answers["netatmo_refresh_token"] = prompt_secret("Netatmo refresh token", default=env.get("NETATMO_REFRESH_TOKEN", ""), required=True, key="netatmo_refresh_token")
         answers["netatmo_device_id"] = prompt_text("Netatmo device ID (optional)", default=env.get("NETATMO_DEVICE_ID", ""), required=False, key="netatmo_device_id")
-        answers["netatmo_module_id"] = prompt_text("Netatmo module ID (optional)", default=env.get("NETATMO_MODULE_ID", ""), required=False, key="netatmo_module_id")
+        answers["netatmo_module_id"] = prompt_text("Netatmo temperature/humidity module ID (optional)", default=env.get("NETATMO_MODULE_ID", ""), required=False, key="netatmo_module_id")
+        answers["netatmo_wind_module_id"] = prompt_text("Netatmo wind module ID (optional)", default=env.get("NETATMO_WIND_MODULE_ID", ""), required=False, key="netatmo_wind_module_id")
+        answers["netatmo_rain_module_id"] = prompt_text("Netatmo rain module ID (optional)", default=env.get("NETATMO_RAIN_MODULE_ID", ""), required=False, key="netatmo_rain_module_id")
     else:
         answers["netatmo_client_id"] = env.get("NETATMO_CLIENT_ID", "")
         answers["netatmo_client_secret"] = env.get("NETATMO_CLIENT_SECRET", "")
         answers["netatmo_refresh_token"] = env.get("NETATMO_REFRESH_TOKEN", "")
         answers["netatmo_device_id"] = env.get("NETATMO_DEVICE_ID", "")
         answers["netatmo_module_id"] = env.get("NETATMO_MODULE_ID", "")
+        answers["netatmo_wind_module_id"] = env.get("NETATMO_WIND_MODULE_ID", "")
+        answers["netatmo_rain_module_id"] = env.get("NETATMO_RAIN_MODULE_ID", "")
 
     answers["mqtt_weather_enabled"] = prompt_yes_no(
         "Publish weather data to MQTT?",
@@ -492,7 +499,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  apikey: ${WEATHER_API_KEY}",
         f"  num_hourly_forecasts: {answers['num_hourly_forecasts']}",
         f"  metric: {yaml_bool(bool(answers['metric']))}",
-        "current_temperature:",
+        "current_conditions:",
         f"  source: {'netatmo' if answers['netatmo_enabled'] else 'weather'}",
         "  netatmo:",
         "    client_id: ${NETATMO_CLIENT_ID:-}",
@@ -501,6 +508,8 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"    token_file: {token_file}",
         "    device_id: ${NETATMO_DEVICE_ID:-}",
         "    module_id: ${NETATMO_MODULE_ID:-}",
+        "    wind_module_id: ${NETATMO_WIND_MODULE_ID:-}",
+        "    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-}",
         "google:",
         "  apikey: ${GOOGLE_API_KEY}",
         "  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}",
@@ -549,6 +558,8 @@ def render_env(answers: dict[str, object], include_optional: bool) -> str:
                 "NETATMO_REFRESH_TOKEN": str(answers["netatmo_refresh_token"]),
                 "NETATMO_DEVICE_ID": str(answers["netatmo_device_id"]),
                 "NETATMO_MODULE_ID": str(answers["netatmo_module_id"]),
+                "NETATMO_WIND_MODULE_ID": str(answers["netatmo_wind_module_id"]),
+                "NETATMO_RAIN_MODULE_ID": str(answers["netatmo_rain_module_id"]),
             }
         )
     lines = [

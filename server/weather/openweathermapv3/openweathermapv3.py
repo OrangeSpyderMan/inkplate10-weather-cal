@@ -31,7 +31,7 @@ class OpenWeatherMapv3Service(WeatherService):
         if self.units == "metric":
             units = "\N{DEGREE SIGN}C"
         else:
-            units = ("\N{DEGREE SIGN}F",)
+            units = "\N{DEGREE SIGN}F"
 
         forecast = {
             
@@ -63,7 +63,7 @@ class OpenWeatherMapv3Service(WeatherService):
 
         if self.units == "metric":
             temp_units = "\N{DEGREE SIGN}C"
-            speed_units = "kmh"
+            speed_units = "m/s"
         else:
             temp_units = "\N{DEGREE SIGN}F"
             speed_units = "mph"
@@ -79,7 +79,7 @@ class OpenWeatherMapv3Service(WeatherService):
                 },
                 "wind": {
                     "unit": speed_units,
-                    "real": (entry["wind_speed"]),
+                    "value": entry["wind_speed"],
                 },
                 "humidity": (entry["humidity"]),
                 "rain_probability": round(entry["pop"] * 100),

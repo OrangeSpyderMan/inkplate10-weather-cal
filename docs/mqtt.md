@@ -41,6 +41,11 @@ The server publishes after each successful weather refresh. The diagnostic
 listener subscribes when it connects and subscribes again after reconnecting.
 MQTT failures do not stop image rendering or HTTP serving.
 
+Optional realtime-provider fields are included in the retained `/current`
+payload. Netatmo wind data uses `value`, `unit`, and optional `gust` and
+`direction`; rain data uses `value`, `unit`, and optional `last_hour` and
+`last_24_hours`.
+
 Enable diagnostic publishing in the Inkplate configuration, either the SD-card
 `config.yaml` or the YAML passed to `make firmware-upload CONFIG=...`:
 

@@ -4,8 +4,10 @@ import time
 
 import requests
 
+from ..service import RealtimeProvider
 
-class NetatmoCurrentTemperatureService:
+
+class NetatmoRealtimeService(RealtimeProvider):
     def __init__(
         self,
         client_id,
@@ -14,6 +16,8 @@ class NetatmoCurrentTemperatureService:
         token_file,
         device_id=None,
         module_id=None,
+        wind_module_id=None,
+        rain_module_id=None,
         metric=True,
         baseurl="https://api.netatmo.com",
     ):
@@ -23,20 +27,95 @@ class NetatmoCurrentTemperatureService:
         self.token_file = token_file
         self.device_id = device_id
         self.module_id = module_id
+        self.wind_module_id = wind_module_id
+        self.rain_module_id = rain_module_id
         self.metric = metric
         self.baseurl = baseurl
 
-    def get_current_temperature(self):
+    def get_current_conditions(self):
         data = self._get_stations_data()
-        temperature_c = self._extract_temperature(data)
-        value = temperature_c if self.metric else (temperature_c * 9 / 5) + 32
+        device = self._get_device(data)
+        primary_source = self._measurement_source(device, self.module_id)
+        dashboard_data = primary_source.get("dashboard_data", {})
+        conditions = {}
 
+        if "Temperature" in dashboard_data:
+            conditions["temperature"] = self._temperature(
+                dashboard_data["Temperature"]
+            )
+        if "Humidity" in dashboard_data:
+            conditions["humidity"] = dashboard_data["Humidity"]
+
+        wind_data = self._module_dashboard(
+            device,
+            self.wind_module_id,
+            primary_source,
+            "WindStrength",
+        )
+        if wind_data:
+            conditions["wind"] = self._wind(wind_data)
+
+        rain_data = self._module_dashboard(
+            device,
+            self.rain_module_id,
+            primary_source,
+            "Rain",
+        )
+        if rain_data:
+            conditions["rain"] = self._rain(rain_data)
+
+        if not conditions:
+            source_id = primary_source.get("_id", "unknown")
+            raise ValueError(
+                f"No supported measurements found for Netatmo source {source_id}"
+            )
+
+        return conditions
+
+    def get_current_temperature(self):
+        conditions = self.get_current_conditions()
+        if "temperature" not in conditions:
+            raise ValueError("No Temperature measurement found for Netatmo source")
+        return conditions["temperature"]
+
+    def _temperature(self, temperature_c):
+        value = temperature_c if self.metric else (temperature_c * 9 / 5) + 32
         return {
             "source": "netatmo",
             "live": True,
             "unit": "\N{DEGREE SIGN}C" if self.metric else "\N{DEGREE SIGN}F",
             "value": round(value),
         }
+
+    def _wind(self, data):
+        factor = 1 if self.metric else 0.621371
+        wind = {
+            "source": "netatmo",
+            "live": True,
+            "unit": "kmh" if self.metric else "mph",
+            "value": round(data["WindStrength"] * factor, 1),
+        }
+        if "GustStrength" in data:
+            wind["gust"] = round(data["GustStrength"] * factor, 1)
+        if "WindAngle" in data:
+            wind["direction"] = data["WindAngle"]
+        return wind
+
+    def _rain(self, data):
+        factor = 1 if self.metric else 0.0393701
+        rain = {
+            "source": "netatmo",
+            "live": True,
+            "unit": "mm" if self.metric else "in",
+            "value": round(data["Rain"] * factor, 2),
+        }
+        for source_key, output_key in (
+            ("sum_rain_1", "last_hour"),
+            ("sum_rain_24", "last_24_hours"),
+        ):
+            if source_key in data:
+                rain[output_key] = round(data[source_key] * factor, 2)
+        return rain
 
     def _get_stations_data(self):
         token = self._get_access_token()
@@ -69,29 +148,32 @@ class NetatmoCurrentTemperatureService:
 
         return data
 
-    def _extract_temperature(self, data):
+    def _get_device(self, data):
         body = data.get("body", {})
         devices = body.get("devices", [])
         if len(devices) == 0:
             raise ValueError("No Netatmo weather stations found in response")
+        return self._find_by_id(devices, self.device_id, "station")
 
-        device = self._find_by_id(devices, self.device_id, "station")
-        measurement_source = device
+    def _measurement_source(self, device, module_id):
+        if not module_id:
+            return device
+        return self._find_by_id(device.get("modules", []), module_id, "module")
 
-        if self.module_id:
-            modules = device.get("modules", [])
-            measurement_source = self._find_by_id(modules, self.module_id, "module")
-
-        dashboard_data = measurement_source.get("dashboard_data", {})
-        if "Temperature" not in dashboard_data:
-            source_id = measurement_source.get("_id", "unknown")
-            raise ValueError(
-                "No Temperature measurement found for Netatmo source {}".format(
-                    source_id
-                )
-            )
-
-        return dashboard_data["Temperature"]
+    def _module_dashboard(
+        self,
+        device,
+        module_id,
+        fallback_source,
+        required_key,
+    ):
+        source = (
+            self._measurement_source(device, module_id)
+            if module_id
+            else fallback_source
+        )
+        dashboard = source.get("dashboard_data", {})
+        return dashboard if required_key in dashboard else None
 
     def _find_by_id(self, items, item_id, item_name):
         if item_id is None:
@@ -155,3 +237,7 @@ class NetatmoCurrentTemperatureService:
 
         with open(self.token_file, "w") as f:
             json.dump(token_data, f)
+
+
+# Preserve imports used by existing installations and third-party code.
+NetatmoCurrentTemperatureService = NetatmoRealtimeService
