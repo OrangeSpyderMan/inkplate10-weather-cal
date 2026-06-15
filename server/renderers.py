@@ -26,8 +26,19 @@ class FirefoxCalendarRenderer:
         page.save()
 
 
-def build_renderer(name):
-    if name == FirefoxCalendarRenderer.name:
-        return FirefoxCalendarRenderer()
+RENDERERS = {
+    FirefoxCalendarRenderer.name: FirefoxCalendarRenderer,
+}
 
-    raise ValueError(f"unsupported output renderer {name!r}")
+
+def build_renderer(name):
+    renderer = RENDERERS.get(name)
+    if renderer is not None:
+        return renderer()
+
+    raise ValueError(
+        "unsupported output renderer {!r}; supported renderers: {}".format(
+            name,
+            ", ".join(sorted(RENDERERS)),
+        )
+    )

@@ -4,6 +4,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import requests
 
 from ..service import WeatherService
+from ..models import ForecastData
 
 
 class OpenWeatherMapv4Service(WeatherService):
@@ -45,6 +46,12 @@ class OpenWeatherMapv4Service(WeatherService):
             },
         }
 
+    def fetch(self):
+        return ForecastData.from_dicts(
+            self.get_daily_summary(),
+            self.get_hourly_forecast(),
+        ).validate()
+
     def get_hourly_forecast(self):
         required_records = self.HOURLY_STEP * self.num_hours + 3
         records, timezone_offset = self._get_records(
@@ -82,7 +89,7 @@ class OpenWeatherMapv4Service(WeatherService):
                 },
                 "wind": {
                     "unit": "m/s" if self.units == "metric" else "mph",
-                    "real": entry["wind_speed"],
+                    "value": entry["wind_speed"],
                 },
                 "humidity": entry["humidity"],
                 "rain_probability": round(entry.get("pop", 0) * 100),
@@ -180,3 +187,12 @@ class OpenWeatherMapv4Service(WeatherService):
         if self.units == "metric":
             return celsius
         return celsius * 9 / 5 + 32
+
+
+def build_provider(config):
+    return OpenWeatherMapv4Service(
+        apikey=config["apikey"],
+        location=config["location"],
+        metric=config.get("metric", True),
+        num_hours=config.get("num_hours", 6),
+    )

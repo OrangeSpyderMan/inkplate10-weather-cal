@@ -102,22 +102,15 @@ group, start a new login session or run `newgrp docker` before retrying.
 
 ### AccuWeather API
 
-This is the least tested API.
+This provider follows AccuWeather's current Core Weather API contract, using
+HTTPS and Bearer authentication. It is covered by mocked contract tests but is
+not exercised against the live API in CI.
  
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
-2. Create an app in [https://developer.accuweather.com/user/me/apps](https://developer.accuweather.com/user/me/apps).
-3. Enter some details about the app's usage and purpose.
-4. Generate API key.
+2. Select a Core Weather API plan and generate an API key.
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `accuweather`.
-
-### OpenWeatherMap API
-
-[DEPRECATED]
-This provider is no longer supported in this version. Use
-[OpenWeatherMapv3](#openweathermapv3-api) or
-[OpenWeatherMapv4](#openweathermapv4-api) instead.
 
 ### OpenWeatherMapv3 API
 
@@ -171,19 +164,20 @@ lookup is not currently performed.
 OpenWeatherMap v3 remains the default while v4 output is compared on real
 servers.
 
-### Current temperature source
+### Realtime conditions source
 
-By default the current temperature shown on the display comes from the configured weather provider:
+By default current conditions come from the configured forecast provider:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: weather
 ```
 
-You can optionally use a Netatmo Weather Station for only the current temperature while keeping the configured weather provider for the icon, min/max temperature, hourly forecast, and rain chart:
+You can overlay realtime Netatmo measurements while keeping the configured
+provider for icons, min/max temperature, and hourly forecasts:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: netatmo
   netatmo:
     client_id: ${NETATMO_CLIENT_ID:-}
@@ -191,10 +185,39 @@ current_temperature:
     refresh_token: ${NETATMO_REFRESH_TOKEN:-}
     token_file: netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
-    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
+    module_id: ${NETATMO_MODULE_ID:-} # optional temperature/humidity module
+    wind_module_id: ${NETATMO_WIND_MODULE_ID:-} # optional wind gauge
+    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-} # optional rain gauge
 ```
 
-The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
+The Netatmo integration uses the refresh token to request access tokens and
+stores refreshed token data in `token_file`. Temperature and humidity are read
+from `module_id`, or from the station when it is omitted. Optional wind and rain
+modules add normalized wind speed, gust, direction, current rain, one-hour
+rainfall, and 24-hour rainfall to the API and MQTT snapshot. The existing
+`current_temperature` configuration key remains accepted for migration, but new
+configurations should use `current_conditions`.
+
+### Provider interfaces
+
+Forecast providers implement the normalized `ForecastProvider` interface:
+
+- `fetch() -> ForecastData`
+
+Realtime providers implement `RealtimeProvider.get_current_conditions()` and
+return a partial `CurrentConditions` overlay. The supported provider boundary
+uses dataclasses for temperature, wind, rain, current conditions, hourly
+forecasts, and the complete forecast. Renderers and external API clients still
+receive the normalized schema `2.0` dictionary representation.
+
+Providers are registered in
+`weather/providers.py`, which keeps construction, supported names, and lazy
+imports in one place. OpenWeatherMap v2 is no longer registered; supported
+OpenWeatherMap providers are v3 and v4.
+
+Normalized wind measurements use `value` and `unit`, with optional `gust` and
+`direction`. Normalized rain measurements use `value` and `unit`, with optional
+`last_hour` and `last_24_hours`.
 
 ### MQTT weather publishing
 
@@ -249,11 +272,26 @@ endpoint returns `503` until a snapshot is available. Provider-specific
 optional fields are preserved; for example, OpenWeatherMap v4 active alert IDs
 are exposed under `current.alerts`.
 
+The current payload schema is `2.0`. Wind measurements use `wind.value`;
+the OpenWeatherMap v4-specific `wind.real` field from schema `1.0` has been
+removed.
+
 Generated display artifacts use named output profiles:
 
 ```text
 GET /outputs/inkplate10-portrait/calendar.png
 ```
+
+Battery-powered clients can check a small content-hash manifest before
+downloading an output:
+
+```text
+GET /api/v1/outputs/inkplate10-portrait/status
+```
+
+The response includes the output URL and a SHA-256 of its content. The hash
+changes only when the rendered image bytes change, unlike timestamp-based HTTP
+validators.
 
 Output profiles are configured independently:
 
@@ -291,12 +329,20 @@ Operational endpoints are:
 ```text
 GET /api/v1/health
 GET /api/v1/ready
+GET /api/v1/outputs/<profile>/status
 ```
 
 Health reports whether the Gunicorn web application is running. Readiness
-returns `200` only when the snapshot and output signatures match the completion
-marker written at the end of a successful producer cycle. During an update or
-after an incomplete first cycle it returns `503`.
+returns `200` only when the snapshot and output signatures and SHA-256 hashes
+match the completion marker written at the end of a successful producer cycle.
+During an update or after an incomplete first cycle it returns `503`. Readiness
+markers created before hashes were added are upgraded in place when their
+recorded file signatures still match, so deployment does not require an
+immediate successful weather-provider request.
+
+The per-output status endpoint returns the completed output's SHA-256 and
+generation time. Firmware can compare that hash with its retained value and
+avoid downloading and driving an unchanged image to the e-paper panel.
 
 Snapshots and rendered outputs use stable paths and are atomically replaced, so
 the data directory does not accumulate historical versions. On startup, the
@@ -330,6 +376,8 @@ NETATMO_CLIENT_SECRET
 NETATMO_REFRESH_TOKEN
 NETATMO_DEVICE_ID
 NETATMO_MODULE_ID
+NETATMO_WIND_MODULE_ID
+NETATMO_RAIN_MODULE_ID
 ```
 
 Empty runtime values do not satisfy required config placeholders such as
@@ -514,12 +562,14 @@ WEATHER_API_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_STATICMAPS_MAPID=...
 
-# Optional, only when current_temperature.source is netatmo
+# Optional, only when current_conditions.source is netatmo
 NETATMO_CLIENT_ID=
 NETATMO_CLIENT_SECRET=
 NETATMO_REFRESH_TOKEN=
 NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
+NETATMO_WIND_MODULE_ID=
+NETATMO_RAIN_MODULE_ID=
 ```
 
 Compose runs separate `inkplate` web, `producer`, and `diagnostics` services.
@@ -653,7 +703,7 @@ Configure the container with:
 
 Fill in at least `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and
 `GOOGLE_STATICMAPS_MAPID`; leave Netatmo values empty unless
-`current_temperature.source` is set to `netatmo`. The supported variable names
+`current_conditions.source` is set to `netatmo`. The supported variable names
 are listed in `.env.example`.
 
 Do not mount a directory over `/srv/inkplate/server`; that path contains the

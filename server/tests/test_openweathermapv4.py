@@ -103,6 +103,13 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             },
         )
 
+    def test_fetch_returns_complete_typed_forecast(self):
+        forecast = self.service.fetch()
+
+        self.assertEqual(forecast.current.temperature.value, 16)
+        self.assertEqual(len(forecast.hourly), 6)
+        self.assertEqual(forecast.hourly[0].wind.unit, "m/s")
+
     def test_follows_hourly_pagination_for_all_six_forecast_slots(self):
         forecasts = self.service.get_hourly_forecast()
 
@@ -117,6 +124,9 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         )
         self.assertTrue(
             all(forecast["wind"]["unit"] == "m/s" for forecast in forecasts)
+        )
+        self.assertTrue(
+            all("value" in forecast["wind"] for forecast in forecasts)
         )
         self.assertEqual(
             [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],

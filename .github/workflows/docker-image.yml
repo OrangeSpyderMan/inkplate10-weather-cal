@@ -80,12 +80,13 @@ jobs:
             port: 8080
           EOF
           cat > "$RUNNER_TEMP/inkplate-data/weather.json" <<'EOF'
-          {"schema_version":"1.0","generated_at":"2026-06-09T00:00:00+00:00","current":{},"hourly":[]}
+          {"schema_version":"2.0","generated_at":"2026-06-09T00:00:00+00:00","current":{},"hourly":[]}
           EOF
           mkdir -p "$RUNNER_TEMP/inkplate-data/outputs/inkplate10-portrait"
           printf '\211PNG\r\n\032\n' > "$RUNNER_TEMP/inkplate-data/outputs/inkplate10-portrait/calendar.png"
           python3 - <<'PY'
           import json
+          import hashlib
           import os
           from pathlib import Path
 
@@ -93,12 +94,14 @@ jobs:
 
           def artifact(path):
               stat = path.stat()
+              sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
               return {
                   "path": str(path.relative_to(root)),
                   "signature": {
                       "mtime_ns": stat.st_mtime_ns,
                       "size": stat.st_size,
                   },
+                  "sha256": sha256,
               }
 
           ready = {

@@ -7,7 +7,7 @@ import unittest
 SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
-from weather.snapshot import WeatherSnapshot
+from weather.snapshot import SCHEMA_VERSION, WeatherSnapshot
 
 
 class WeatherSnapshotTests(unittest.TestCase):
@@ -19,7 +19,8 @@ class WeatherSnapshotTests(unittest.TestCase):
             generated_at=dt.datetime(2026, 6, 8, tzinfo=dt.timezone.utc),
         )
 
-        self.assertEqual(snapshot.to_payload()["schema_version"], "1.0")
+        self.assertEqual(SCHEMA_VERSION, "2.0")
+        self.assertEqual(snapshot.to_payload()["schema_version"], SCHEMA_VERSION)
 
     def test_payload_preserves_current_weather_alerts(self):
         alerts = {"active": True, "ids": ["alert-id"]}

@@ -13,6 +13,52 @@ SPEC.loader.exec_module(install_server)
 
 
 class InstallerCopyTests(unittest.TestCase):
+    def test_weather_choices_match_registered_forecast_providers(self):
+        choices = install_server.weather_provider_choices()
+
+        self.assertEqual(
+            {name for name, _ in choices},
+            set(install_server.FORECAST_PROVIDERS),
+        )
+
+    def test_rendered_config_uses_runtime_output_defaults(self):
+        answers = {
+            "port": 8080,
+            "refresh_hours": 3,
+            "weather_service": "openweathermapv3",
+            "num_hourly_forecasts": 6,
+            "metric": True,
+            "netatmo_enabled": False,
+            "location": "Landry, FR",
+            "mqtt_weather_enabled": False,
+            "mqtt_weather_broker": "",
+            "mqtt_weather_port": 1883,
+            "mqtt_weather_base_topic": "",
+            "mqtt_diagnostics_enabled": False,
+            "mqtt_diagnostics_broker": "",
+            "mqtt_diagnostics_port": 1883,
+            "mqtt_diagnostics_topic": "",
+        }
+
+        config = install_server.render_config(answers, mode="docker")
+
+        self.assertIn(
+            f"  default: {install_server.DEFAULT_OUTPUT_PROFILE}",
+            config,
+        )
+        self.assertIn(
+            f"      renderer: {install_server.DEFAULT_RENDERER}",
+            config,
+        )
+        self.assertIn(
+            f"      width: {install_server.DEFAULT_IMAGE_WIDTH}",
+            config,
+        )
+        self.assertIn(
+            f"      height: {install_server.DEFAULT_IMAGE_HEIGHT}",
+            config,
+        )
+
     def test_preserves_committed_png_assets_and_ignores_generated_images(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = pathlib.Path(temporary_dir)

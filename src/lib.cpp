@@ -1,3 +1,6 @@
+#include <ArduinoJson.h>
+#include <ctype.h>
+
 #include "lib.h"
 
 // RTC epoch of the last time we booted.
@@ -6,9 +9,15 @@ RTC_DATA_ATTR time_t lastBootTime = 0;
 RTC_DATA_ATTR time_t lastSleepTime = 0;
 // Avoid redrawing the same retained low-battery screen on every wake.
 RTC_DATA_ATTR bool batteryLowWarningDisplayed = false;
+// Avoid driving the panel repeatedly for the same retained error screen.
+RTC_DATA_ATTR uint32_t displayedErrorSignature = 0;
 // Cache timezone rules across deep sleep to avoid a network lookup every wake.
 RTC_DATA_ATTR char cachedTimezoneName[64] = "";
 RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
+// RTC epoch of the last successful NTP synchronization.
+RTC_DATA_ATTR time_t lastNtpSyncTime = 0;
+// SHA-256 of the last image successfully driven to the panel.
+RTC_DATA_ATTR char displayedCalendarSignature[65] = "";
 
 // Remote MQTT diagnostics.
 esp_mqtt_client_handle_t mqttClient = nullptr;
@@ -21,6 +30,35 @@ const char *mqttLogTopic = nullptr;
 Inkplate board(INKPLATE_3BIT);
 // timezone store
 Timezone myTz;
+
+namespace
+{
+constexpr time_t NTP_RESYNC_INTERVAL_SECONDS = 24 * 60 * 60;
+constexpr time_t MIN_VALID_RTC_EPOCH = 1577836800; // 2020-01-01T00:00:00Z
+
+uint32_t errorSignature(
+    const char *title,
+    const char *detail,
+    const String &diagnostics)
+{
+    uint32_t hash = 2166136261UL;
+    const char *values[] = {title, detail, diagnostics.c_str()};
+    for (const char *value : values)
+    {
+        if (value != nullptr)
+        {
+            while (*value != '\0')
+            {
+                hash ^= static_cast<uint8_t>(*value++);
+                hash *= 16777619UL;
+            }
+        }
+        hash ^= 0xFF;
+        hash *= 16777619UL;
+    }
+    return hash;
+}
+} // namespace
 
 esp_err_t handleMQTTEvent(esp_mqtt_event_handle_t event)
 {
@@ -161,7 +199,59 @@ esp_err_t displayImage(const char *url)
     log(LOG_DEBUG, "shutting down network before display refresh");
     shutdownNetwork();
     board.display();
+    displayedErrorSignature = 0;
 
+    return ESP_OK;
+}
+
+esp_err_t fetchCalendarSignature(
+    const char *url,
+    char *signature,
+    size_t signatureSize)
+{
+    if (url == nullptr || url[0] == '\0' || signatureSize < 65)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    HTTPClient http;
+    http.setConnectTimeout(3000);
+    http.setTimeout(3000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!http.begin(url))
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    const int httpCode = http.GET();
+    if (httpCode != HTTP_CODE_OK)
+    {
+        http.end();
+        return ESP_ERR_EMANIFEST;
+    }
+
+    StaticJsonDocument<256> document;
+    DeserializationError error = deserializeJson(document, http.getStream());
+    http.end();
+    if (error)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    const char *sha256 = document["sha256"];
+    if (sha256 == nullptr || strlen(sha256) != 64)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+    for (size_t i = 0; i < 64; ++i)
+    {
+        if (!isxdigit(static_cast<unsigned char>(sha256[i])))
+        {
+            return ESP_ERR_EMANIFEST;
+        }
+    }
+
+    snprintf(signature, signatureSize, "%s", sha256);
     return ESP_OK;
 }
 
@@ -175,6 +265,13 @@ esp_err_t displayImage(const char *url)
 */
 void displayError(const char *title, const char *detail, const String &diagnostics)
 {
+    const uint32_t signature = errorSignature(title, detail, diagnostics);
+    if (displayedErrorSignature == signature)
+    {
+        log(LOG_INFO, "error screen unchanged; skipping display refresh");
+        return;
+    }
+
     const uint8_t black = 0;
     const uint8_t white = 7;
     const int margin = 24;
@@ -206,6 +303,7 @@ void displayError(const char *title, const char *detail, const String &diagnosti
     }
 
     board.display();
+    displayedErrorSignature = signature;
 }
 
 void displayError(const char *title, const char *detail)
@@ -540,25 +638,19 @@ void shutdownNetwork()
 }
 
 /**
-  Connect to an NTP server and synchronize the on-board real-time clock.
+  Configure timezone rules and synchronize the on-board real-time clock from
+  NTP when synchronization is due.
 
   @param host the hostname of the NTP server (eg. pool.ntp.org).
   @param timezoneName the name of the timezone in Olson format (eg.
   Europe/Dublin)
   @returns the esp_err_t code:
-  - ESP_OK if successful.
+  - ESP_OK if the retained RTC is valid or synchronization succeeds.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
 esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
 {
     log(LOG_INFO, "configuring network time and RTC...");
-
-    setServer(ntpHost);
-    updateNTP();
-    if (!waitForSync(5))
-    {
-        return ESP_ERR_ENTP;
-    }
 
     if (strcmp(cachedTimezoneName, timezoneName) == 0 &&
         cachedTimezonePosix[0] != '\0')
@@ -579,9 +671,33 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
                                   sizeof(cachedTimezonePosix));
     }
 
+    const time_t rtcTime = board.rtc.getEpoch();
+    const bool rtcInvalid = rtcTime < MIN_VALID_RTC_EPOCH;
+    const bool rtcMovedBackwards =
+        lastNtpSyncTime > 0 && rtcTime < lastNtpSyncTime;
+    const bool syncDue =
+        lastNtpSyncTime == 0 ||
+        rtcInvalid ||
+        rtcMovedBackwards ||
+        rtcTime - lastNtpSyncTime >= NTP_RESYNC_INTERVAL_SECONDS;
+    if (!syncDue)
+    {
+        logf(LOG_INFO, "using RTC time; last NTP sync was %lld seconds ago",
+             static_cast<long long>(rtcTime - lastNtpSyncTime));
+        return ESP_OK;
+    }
+
+    setServer(ntpHost);
+    updateNTP();
+    if (!waitForSync(5))
+    {
+        return ESP_ERR_ENTP;
+    }
+
     // Sync RTC with NTP time
     time_t nowTime = myTz.now();
     board.rtc.setEpoch(nowTime);
+    lastNtpSyncTime = nowTime;
     logf(LOG_INFO, "RTC synced to %s", dateTime(nowTime, RFC3339).c_str());
 
     return ESP_OK;
@@ -600,12 +716,25 @@ void sleep(const int sleepHours)
     {
         boundedSleepHours = CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
     }
+    sleepForSeconds(
+        static_cast<uint32_t>(boundedSleepHours) * 60UL * 60UL);
+}
+
+void sleepForSeconds(const uint32_t sleepSeconds)
+{
+    uint32_t boundedSleepSeconds = sleepSeconds;
+    if (boundedSleepSeconds == 0)
+    {
+        boundedSleepSeconds =
+            CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL * 60UL * 60UL;
+    }
 
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtc.getEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
-    logf(LOG_INFO, "waking in %d hours", boundedSleepHours);
+    logf(LOG_INFO, "waking in %lu seconds",
+         static_cast<unsigned long>(boundedSleepSeconds));
     lastSleepTime = rtcTime;
 
     log(LOG_NOTICE, "Shutdown is NOW!");
@@ -616,7 +745,8 @@ void sleep(const int sleepHours)
     board.sdCardSleep();
 #endif
 
-    const uint64_t sleepMicroseconds = ((uint64_t)boundedSleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
+    const uint64_t sleepMicroseconds =
+        static_cast<uint64_t>(boundedSleepSeconds) * 1000ULL * 1000ULL;
     logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);
     esp_sleep_enable_timer_wakeup(sleepMicroseconds);
     log(LOG_NOTICE, "Sleeping...");
