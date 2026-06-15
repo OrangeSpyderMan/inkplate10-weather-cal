@@ -110,7 +110,8 @@ calendar:
   url: http://<server-host>:8080/calendar.png
   status_url: http://<server-host>:8080/api/v1/outputs/inkplate10-portrait/status
   refresh_interval: 3
-  retries: 3
+  retries: 1
+  retry_interval_minutes: 15
 wifi:
   ssid: XXXX
   pass: XXXX
@@ -143,6 +144,11 @@ Likely parameters you'll need to change are:
   image download and e-paper refresh. Omit it when using an older or third-party
   server.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
+- `calendar.retries` - whether to make one immediate image retry while awake.
+  Set to `0` to disable it; values above `1` are accepted for compatibility but
+  still result in only one immediate retry.
+- `calendar.retry_interval_minutes` - deep-sleep interval after both image
+  attempts fail. Defaults to 15 minutes.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 - `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.

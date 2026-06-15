@@ -712,12 +712,25 @@ void sleep(const int sleepHours)
     {
         boundedSleepHours = CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
     }
+    sleepForSeconds(
+        static_cast<uint32_t>(boundedSleepHours) * 60UL * 60UL);
+}
+
+void sleepForSeconds(const uint32_t sleepSeconds)
+{
+    uint32_t boundedSleepSeconds = sleepSeconds;
+    if (boundedSleepSeconds == 0)
+    {
+        boundedSleepSeconds =
+            CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL * 60UL * 60UL;
+    }
 
     log(LOG_NOTICE, "deep sleep initiated");
     time_t rtcTime = board.rtc.getEpoch();
     logf(LOG_DEBUG, "RTC time now is %s", dateTime(rtcTime, RFC3339).c_str());
 
-    logf(LOG_INFO, "waking in %d hours", boundedSleepHours);
+    logf(LOG_INFO, "waking in %lu seconds",
+         static_cast<unsigned long>(boundedSleepSeconds));
     lastSleepTime = rtcTime;
 
     log(LOG_NOTICE, "Shutdown is NOW!");
@@ -728,7 +741,8 @@ void sleep(const int sleepHours)
     board.sdCardSleep();
 #endif
 
-    const uint64_t sleepMicroseconds = ((uint64_t)boundedSleepHours * 60 * 60 * 1000 * 1000); // Convert the Hours interval into microseconds
+    const uint64_t sleepMicroseconds =
+        static_cast<uint64_t>(boundedSleepSeconds) * 1000ULL * 1000ULL;
     logf(LOG_DEBUG, "Enable sleep timer for wakeup after %llu microseconds", sleepMicroseconds);
     esp_sleep_enable_timer_wakeup(sleepMicroseconds);
     log(LOG_NOTICE, "Sleeping...");

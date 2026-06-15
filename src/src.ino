@@ -173,19 +173,19 @@ void setup()
         sleep(config.calendarRefreshInterval);
     }
 
-    // Reset err state.
+    // Limit radio-on retries to one immediate retry. Further recovery happens
+    // after a short deep-sleep interval.
     err = ESP_FAIL;
-    const char *errMsg;
+    const int maxAttempts = config.calendarRetries > 0 ? 2 : 1;
     int attempts = 0;
-    do
+    for (; attempts < maxAttempts; ++attempts)
     {
         logf(LOG_DEBUG, "calendar refresh attempt #%d", attempts + 1);
 
         err = displayImage(config.calendarUrl);
         if (err != ESP_OK)
         {
-            errMsg = "image display error";
-            log(LOG_ERROR, errMsg);
+            log(LOG_ERROR, "image display error");
             continue;
         }
         if (candidateSignature[0] != '\0')
@@ -196,14 +196,17 @@ void setup()
                 "%s",
                 candidateSignature);
         }
-    } while (err != ESP_OK && ++attempts <= config.calendarRetries);
+        break;
+    }
 
     // E-ink retains the previous image, so a failed refresh should not replace
     // a valid forecast with an error screen.
     if (err != ESP_OK)
     {
-        logf(LOG_ERROR, "%s after %d attempts", errMsg, attempts);
+        logf(LOG_ERROR, "image display error after %d attempts", attempts);
         logf(LOG_ERROR, "calendar URL: %s", config.calendarUrl);
+        sleepForSeconds(
+            static_cast<uint32_t>(config.calendarRetryIntervalMinutes) * 60UL);
     }
 
     // Deep sleep until next refresh time

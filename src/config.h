@@ -17,6 +17,7 @@ struct RuntimeConfig
     const char *calendarStatusUrl;
     int calendarRetries;
     int calendarRefreshInterval;
+    int calendarRetryIntervalMinutes;
     const char *wifiSSID;
     const char *wifiPass;
     int wifiRetries;

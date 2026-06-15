@@ -180,6 +180,13 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 void sleep(const int sleepHours);
 
 /**
+  Enter deep sleep for a duration in seconds.
+
+  @param sleepSeconds number of seconds before the timer wakeup.
+*/
+void sleepForSeconds(const uint32_t sleepSeconds);
+
+/**
   Connect to a MQTT broker for remote diagnostic logging.
 
   @param broker the hostname of the MQTT broker.

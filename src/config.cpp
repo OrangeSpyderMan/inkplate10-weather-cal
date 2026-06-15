@@ -101,6 +101,8 @@ bool loadRuntimeConfig(
     config.calendarRefreshInterval =
         calendar["refresh_interval"] |
         CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
+    config.calendarRetryIntervalMinutes =
+        calendar["retry_interval_minutes"] | 15;
 
     JsonObject wifi = document["wifi"];
     config.wifiSSID = wifi["ssid"];
@@ -130,6 +132,10 @@ bool loadRuntimeConfig(
     if (config.calendarRetries < 0)
     {
         return failConfig("Invalid calendar.retries");
+    }
+    if (config.calendarRetryIntervalMinutes <= 0)
+    {
+        return failConfig("Invalid calendar.retry_interval_minutes");
     }
     if (isMissingConfigValue(config.wifiSSID))
     {
