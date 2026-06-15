@@ -76,7 +76,9 @@ class AccuweatherService(WeatherService):
         forecasts = []
         for entry in even_select(self.num_hours, data):
             forecast = {
-                "dt": datetime.fromtimestamp(entry["EpochDateTime"]),
+                "dt": datetime.fromisoformat(
+                    entry["DateTime"].replace("Z", "+00:00")
+                ),
                 "icon": self.get_icon(entry["WeatherIcon"]),
                 "temperature": {
                     "unit": temp_units,

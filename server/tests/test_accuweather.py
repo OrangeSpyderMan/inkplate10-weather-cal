@@ -1,6 +1,7 @@
 import pathlib
 import sys
 import unittest
+from datetime import timedelta
 from unittest import mock
 
 
@@ -63,6 +64,9 @@ class AccuweatherServiceTests(unittest.TestCase):
                 [
                     {
                         "EpochDateTime": 1781510400 + offset * 3600,
+                        "DateTime": (
+                            f"2026-06-15T{10 + offset:02d}:00:00+02:00"
+                        ),
                         "WeatherIcon": 1,
                         "Temperature": {"Value": 12 + offset},
                         "Wind": {"Speed": {"Value": 10}},
@@ -84,6 +88,11 @@ class AccuweatherServiceTests(unittest.TestCase):
 
         self.assertEqual(forecast.current.temperature.value, 12)
         self.assertEqual(len(forecast.hourly), 6)
+        self.assertEqual(forecast.hourly[0].timestamp.hour, 10)
+        self.assertEqual(
+            forecast.hourly[0].timestamp.utcoffset(),
+            timedelta(hours=2),
+        )
         self.assertTrue(all(response.closed for response in responses))
         self.assertTrue(
             all(call.kwargs["timeout"] == 20 for call in get.call_args_list)
