@@ -25,8 +25,7 @@ class AccuweatherService(WeatherService):
     def get_daily_summary(self):
         is_metric = self.units == "metric"
         path = f"{self.baseurl}/forecasts/v1/daily/1day/{self.location_key}?apikey={self.apikey}&metric={is_metric}&details=true"
-        res = requests.get(path)
-        data = res.json()
+        data = self._get_json(path)
 
         if len(data) == 0:
             raise ValueError("Unexpected response from weather api: {}".format(data))
@@ -56,8 +55,7 @@ class AccuweatherService(WeatherService):
     def get_hourly_forecast(self):
         is_metric = self.units == "metric"
         path = f"{self.baseurl}/forecasts/v1/hourly/12hour/{self.location_key}?apikey={self.apikey}&metric={is_metric}&details=true"
-        res = requests.get(path)
-        data = res.json()
+        data = self._get_json(path)
 
         if len(data) == 0:
             raise ValueError("Unexpected response from weather api: {}".format(data))
@@ -92,8 +90,7 @@ class AccuweatherService(WeatherService):
 
     def _get_current_conditions(self):
         path = f"{self.baseurl}/currentconditions/v1/{self.location_key}?apikey={self.apikey}&details=true"
-        res = requests.get(path)
-        data = res.json()
+        data = self._get_json(path)
 
         if len(data) == 0:
             raise ValueError("Unexpected response from weather api: {}".format(data))
@@ -127,8 +124,7 @@ class AccuweatherService(WeatherService):
         path = (
             f"{self.baseurl}/locations/v1/search?apikey={self.apikey}&q={location}"
         )
-        res = requests.get(path)
-        data = res.json()
+        data = self._get_json(path)
 
         if len(data) == 0:
             raise ValueError("Unexpected response from weather api: {}".format(data))
@@ -136,3 +132,15 @@ class AccuweatherService(WeatherService):
         location_key = data["Key"]
 
         return location_key
+
+    def _get_json(self, url):
+        response = requests.get(url, timeout=20)
+        try:
+            if response.status_code != 200:
+                raise ValueError(
+                    "Non-200 response from weather api: "
+                    f"{response.status_code}"
+                )
+            return response.json()
+        finally:
+            response.close()
