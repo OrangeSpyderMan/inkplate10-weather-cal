@@ -29,8 +29,10 @@ Both a server and client are required. The main workload is on the server, which
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
 2. Optionally connects to MQTT to publish diagnostic logs.
-3. Attempts to get current network time and update real-time clock.
-4. Downloads and renders the server-hosted PNG directly over HTTP.
+3. Uses the RTC for timekeeping and refreshes it from NTP when synchronization
+   is due.
+4. Optionally checks the output status and downloads the server-hosted PNG only
+   when its content has changed.
 5. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
@@ -39,7 +41,8 @@ Both a server and client are required. The main workload is on the server, which
   - approx 21µA in deep sleep
   - approx 240mA awake
   - approx 30 seconds awake time daily
-- Real-time clock is synchronized from NTP after wake.
+- Real-time clock is normally synchronized from NTP at most once every 24
+  hours; the retained RTC is used between synchronizations.
 - Daylight savings time handled automatically.
 - Battery voltage is checked before WiFi starts; low readings are confirmed
   before a refresh is skipped.
@@ -149,13 +152,20 @@ Likely parameters you'll need to change are:
   still result in only one immediate retry.
 - `calendar.retry_interval_minutes` - deep-sleep interval after both image
   attempts fail. Defaults to 15 minutes.
-- `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
+- `ntp.timezone` - the timezone used for local timestamps and daylight-saving
+  rules, in Olson format such as `Europe/Dublin`.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 - `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.
 
 The firmware uses the Inkplate RTC between wake cycles and refreshes it from NTP
 at most once every 24 hours. A cold boot, invalid RTC value, or clock moving
 backwards forces an immediate NTP synchronization.
+
+When `calendar.status_url` is configured, an unchanged SHA-256 skips both the
+PNG download and e-paper update. If the status endpoint is unavailable or
+invalid, the firmware falls back to downloading the image. Failed image
+attempts are limited to one immediate retry before the device returns to deep
+sleep for `calendar.retry_interval_minutes`.
 
 See the [server](/server) for info on server setup.
 
@@ -171,6 +181,7 @@ The server also exposes versioned data and output endpoints:
 /api/v1/weather
 /api/v1/health
 /api/v1/ready
+/api/v1/outputs/inkplate10-portrait/status
 /outputs/inkplate10-portrait/calendar.png
 ```
 

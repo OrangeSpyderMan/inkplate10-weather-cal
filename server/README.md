@@ -329,12 +329,20 @@ Operational endpoints are:
 ```text
 GET /api/v1/health
 GET /api/v1/ready
+GET /api/v1/outputs/<profile>/status
 ```
 
 Health reports whether the Gunicorn web application is running. Readiness
-returns `200` only when the snapshot and output signatures match the completion
-marker written at the end of a successful producer cycle. During an update or
-after an incomplete first cycle it returns `503`.
+returns `200` only when the snapshot and output signatures and SHA-256 hashes
+match the completion marker written at the end of a successful producer cycle.
+During an update or after an incomplete first cycle it returns `503`. Readiness
+markers created before hashes were added are upgraded in place when their
+recorded file signatures still match, so deployment does not require an
+immediate successful weather-provider request.
+
+The per-output status endpoint returns the completed output's SHA-256 and
+generation time. Firmware can compare that hash with its retained value and
+avoid downloading and driving an unchanged image to the e-paper panel.
 
 Snapshots and rendered outputs use stable paths and are atomically replaced, so
 the data directory does not accumulate historical versions. On startup, the

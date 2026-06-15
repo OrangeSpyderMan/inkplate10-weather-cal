@@ -160,13 +160,15 @@ String networkDiagnostics();
 void displayMessage(const char *msg);
 
 /**
-  Connect to an NTP server and synchronize the on-board real-time clock.
+  Configure local timezone rules and synchronize the on-board real-time clock
+  from NTP when the retained synchronization interval has elapsed or the RTC is
+  invalid.
 
   @param ntpHost the hostname of the NTP server (eg. pool.ntp.org).
   @param timezoneName the name of the timezone in Olson format (eg.
   Europe/Dublin)
   @returns the esp_err_t code:
-  - ESP_OK if successful.
+  - ESP_OK if the retained RTC is valid or synchronization succeeds.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
 esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
