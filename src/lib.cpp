@@ -6,9 +6,13 @@ RTC_DATA_ATTR time_t lastBootTime = 0;
 RTC_DATA_ATTR time_t lastSleepTime = 0;
 // Avoid redrawing the same retained low-battery screen on every wake.
 RTC_DATA_ATTR bool batteryLowWarningDisplayed = false;
+// Avoid driving the panel repeatedly for the same retained error screen.
+RTC_DATA_ATTR uint32_t displayedErrorSignature = 0;
 // Cache timezone rules across deep sleep to avoid a network lookup every wake.
 RTC_DATA_ATTR char cachedTimezoneName[64] = "";
 RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
+// RTC epoch of the last successful NTP synchronization.
+RTC_DATA_ATTR time_t lastNtpSyncTime = 0;
 
 // Remote MQTT diagnostics.
 esp_mqtt_client_handle_t mqttClient = nullptr;
@@ -21,6 +25,32 @@ const char *mqttLogTopic = nullptr;
 Inkplate board(INKPLATE_3BIT);
 // timezone store
 Timezone myTz;
+
+namespace
+{
+constexpr time_t NTP_RESYNC_INTERVAL_SECONDS = 24 * 60 * 60;
+constexpr time_t MIN_VALID_RTC_EPOCH = 1577836800; // 2020-01-01T00:00:00Z
+
+uint32_t errorSignature(const char *title, const char *detail)
+{
+    uint32_t hash = 2166136261UL;
+    const char *values[] = {title, detail};
+    for (const char *value : values)
+    {
+        if (value != nullptr)
+        {
+            while (*value != '\0')
+            {
+                hash ^= static_cast<uint8_t>(*value++);
+                hash *= 16777619UL;
+            }
+        }
+        hash ^= 0xFF;
+        hash *= 16777619UL;
+    }
+    return hash;
+}
+} // namespace
 
 esp_err_t handleMQTTEvent(esp_mqtt_event_handle_t event)
 {
@@ -161,6 +191,7 @@ esp_err_t displayImage(const char *url)
     log(LOG_DEBUG, "shutting down network before display refresh");
     shutdownNetwork();
     board.display();
+    displayedErrorSignature = 0;
 
     return ESP_OK;
 }
@@ -175,6 +206,13 @@ esp_err_t displayImage(const char *url)
 */
 void displayError(const char *title, const char *detail, const String &diagnostics)
 {
+    const uint32_t signature = errorSignature(title, detail);
+    if (displayedErrorSignature == signature)
+    {
+        log(LOG_INFO, "error screen unchanged; skipping display refresh");
+        return;
+    }
+
     const uint8_t black = 0;
     const uint8_t white = 7;
     const int margin = 24;
@@ -206,6 +244,7 @@ void displayError(const char *title, const char *detail, const String &diagnosti
     }
 
     board.display();
+    displayedErrorSignature = signature;
 }
 
 void displayError(const char *title, const char *detail)
@@ -553,13 +592,6 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
 {
     log(LOG_INFO, "configuring network time and RTC...");
 
-    setServer(ntpHost);
-    updateNTP();
-    if (!waitForSync(5))
-    {
-        return ESP_ERR_ENTP;
-    }
-
     if (strcmp(cachedTimezoneName, timezoneName) == 0 &&
         cachedTimezonePosix[0] != '\0')
     {
@@ -579,9 +611,33 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
                                   sizeof(cachedTimezonePosix));
     }
 
+    const time_t rtcTime = board.rtc.getEpoch();
+    const bool rtcInvalid = rtcTime < MIN_VALID_RTC_EPOCH;
+    const bool rtcMovedBackwards =
+        lastNtpSyncTime > 0 && rtcTime < lastNtpSyncTime;
+    const bool syncDue =
+        lastNtpSyncTime == 0 ||
+        rtcInvalid ||
+        rtcMovedBackwards ||
+        rtcTime - lastNtpSyncTime >= NTP_RESYNC_INTERVAL_SECONDS;
+    if (!syncDue)
+    {
+        logf(LOG_INFO, "using RTC time; last NTP sync was %lld seconds ago",
+             static_cast<long long>(rtcTime - lastNtpSyncTime));
+        return ESP_OK;
+    }
+
+    setServer(ntpHost);
+    updateNTP();
+    if (!waitForSync(5))
+    {
+        return ESP_ERR_ENTP;
+    }
+
     // Sync RTC with NTP time
     time_t nowTime = myTz.now();
     board.rtc.setEpoch(nowTime);
+    lastNtpSyncTime = nowTime;
     logf(LOG_INFO, "RTC synced to %s", dateTime(nowTime, RFC3339).c_str());
 
     return ESP_OK;

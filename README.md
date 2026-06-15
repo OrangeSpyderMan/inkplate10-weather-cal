@@ -142,6 +142,10 @@ Likely parameters you'll need to change are:
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 - `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.
 
+The firmware uses the Inkplate RTC between wake cycles and refreshes it from NTP
+at most once every 24 hours. A cold boot, invalid RTC value, or clock moving
+backwards forces an immediate NTP synchronization.
+
 See the [server](/server) for info on server setup.
 
 The server can also expose the rendered calendar as a lightweight browser/PWA

@@ -68,6 +68,10 @@ extern RTC_DATA_ATTR time_t lastBootTime;
 extern RTC_DATA_ATTR time_t lastSleepTime;
 // Whether the retained e-ink display already shows the critical battery warning.
 extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
+// Signature of the retained error screen, or zero after a successful refresh.
+extern RTC_DATA_ATTR uint32_t displayedErrorSignature;
+// RTC epoch of the last successful NTP synchronization.
+extern RTC_DATA_ATTR time_t lastNtpSyncTime;
 // Whether routine debug and informational messages should be sent over MQTT.
 extern bool mqttDebugEnabled;
 // The log message queue.
