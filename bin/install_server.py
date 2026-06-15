@@ -8,6 +8,7 @@ before the server virtualenv and Python package dependencies exist.
 from __future__ import annotations
 
 import argparse
+import filecmp
 import getpass
 import json
 import os
@@ -173,7 +174,7 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
         print("No changes made.")
         return
 
-    if action in ("fresh", "reconfigure"):
+    if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(repo_root))
         answers = collect_answers(current_env, current_config, mode="docker")
@@ -217,7 +218,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
     validate_native_platform(dry_run)
 
-    if action in ("fresh", "update"):
+    if action in ("fresh", "update", "update_reconfigure"):
         install_native_prerequisites(dry_run)
         ensure_system_user(dry_run)
         copy_repo(repo_root, INSTALL_DIR, dry_run)
@@ -225,7 +226,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         refresh_dependencies(dry_run)
         install_geckodriver(repo_root, dry_run)
 
-    if action in ("fresh", "reconfigure"):
+    if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
         answers = collect_answers(current_env, current_config, mode="systemd")
@@ -246,7 +247,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         run(["chown", f"{APP_USER}:{APP_GROUP}", str(INSTALL_DIR / SERVER_CONFIG)], sudo=True, dry_run=dry_run)
         run(["chown", "root:root", str(NATIVE_ENV_FILE)], sudo=True, dry_run=dry_run)
 
-    if action in ("fresh", "update"):
+    if action in ("fresh", "update", "update_reconfigure"):
         run(
             ["bin/install_service", "--unit-file", "bin/inkplate.service", "--no-start"],
             sudo=True,
@@ -337,6 +338,10 @@ def choose_existing_action(label: str, existing: list[Path]) -> str:
         "How should the installer continue?",
         [
             ("update", "update app/dependencies and preserve config/secrets"),
+            (
+                "update_reconfigure",
+                "update app/dependencies and rewrite config/secrets",
+            ),
             ("reconfigure", "rewrite config/secrets only"),
             ("abort", "make no changes"),
         ],
@@ -759,8 +764,35 @@ def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
         ignore = install_copy_ignore(repo_root)
         shutil.copytree(repo_root, tmp_path, ignore=ignore)
         run(["cp", "-a", f"{tmp_path}/.", str(install_dir)], sudo=True)
+    verify_installed_runtime(repo_root, install_dir)
     run(["mkdir", "-p", str(install_dir / "server" / "config"), str(install_dir / "server" / "data")], sudo=True)
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(install_dir)], sudo=True)
+
+
+def verify_installed_runtime(repo_root: Path, install_dir: Path) -> None:
+    runtime_files = (
+        Path("server/server.py"),
+        Path("server/producer_config.py"),
+        Path("bin/install_server.py"),
+    )
+    mismatches = []
+    for relative in runtime_files:
+        try:
+            matches = filecmp.cmp(
+                repo_root / relative,
+                install_dir / relative,
+                shallow=False,
+            )
+        except OSError:
+            matches = False
+        if not matches:
+            mismatches.append(str(relative))
+    if mismatches:
+        raise SystemExit(
+            "ERROR: installed application files do not match the checkout: "
+            + ", ".join(mismatches)
+        )
+    print("Verified installed application files match the checkout.")
 
 
 def ensure_venv(dry_run: bool) -> None:

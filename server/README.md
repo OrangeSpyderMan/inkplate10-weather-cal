@@ -88,7 +88,9 @@ non-interactive install.
 
 Re-run the installer to update an existing install. It will detect existing
 Docker or systemd files and offer to update the application while preserving
-config/secrets, reconfigure config/secrets, or abort.
+config/secrets, update and reconfigure together, reconfigure config/secrets
+only, or abort. Use the combined option when a release changes both application
+code and configuration keys.
 
 Logs:
 

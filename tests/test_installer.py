@@ -141,6 +141,54 @@ class InstallerCopyTests(unittest.TestCase):
                 ignore(str(html_dir), ["calendar.html", "styles.css"]),
             )
 
+    def test_verifies_installed_runtime_files(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            with tempfile.TemporaryDirectory() as install_dir:
+                source = pathlib.Path(source_dir)
+                installed = pathlib.Path(install_dir)
+                for relative in (
+                    pathlib.Path("server/server.py"),
+                    pathlib.Path("server/producer_config.py"),
+                    pathlib.Path("bin/install_server.py"),
+                ):
+                    (source / relative).parent.mkdir(parents=True, exist_ok=True)
+                    (installed / relative).parent.mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+                    (source / relative).write_text("same", encoding="utf-8")
+                    (installed / relative).write_text("same", encoding="utf-8")
+
+                install_server.verify_installed_runtime(source, installed)
+
+    def test_rejects_stale_installed_runtime_files(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            with tempfile.TemporaryDirectory() as install_dir:
+                source = pathlib.Path(source_dir)
+                installed = pathlib.Path(install_dir)
+                for relative in (
+                    pathlib.Path("server/server.py"),
+                    pathlib.Path("server/producer_config.py"),
+                    pathlib.Path("bin/install_server.py"),
+                ):
+                    (source / relative).parent.mkdir(parents=True, exist_ok=True)
+                    (installed / relative).parent.mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+                    (source / relative).write_text("new", encoding="utf-8")
+                    (installed / relative).write_text("new", encoding="utf-8")
+                (installed / "server/server.py").write_text(
+                    "old",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    SystemExit,
+                    "server/server.py",
+                ):
+                    install_server.verify_installed_runtime(source, installed)
+
     @mock.patch.object(install_server, "run")
     def test_removes_only_legacy_application_logs(self, run):
         install_server.remove_legacy_application_logs(dry_run=False)

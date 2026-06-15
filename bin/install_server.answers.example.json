@@ -1,6 +1,6 @@
 {
   "mode": "docker",
-  "existing_action": "reconfigure",
+  "existing_action": "update_reconfigure",
   "start_now": false,
   "port": 8080,
   "refresh_minutes": 180,
