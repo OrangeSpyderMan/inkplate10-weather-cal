@@ -5,6 +5,10 @@ from abc import ABC, abstractmethod
 from .models import CurrentConditions, ForecastData
 
 
+class ProviderConfigurationError(ValueError):
+    pass
+
+
 class ForecastProvider(ABC):
     def __init__(
         self, apikey, baseurl, service_name, num_hours=6, metric=True

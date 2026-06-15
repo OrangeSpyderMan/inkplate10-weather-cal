@@ -153,3 +153,12 @@ class AccuweatherService(WeatherService):
             return response.json()
         finally:
             response.close()
+
+
+def build_provider(config):
+    return AccuweatherService(
+        apikey=config["apikey"],
+        location=config["location"],
+        metric=config.get("metric", True),
+        num_hours=config.get("num_hours", 6),
+    )

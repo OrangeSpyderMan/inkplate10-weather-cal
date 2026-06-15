@@ -187,3 +187,12 @@ class OpenWeatherMapv4Service(WeatherService):
         if self.units == "metric":
             return celsius
         return celsius * 9 / 5 + 32
+
+
+def build_provider(config):
+    return OpenWeatherMapv4Service(
+        apikey=config["apikey"],
+        location=config["location"],
+        metric=config.get("metric", True),
+        num_hours=config.get("num_hours", 6),
+    )

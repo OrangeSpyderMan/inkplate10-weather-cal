@@ -1,42 +1,37 @@
 from dataclasses import dataclass
 from importlib import import_module
-from os.path import isabs
-from pathlib import Path
+
+from .service import ProviderConfigurationError
 
 
-class ConfigurationError(ValueError):
-    pass
+ConfigurationError = ProviderConfigurationError
 
 
 @dataclass(frozen=True)
 class ProviderDefinition:
     module: str
-    class_name: str
+    builder_name: str = "build_provider"
 
-    def build(self, **kwargs):
-        provider_class = getattr(import_module(self.module), self.class_name)
-        return provider_class(**kwargs)
+    def build(self, config, **context):
+        builder = getattr(import_module(self.module), self.builder_name)
+        return builder(config, **context)
 
 
 FORECAST_PROVIDERS = {
     "accuweather": ProviderDefinition(
         "weather.accuweather.accuweather",
-        "AccuweatherService",
     ),
     "openweathermapv3": ProviderDefinition(
         "weather.openweathermapv3.openweathermapv3",
-        "OpenWeatherMapv3Service",
     ),
     "openweathermapv4": ProviderDefinition(
         "weather.openweathermapv4.openweathermapv4",
-        "OpenWeatherMapv4Service",
     ),
 }
 
 REALTIME_PROVIDERS = {
     "netatmo": ProviderDefinition(
         "weather.netatmo.netatmo",
-        "NetatmoRealtimeService",
     ),
 }
 
@@ -70,10 +65,12 @@ def build_forecast_provider(
         )
 
     return definition.build(
-        apikey=apikey,
-        location=location,
-        metric=metric,
-        num_hours=num_hours,
+        {
+            "apikey": apikey,
+            "location": location,
+            "metric": metric,
+            "num_hours": num_hours,
+        }
     )
 
 
@@ -94,39 +91,14 @@ def build_realtime_provider(config, *, metric=True, base_dir=None):
         )
 
     provider_config = realtime_config.get(name, realtime_config)
-    kwargs = {
-        "client_id": _required(provider_config, name, "client_id"),
-        "client_secret": _required(provider_config, name, "client_secret"),
-        "refresh_token": _required(provider_config, name, "refresh_token"),
-        "token_file": provider_config.get("token_file", "netatmo-token.json"),
-        "device_id": _optional(provider_config, "device_id"),
-        "module_id": _optional(provider_config, "module_id"),
-        "wind_module_id": _optional(provider_config, "wind_module_id"),
-        "rain_module_id": _optional(provider_config, "rain_module_id"),
-        "metric": metric,
-    }
-
-    if base_dir and not isabs(kwargs["token_file"]):
-        kwargs["token_file"] = str(Path(base_dir) / kwargs["token_file"])
-
-    return definition.build(**kwargs)
+    return definition.build(
+        provider_config,
+        metric=metric,
+        base_dir=base_dir,
+    )
 
 
 def _provider_name(value, key):
     if value is None or str(value).strip() == "":
         raise ConfigurationError(f"{key} is required")
     return str(value).strip().lower()
-
-
-def _required(config, provider, key):
-    value = config.get(key)
-    if value is None or value == "":
-        raise ConfigurationError(
-            f"current_conditions.{provider}.{key} is required"
-        )
-    return value
-
-
-def _optional(config, key):
-    value = config.get(key)
-    return None if value == "" else value

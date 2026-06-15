@@ -135,3 +135,12 @@ class OpenWeatherMapv3Service(WeatherService):
             )
 
         return data[0]["lat"], data[0]["lon"]
+
+
+def build_provider(config):
+    return OpenWeatherMapv3Service(
+        apikey=config["apikey"],
+        location=config["location"],
+        metric=config.get("metric", True),
+        num_hours=config.get("num_hours", 6),
+    )

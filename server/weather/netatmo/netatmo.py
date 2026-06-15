@@ -2,11 +2,14 @@ import json
 import os
 import tempfile
 import time
+from os.path import isabs
+from pathlib import Path
 
 import requests
 
 from ..service import RealtimeProvider
 from ..models import CurrentConditions, Rain, Temperature, Wind
+from ..service import ProviderConfigurationError
 
 
 class NetatmoRealtimeService(RealtimeProvider):
@@ -276,3 +279,35 @@ class NetatmoRealtimeService(RealtimeProvider):
 
 # Preserve imports used by existing installations and third-party code.
 NetatmoCurrentTemperatureService = NetatmoRealtimeService
+
+
+def build_provider(config, *, metric=True, base_dir=None):
+    token_file = config.get("token_file", "netatmo-token.json")
+    if base_dir and not isabs(token_file):
+        token_file = str(Path(base_dir) / token_file)
+
+    return NetatmoRealtimeService(
+        client_id=_required(config, "client_id"),
+        client_secret=_required(config, "client_secret"),
+        refresh_token=_required(config, "refresh_token"),
+        token_file=token_file,
+        device_id=_optional(config, "device_id"),
+        module_id=_optional(config, "module_id"),
+        wind_module_id=_optional(config, "wind_module_id"),
+        rain_module_id=_optional(config, "rain_module_id"),
+        metric=metric,
+    )
+
+
+def _required(config, key):
+    value = config.get(key)
+    if value is None or value == "":
+        raise ProviderConfigurationError(
+            f"current_conditions.netatmo.{key} is required"
+        )
+    return value
+
+
+def _optional(config, key):
+    value = config.get(key)
+    return None if value == "" else value
