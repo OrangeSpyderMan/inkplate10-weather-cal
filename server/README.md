@@ -102,13 +102,13 @@ group, start a new login session or run `newgrp docker` before retrying.
 
 ### AccuWeather API
 
-This is the least tested API.
+This provider follows AccuWeather's current Core Weather API contract, using
+HTTPS and Bearer authentication. It is covered by mocked contract tests but is
+not exercised against the live API in CI.
  
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
-2. Create an app in [https://developer.accuweather.com/user/me/apps](https://developer.accuweather.com/user/me/apps).
-3. Enter some details about the app's usage and purpose.
-4. Generate API key.
+2. Select a Core Weather API plan and generate an API key.
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `accuweather`.
 

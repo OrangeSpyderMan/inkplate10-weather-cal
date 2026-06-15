@@ -33,7 +33,7 @@ class AccuweatherServiceTests(unittest.TestCase):
                     "DailyForecasts": [
                         {
                             "Day": {"Icon": 1},
-                            "RealFeelTemperature": {
+                            "Temperature": {
                                 "Minimum": {"Value": 5},
                                 "Maximum": {"Value": 15},
                             },
@@ -45,7 +45,7 @@ class AccuweatherServiceTests(unittest.TestCase):
                 [
                     {
                         "WeatherIcon": 1,
-                        "RealFeelTemperature": {
+                        "Temperature": {
                             "Metric": {"Value": 12},
                             "Imperial": {"Value": 54},
                         },
@@ -64,7 +64,7 @@ class AccuweatherServiceTests(unittest.TestCase):
                     {
                         "EpochDateTime": 1781510400 + offset * 3600,
                         "WeatherIcon": 1,
-                        "RealFeelTemperature": {"Value": 12 + offset},
+                        "Temperature": {"Value": 12 + offset},
                         "Wind": {"Speed": {"Value": 10}},
                         "RelativeHumidity": 65,
                         "RainProbability": 20,
@@ -88,6 +88,34 @@ class AccuweatherServiceTests(unittest.TestCase):
         self.assertTrue(
             all(call.kwargs["timeout"] == 20 for call in get.call_args_list)
         )
+        self.assertTrue(
+            all(
+                call.kwargs["headers"]
+                == {"Authorization": "Bearer weather-key"}
+                for call in get.call_args_list
+            )
+        )
+        self.assertEqual(
+            get.call_args_list[0],
+            mock.call(
+                "https://dataservice.accuweather.com/locations/v1/search",
+                headers={"Authorization": "Bearer weather-key"},
+                params={"q": "Landry,FR"},
+                timeout=20,
+            ),
+        )
+        self.assertEqual(
+            get.call_args_list[1].kwargs["params"],
+            {"metric": True, "details": True},
+        )
+        self.assertEqual(
+            get.call_args_list[2].kwargs["params"],
+            {"details": True},
+        )
+        self.assertEqual(
+            get.call_args_list[3].kwargs["params"],
+            {"metric": True, "details": True},
+        )
 
     @mock.patch("weather.accuweather.accuweather.requests.get")
     def test_non_200_response_is_closed(self, get):
@@ -98,6 +126,10 @@ class AccuweatherServiceTests(unittest.TestCase):
             AccuweatherService("weather-key", "Landry,FR")
 
         self.assertTrue(response.closed)
+        self.assertEqual(
+            get.call_args.kwargs["headers"],
+            {"Authorization": "Bearer weather-key"},
+        )
 
 
 if __name__ == "__main__":
