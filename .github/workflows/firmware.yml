@@ -22,6 +22,12 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to receive firmware assets
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,7 +36,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      FIRMWARE_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+      FIRMWARE_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.release_tag || '' }}
 
     steps:
       - name: Checkout repository
@@ -79,7 +85,7 @@ jobs:
           path: firmware_binaries/*
 
   publish-release:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.release_tag != ''
     needs:
       - build
     runs-on: ubuntu-latest
@@ -96,9 +102,10 @@ jobs:
       - name: Upload firmware release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.release_tag }}
         run: |
           gh release upload \
-            "${{ github.event.release.tag_name }}" \
+            "$RELEASE_TAG" \
             firmware_binaries/* \
             --clobber \
             --repo "${{ github.repository }}"

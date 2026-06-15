@@ -1,0 +1,183 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example v3.2.0
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-management
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use stable SemVer form vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
+          git fetch origin main next --tags
+          main_sha="$(git rev-parse origin/main)"
+          checkout_sha="$(git rev-parse HEAD)"
+
+          if [ "$checkout_sha" != "$main_sha" ]; then
+            echo "Checked out main moved during the workflow; run it again" >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor origin/next origin/main; then
+            echo "Current main does not contain the released next history" >&2
+            echo "Merge the release PR using a merge commit, not squash or rebase" >&2
+            exit 1
+          fi
+
+          release_sha="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head next \
+              --state merged \
+              --limit 20 \
+              --json mergeCommit,title \
+              --jq ".[] | select(.title == \"Prepare $VERSION release\") | .mergeCommit.oid" |
+              head -n 1
+          )"
+          if [ -z "$release_sha" ] || [ "$release_sha" != "$main_sha" ]; then
+            echo "Current main is not the merge commit for Prepare $VERSION release" >&2
+            exit 1
+          fi
+
+          if git rev-parse --verify --quiet "refs/tags/$VERSION"; then
+            tag_sha="$(git rev-list -n 1 "$VERSION")"
+            if [ "$tag_sha" != "$main_sha" ]; then
+              echo "Existing tag $VERSION does not point to current main" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if ! git rev-parse --verify --quiet "refs/tags/$VERSION"; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "Inkplate 10 Weather Calendar $VERSION"
+            git push origin "refs/tags/$VERSION"
+          fi
+
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub Release $VERSION already exists"
+          else
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$VERSION" \
+              --generate-notes
+          fi
+
+      - name: Dispatch release builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          gh workflow run firmware.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$VERSION" \
+            -f release_tag="$VERSION"
+
+          gh workflow run container-publish.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$VERSION"
+
+      - name: Open synchronization pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          branch="chore/sync-${VERSION#v}-to-next"
+          main_sha="$(git rev-parse HEAD)"
+
+          git fetch origin next
+          synced_version="$(
+            git show origin/next:.github/release-sync 2>/dev/null |
+              sed -n 's/^version: //p'
+          )"
+          synced_commit="$(
+            git show origin/next:.github/release-sync 2>/dev/null |
+              sed -n 's/^main_commit: //p'
+          )"
+          if [ "$synced_version" = "$VERSION" ] && [ "$synced_commit" = "$main_sha" ]; then
+            echo "$VERSION is already synchronized to next"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+
+          cat > .github/release-sync <<EOF
+          version: $VERSION
+          main_commit: $main_sha
+          synced_at: $(date -u +%Y-%m-%d)
+          EOF
+
+          git add .github/release-sync
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync $VERSION release back to next"
+          fi
+          git fetch origin "$branch:refs/remotes/origin/$branch" || true
+          git push --force-with-lease origin "$branch"
+
+          existing_pr="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base next \
+              --head "$branch" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+
+          if [ -n "$existing_pr" ]; then
+            echo "Synchronization pull request #$existing_pr is already open"
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base next \
+            --head "$branch" \
+            --title "chore: sync $VERSION release back to next" \
+            --body "Merge the $VERSION release commit and tag ancestry from \`main\` back into \`next\`. The tracked marker makes this synchronization visible to GitHub even when the released trees are otherwise identical."
