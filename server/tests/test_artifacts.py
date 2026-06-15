@@ -23,7 +23,7 @@ class ArtifactStoreTests(unittest.TestCase):
             snapshot.generated_at.isoformat.return_value = (
                 "2026-06-09T00:00:00+00:00"
             )
-            snapshot.to_payload.return_value = {"schema_version": "1.0"}
+            snapshot.to_payload.return_value = {"schema_version": "2.0"}
 
             store.write_snapshot(snapshot)
             output_path = store.output_path(
@@ -44,7 +44,7 @@ class ArtifactStoreTests(unittest.TestCase):
 
             self.assertEqual(
                 json.loads(store.snapshot_path.read_text(encoding="utf-8")),
-                {"schema_version": "1.0"},
+                {"schema_version": "2.0"},
             )
             self.assertEqual(
                 store.output_path(DEFAULT_OUTPUT_PROFILE, "calendar.png"),

@@ -268,6 +268,10 @@ endpoint returns `503` until a snapshot is available. Provider-specific
 optional fields are preserved; for example, OpenWeatherMap v4 active alert IDs
 are exposed under `current.alerts`.
 
+The current payload schema is `2.0`. Wind measurements use `wind.value`;
+the OpenWeatherMap v4-specific `wind.real` field from schema `1.0` has been
+removed.
+
 Generated display artifacts use named output profiles:
 
 ```text

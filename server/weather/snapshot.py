@@ -2,6 +2,9 @@ import copy
 import datetime as dt
 
 
+SCHEMA_VERSION = "2.0"
+
+
 class WeatherSnapshot:
     def __init__(
         self,
@@ -19,7 +22,7 @@ class WeatherSnapshot:
 
     def to_payload(self):
         return {
-            "schema_version": "1.0",
+            "schema_version": SCHEMA_VERSION,
             "generated_at": self.generated_at.isoformat(),
             "source": self.weather_source,
             "units": "metric" if self.metric else "imperial",

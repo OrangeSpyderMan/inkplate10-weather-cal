@@ -73,7 +73,7 @@ class WebAppTests(unittest.TestCase):
 
     def test_serves_weather_snapshot_with_cache_validators(self):
         payload = {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "generated_at": "2026-06-08T08:46:24+00:00",
             "current": {
                 "alerts": {
@@ -98,8 +98,8 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(conditional.status_code, 304)
 
     def test_weather_validator_matches_the_open_file_during_replacement(self):
-        old_payload = {"schema_version": "1.0", "value": "old"}
-        new_payload = {"schema_version": "1.0", "value": "new-and-larger"}
+        old_payload = {"schema_version": "2.0", "value": "old"}
+        new_payload = {"schema_version": "2.0", "value": "new-and-larger"}
         ArtifactStore.write_json(self.store.snapshot_path, old_payload)
         old_size = self.store.snapshot_path.stat().st_size
         original_json_load = json.load
@@ -193,7 +193,7 @@ class WebAppTests(unittest.TestCase):
     def test_ready_requires_snapshot_and_named_output(self):
         ArtifactStore.write_json(
             self.store.snapshot_path,
-            {"schema_version": "1.0"},
+            {"schema_version": "2.0"},
         )
         output_path = self.store.output_path(
             DEFAULT_OUTPUT_PROFILE,
