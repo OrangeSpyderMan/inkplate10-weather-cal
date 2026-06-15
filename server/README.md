@@ -49,9 +49,10 @@ From the repository root, run:
 ```
 
 The installer walks through Docker Compose, Podman Compose, or native systemd
-installation. It uses the same defaults as the server code and example config:
-OpenWeatherMap v3, port `8080`, six forecast slots, a three-hour refresh
-interval, `825x1200` images, and MQTT disabled.
+installation, and links to the dedicated experimental Proxmox VE 9 installer.
+It uses the same defaults as the server code and example config: OpenWeatherMap
+v3, port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
+images, and MQTT disabled.
 
 It prompts for the location, weather API key, Google Static Maps API key, Google
 Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
@@ -691,6 +692,28 @@ Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
 usable as an OCI source, but treat this as newer and less tested than Docker
 Compose until it has been exercised on your Proxmox host.
 
+The repository includes an experimental fresh-install-only helper. Run it from
+the repository checkout on the Proxmox host:
+
+```bash
+sudo ./bin/install_proxmox --dry-run
+sudo ./bin/install_proxmox
+```
+
+It checks for Proxmox VE 9.x with `pve-container` 6.0.15 or newer, installs
+`skopeo` with permission when needed, queries GHCR for the currently published
+tags, resolves the selected image digest, creates an unprivileged DHCP-enabled
+LXC with `pct`, installs the generated configuration through `pct push`, and
+checks the readiness endpoint. Versioned release tags are offered first,
+followed by `main` and `next`.
+
+The helper deliberately refuses existing CTIDs and does not yet perform
+upgrades, migration, backup, rollback, static network configuration, clustered
+placement, or HA setup. Treat the created container as a technical preview and
+test backup/restore before relying on it. It stores configuration, secrets, and
+generated data in the CT root disk so they are included in normal Proxmox
+container backups.
+
 Recommended image:
 
 ```text
@@ -699,11 +722,13 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:main
 
 Use the `:next` tag only when you want to test upcoming changes.
 
-If the Proxmox host pulls directly from GHCR without registry credentials, make
-the GitHub package public. Otherwise, configure registry credentials in Proxmox
-before creating the container.
+The helper can pull a public GHCR package anonymously. For a private package,
+authenticate on the Proxmox host with `skopeo login ghcr.io` before running the
+helper. A manual Proxmox-managed pull may instead use registry credentials
+configured in Proxmox.
 
-Configure the container with:
+For a manual OCI deployment instead of the helper, configure the container
+with:
 
 - environment variables from `.env.example`
 - port `8080` exposed to your LAN
@@ -748,6 +773,7 @@ http://<container-ip-or-hostname>:8080/app
 Known caveats:
 
 - Proxmox OCI support is newer than standard Docker/Podman workflows.
+- `bin/install_proxmox` currently supports fresh installations only.
 - Proxmox mount and environment-variable management is not the same as Compose.
 - Firefox/Geckodriver should be tested on the target Proxmox host.
 - The renderer is tuned for Inkplate 10 portrait output at `825x1200`.

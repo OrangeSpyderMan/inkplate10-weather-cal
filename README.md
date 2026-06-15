@@ -211,8 +211,8 @@ and example clients such as the
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
-Docker Compose, Podman Compose, or native producer and web systemd services
-under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
+Docker Compose, Podman Compose, native producer and web systemd services under
+`/srv/inkplate`, or hand off to the experimental Proxmox VE 9 OCI installer.
 
 Run it from the repository root:
 
@@ -254,6 +254,12 @@ For CI or repeatable testing, use a JSON answers file:
 Re-run the installer later to update an existing install. It will detect
 existing Docker, Podman, or systemd files and offer to update the application
 while preserving config/secrets, reconfigure config/secrets, or abort.
+
+The Proxmox option directs you to the dedicated fresh-install-only preview:
+
+```bash
+sudo ./bin/install_proxmox --dry-run
+```
 
 For troubleshooting:
 

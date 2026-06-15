@@ -75,7 +75,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("docker", "podman", "systemd"),
+        choices=("docker", "podman", "proxmox", "systemd"),
         help="install mode; prompts when omitted",
     )
     parser.add_argument(
@@ -105,18 +105,27 @@ def main() -> int:
         [
             ("docker", "Docker Compose install from this checkout"),
             ("podman", "Podman Compose install from this checkout"),
+            ("proxmox", "Experimental Proxmox VE 9 OCI/LXC installer"),
             ("systemd", "Native systemd install under /srv/inkplate"),
         ],
         default="docker",
     )
 
-    if mode not in ("docker", "podman", "systemd"):
+    if mode not in ("docker", "podman", "proxmox", "systemd"):
         raise SystemExit(
-            "ERROR: install mode must be 'docker', 'podman', or 'systemd'."
+            "ERROR: install mode must be 'docker', 'podman', 'proxmox', "
+            "or 'systemd'."
         )
 
     if mode in ("docker", "podman"):
         install_compose(repo_root, args.dry_run, mode)
+    elif mode == "proxmox":
+        print(
+            "Proxmox VE support is experimental and uses a dedicated installer."
+        )
+        print("Run: ./bin/install_proxmox")
+        print("Preview first with: ./bin/install_proxmox --dry-run")
+        return 0
     else:
         install_systemd(repo_root, args.dry_run)
 

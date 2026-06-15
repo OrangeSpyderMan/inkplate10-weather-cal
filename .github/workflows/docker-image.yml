@@ -7,6 +7,8 @@ on:
   push:
     paths:
       - 'bin/install_server.py'
+      - 'bin/install_proxmox'
+      - 'bin/install_proxmox.py'
       - 'server/**'
       - 'tests/**'
       - 'Dockerfile'
@@ -17,6 +19,8 @@ on:
   pull_request:
     paths:
       - 'bin/install_server.py'
+      - 'bin/install_proxmox'
+      - 'bin/install_proxmox.py'
       - 'server/**'
       - 'tests/**'
       - 'Dockerfile'

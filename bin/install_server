@@ -10,13 +10,14 @@ configure one of:
 
   - Docker Compose from this checkout
   - Podman Compose from this checkout
+  - experimental Proxmox VE 9 OCI/LXC deployment
   - a native systemd service under /srv/inkplate
 
 Native systemd installs must run as root or from a user that can elevate with
 sudo, doas, or run0. The installer checks this before making system changes.
 
 Usage:
-  ./bin/install_server [--dry-run] [--mode docker|podman|systemd]
+  ./bin/install_server [--dry-run] [--mode docker|podman|proxmox|systemd]
   ./bin/install_server --dry-run --non-interactive --answers bin/install_server.answers.example.json
 
 Useful first run:

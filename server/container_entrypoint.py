@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import os
+import re
 import signal
 import subprocess
 import sys
@@ -7,6 +9,30 @@ from pathlib import Path
 
 
 SERVER_DIR = Path(__file__).resolve().parent
+ENV_FILE = SERVER_DIR / "config" / "weather.env"
+
+
+def load_environment(path=ENV_FILE):
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = decode_env_value(value.strip())
+        os.environ.setdefault(key, value)
+
+
+def decode_env_value(value):
+    if len(value) < 2 or value[0] != value[-1]:
+        return value
+    if value[0] == "'":
+        return value[1:-1]
+    if value[0] != '"':
+        return value
+    return re.sub(r"\\([\\\"$])", r"\1", value[1:-1])
 
 
 def terminate(processes):
@@ -22,6 +48,7 @@ def terminate(processes):
 
 
 def main():
+    load_environment()
     producer = subprocess.Popen([sys.executable, str(SERVER_DIR / "server.py")])
     web = subprocess.Popen([sys.executable, str(SERVER_DIR / "web_server.py")])
     diagnostics = subprocess.Popen(

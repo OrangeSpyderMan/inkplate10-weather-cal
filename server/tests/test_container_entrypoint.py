@@ -1,5 +1,7 @@
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -11,6 +13,35 @@ import container_entrypoint
 
 
 class ContainerEntrypointTests(unittest.TestCase):
+    def test_loads_environment_file_without_overwriting_runtime_values(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            env_file = pathlib.Path(temporary_dir) / "weather.env"
+            env_file.write_text(
+                "WEATHER_API_KEY=file-value\n"
+                "GOOGLE_API_KEY=\"quoted value\"\n"
+                "GOOGLE_STATICMAPS_MAPID=\"map\\$id\\\\suffix\"\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"WEATHER_API_KEY": "runtime-value"},
+                clear=True,
+            ):
+                container_entrypoint.load_environment(env_file)
+
+                self.assertEqual(
+                    os.environ["WEATHER_API_KEY"],
+                    "runtime-value",
+                )
+                self.assertEqual(
+                    os.environ["GOOGLE_API_KEY"],
+                    "quoted value",
+                )
+                self.assertEqual(
+                    os.environ["GOOGLE_STATICMAPS_MAPID"],
+                    "map$id\\suffix",
+                )
+
     @mock.patch("container_entrypoint.terminate")
     @mock.patch("container_entrypoint.signal.signal")
     @mock.patch("container_entrypoint.subprocess.Popen")
