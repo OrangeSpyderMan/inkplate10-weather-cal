@@ -1,3 +1,6 @@
+#include <ArduinoJson.h>
+#include <ctype.h>
+
 #include "lib.h"
 
 // RTC epoch of the last time we booted.
@@ -13,6 +16,8 @@ RTC_DATA_ATTR char cachedTimezoneName[64] = "";
 RTC_DATA_ATTR char cachedTimezonePosix[96] = "";
 // RTC epoch of the last successful NTP synchronization.
 RTC_DATA_ATTR time_t lastNtpSyncTime = 0;
+// SHA-256 of the last image successfully driven to the panel.
+RTC_DATA_ATTR char displayedCalendarSignature[65] = "";
 
 // Remote MQTT diagnostics.
 esp_mqtt_client_handle_t mqttClient = nullptr;
@@ -193,6 +198,57 @@ esp_err_t displayImage(const char *url)
     board.display();
     displayedErrorSignature = 0;
 
+    return ESP_OK;
+}
+
+esp_err_t fetchCalendarSignature(
+    const char *url,
+    char *signature,
+    size_t signatureSize)
+{
+    if (url == nullptr || url[0] == '\0' || signatureSize < 65)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    HTTPClient http;
+    http.setConnectTimeout(3000);
+    http.setTimeout(3000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!http.begin(url))
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    const int httpCode = http.GET();
+    if (httpCode != HTTP_CODE_OK)
+    {
+        http.end();
+        return ESP_ERR_EMANIFEST;
+    }
+
+    StaticJsonDocument<256> document;
+    DeserializationError error = deserializeJson(document, http.getStream());
+    http.end();
+    if (error)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+
+    const char *sha256 = document["sha256"];
+    if (sha256 == nullptr || strlen(sha256) != 64)
+    {
+        return ESP_ERR_EMANIFEST;
+    }
+    for (size_t i = 0; i < 64; ++i)
+    {
+        if (!isxdigit(static_cast<unsigned char>(sha256[i])))
+        {
+            return ESP_ERR_EMANIFEST;
+        }
+    }
+
+    snprintf(signature, signatureSize, "%s", sha256);
     return ESP_OK;
 }
 

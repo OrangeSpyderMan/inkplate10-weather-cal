@@ -108,6 +108,7 @@ display:
   rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
+  status_url: http://<server-host>:8080/api/v1/outputs/inkplate10-portrait/status
   refresh_interval: 3
   retries: 3
 wifi:
@@ -137,6 +138,10 @@ Likely parameters you'll need to change are:
 - `wifi.ssid` - the SSID of your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
+- `calendar.status_url` - optional small JSON manifest containing the rendered
+  image SHA-256. When it matches the retained signature, the firmware skips the
+  image download and e-paper refresh. Omit it when using an older or third-party
+  server.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
 - `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.

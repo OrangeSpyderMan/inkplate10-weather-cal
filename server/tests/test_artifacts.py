@@ -62,6 +62,11 @@ class ArtifactStoreTests(unittest.TestCase):
                 ready["outputs"][DEFAULT_OUTPUT_PROFILE]["path"],
                 "outputs/inkplate10-portrait/calendar.png",
             )
+            self.assertEqual(
+                ready["outputs"][DEFAULT_OUTPUT_PROFILE]["sha256"],
+                "8f8cbb7dcf46e0bc7d53265749a6c17d"
+                "116093a6ba95e442764060c76fd4a86c",
+            )
             self.assertTrue(store.producer_cycle_complete(profiles))
 
             output_path.write_bytes(b"new output")

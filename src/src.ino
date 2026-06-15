@@ -147,6 +147,32 @@ void setup()
              dateTime(lastSleepTime, RFC3339).c_str());
     }
 
+    char candidateSignature[65] = "";
+    bool refreshRequired = true;
+    if (config.calendarStatusUrl[0] != '\0')
+    {
+        err = fetchCalendarSignature(
+            config.calendarStatusUrl,
+            candidateSignature,
+            sizeof(candidateSignature));
+        if (err == ESP_OK &&
+            strcmp(candidateSignature, displayedCalendarSignature) == 0)
+        {
+            logTagged(LOG_INFO, "REFRESH", "status=unchanged");
+            refreshRequired = false;
+        }
+        else if (err != ESP_OK)
+        {
+            log(LOG_WARNING,
+                "calendar status unavailable; falling back to image refresh");
+        }
+    }
+
+    if (!refreshRequired)
+    {
+        sleep(config.calendarRefreshInterval);
+    }
+
     // Reset err state.
     err = ESP_FAIL;
     const char *errMsg;
@@ -161,6 +187,14 @@ void setup()
             errMsg = "image display error";
             log(LOG_ERROR, errMsg);
             continue;
+        }
+        if (candidateSignature[0] != '\0')
+        {
+            snprintf(
+                displayedCalendarSignature,
+                sizeof(displayedCalendarSignature),
+                "%s",
+                candidateSignature);
         }
     } while (err != ESP_OK && ++attempts <= config.calendarRetries);
 

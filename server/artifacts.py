@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import tempfile
 import time
@@ -32,6 +33,7 @@ class ArtifactStore:
             outputs[profile.name] = {
                 "path": str(output_path.relative_to(self.root)),
                 "signature": self.file_signature(output_path),
+                "sha256": self.file_sha256(output_path),
                 "renderer": profile.renderer,
             }
 
@@ -124,6 +126,14 @@ class ArtifactStore:
             "mtime_ns": stat.st_mtime_ns,
             "size": stat.st_size,
         }
+
+    @staticmethod
+    def file_sha256(path):
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as artifact:
+            for block in iter(lambda: artifact.read(64 * 1024), b""):
+                digest.update(block)
+        return digest.hexdigest()
 
 
 def _is_temporary_artifact(path):

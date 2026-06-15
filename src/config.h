@@ -5,7 +5,7 @@
 
 // Sized for the documented configuration fields plus moderate MQTT and URL
 // growth. Review this capacity whenever fields are added to RuntimeConfig.
-constexpr size_t CONFIG_YAML_DOCUMENT_CAPACITY = 768;
+constexpr size_t CONFIG_YAML_DOCUMENT_CAPACITY = 896;
 // SD configuration is parsed through a small fixed buffer to avoid byte-at-a-
 // time reads without retaining a large buffer while the radio is active.
 constexpr size_t CONFIG_SD_READ_BUFFER_SIZE = 64;
@@ -14,6 +14,7 @@ struct RuntimeConfig
 {
     int displayRotation;
     const char *calendarUrl;
+    const char *calendarStatusUrl;
     int calendarRetries;
     int calendarRefreshInterval;
     const char *wifiSSID;

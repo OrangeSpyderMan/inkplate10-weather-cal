@@ -3,6 +3,7 @@ display:
   rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
+  status_url: http://<server-host>:8080/api/v1/outputs/inkplate10-portrait/status
   refresh_interval: 3
   retries: 3
 wifi:

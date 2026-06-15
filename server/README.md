@@ -278,6 +278,17 @@ Generated display artifacts use named output profiles:
 GET /outputs/inkplate10-portrait/calendar.png
 ```
 
+Battery-powered clients can check a small content-hash manifest before
+downloading an output:
+
+```text
+GET /api/v1/outputs/inkplate10-portrait/status
+```
+
+The response includes the output URL and a SHA-256 of its content. The hash
+changes only when the rendered image bytes change, unlike timestamp-based HTTP
+validators.
+
 Output profiles are configured independently:
 
 ```yaml

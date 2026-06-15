@@ -167,6 +167,53 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(unknown_profile.status_code, 404)
         output.close()
 
+    def test_serves_content_hash_status_for_completed_output(self):
+        ArtifactStore.write_json(
+            self.store.snapshot_path,
+            {"schema_version": "2.0"},
+        )
+        output_path = self.store.output_path(
+            DEFAULT_OUTPUT_PROFILE,
+            "calendar.png",
+        )
+        output_path.parent.mkdir(parents=True)
+        output_path.write_bytes(b"calendar image")
+        snapshot = mock.Mock()
+        snapshot.generated_at.isoformat.return_value = (
+            "2026-06-15T10:00:00+00:00"
+        )
+        self.store.write_ready(
+            snapshot,
+            {DEFAULT_OUTPUT_PROFILE: self.profiles[DEFAULT_OUTPUT_PROFILE]},
+        )
+
+        response = self.client.get(
+            f"/api/v1/outputs/{DEFAULT_OUTPUT_PROFILE}/status"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "profile": DEFAULT_OUTPUT_PROFILE,
+                "filename": "calendar.png",
+                "url": (
+                    "/outputs/inkplate10-portrait/calendar.png"
+                ),
+                "generated_at": "2026-06-15T10:00:00+00:00",
+                "sha256": ArtifactStore.file_sha256(output_path),
+            },
+        )
+
+    def test_output_status_requires_completed_output(self):
+        missing = self.client.get(
+            f"/api/v1/outputs/{DEFAULT_OUTPUT_PROFILE}/status"
+        )
+        unknown = self.client.get("/api/v1/outputs/unknown/status")
+
+        self.assertEqual(missing.status_code, 503)
+        self.assertEqual(unknown.status_code, 404)
+
     def test_legacy_aliases_follow_the_configured_default_profile(self):
         output_path = self.store.output_path(
             "inkplate6-landscape",

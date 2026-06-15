@@ -96,6 +96,7 @@ bool loadRuntimeConfig(
 
     JsonObject calendar = document["calendar"];
     config.calendarUrl = calendar["url"];
+    config.calendarStatusUrl = calendar["status_url"] | "";
     config.calendarRetries = calendar["retries"] | 3;
     config.calendarRefreshInterval =
         calendar["refresh_interval"] |
