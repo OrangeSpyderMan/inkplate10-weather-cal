@@ -36,10 +36,13 @@ namespace
 constexpr time_t NTP_RESYNC_INTERVAL_SECONDS = 24 * 60 * 60;
 constexpr time_t MIN_VALID_RTC_EPOCH = 1577836800; // 2020-01-01T00:00:00Z
 
-uint32_t errorSignature(const char *title, const char *detail)
+uint32_t errorSignature(
+    const char *title,
+    const char *detail,
+    const String &diagnostics)
 {
     uint32_t hash = 2166136261UL;
-    const char *values[] = {title, detail};
+    const char *values[] = {title, detail, diagnostics.c_str()};
     for (const char *value : values)
     {
         if (value != nullptr)
@@ -262,7 +265,7 @@ esp_err_t fetchCalendarSignature(
 */
 void displayError(const char *title, const char *detail, const String &diagnostics)
 {
-    const uint32_t signature = errorSignature(title, detail);
+    const uint32_t signature = errorSignature(title, detail, diagnostics);
     if (displayedErrorSignature == signature)
     {
         log(LOG_INFO, "error screen unchanged; skipping display refresh");
@@ -635,13 +638,14 @@ void shutdownNetwork()
 }
 
 /**
-  Connect to an NTP server and synchronize the on-board real-time clock.
+  Configure timezone rules and synchronize the on-board real-time clock from
+  NTP when synchronization is due.
 
   @param host the hostname of the NTP server (eg. pool.ntp.org).
   @param timezoneName the name of the timezone in Olson format (eg.
   Europe/Dublin)
   @returns the esp_err_t code:
-  - ESP_OK if successful.
+  - ESP_OK if the retained RTC is valid or synchronization succeeds.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
 esp_err_t configureTime(const char *ntpHost, const char *timezoneName)
