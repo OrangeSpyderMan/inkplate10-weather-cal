@@ -3,7 +3,7 @@
   "existing_action": "reconfigure",
   "start_now": false,
   "port": 8080,
-  "refresh_hours": 3,
+  "refresh_minutes": 180,
   "location": "Landry, FR",
   "weather_service": "openweathermapv3",
   "weather_api_key": "replace-with-weather-api-key",

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 
 from output_profiles import load_output_profiles
 from utils import get_prop, get_prop_by_keys
@@ -47,23 +48,10 @@ class ProducerConfig:
                 f"num_hourly_forecasts {hourly_forecasts} must be non-negative"
             )
 
-        refresh_hours = int(
-            get_prop_by_keys(
-                config,
-                "server",
-                "refreshhours",
-                default=3,
-                required=False,
-            )
-        )
-        if refresh_hours < 0:
+        refresh_seconds, refresh_key = _refresh_seconds(config)
+        if always_on and refresh_seconds == 0:
             raise ConfigurationError(
-                f"server.refreshhours {refresh_hours} must be non-negative"
-            )
-        if always_on and refresh_hours == 0:
-            raise ConfigurationError(
-                "server.refreshhours must be positive when "
-                "server.alwayson is true"
+                f"{refresh_key} must be positive when server.alwayson is true"
             )
 
         realtime_config = get_prop(
@@ -93,7 +81,7 @@ class ProducerConfig:
                 get_prop(config, "debug", default=False, required=False)
             ),
             always_on=always_on,
-            refresh_seconds=refresh_hours * 3600,
+            refresh_seconds=refresh_seconds,
             weather_service=str(
                 get_prop_by_keys(
                     config,
@@ -156,3 +144,31 @@ def producer_enabled(config):
             required=False,
         )
     )
+
+
+def _refresh_seconds(config):
+    server_config = config.get("server") or {}
+    if "refreshminutes" in server_config:
+        refresh_value = server_config["refreshminutes"]
+        source_key = "server.refreshminutes"
+        multiplier = 60
+    elif "refreshhours" in server_config:
+        refresh_value = server_config["refreshhours"]
+        source_key = "server.refreshhours"
+        multiplier = 3600
+    else:
+        refresh_value = 180
+        source_key = "server.refreshminutes"
+        multiplier = 60
+
+    try:
+        refresh_interval = float(refresh_value)
+    except (TypeError, ValueError):
+        raise ConfigurationError(
+            f"{source_key} {refresh_value!r} must be a number"
+        ) from None
+    if not math.isfinite(refresh_interval) or refresh_interval < 0:
+        raise ConfigurationError(
+            f"{source_key} {refresh_interval:g} must be non-negative"
+        )
+    return round(refresh_interval * multiplier), source_key

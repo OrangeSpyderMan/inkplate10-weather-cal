@@ -49,7 +49,7 @@ DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
 LEGACY_SERVER_CONFIG = Path("server/config.yaml")
 DEFAULT_PORT = 8080
-DEFAULT_REFRESH_HOURS = 3
+DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
@@ -358,12 +358,12 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         maximum=65535,
         key="port",
     )
-    answers["refresh_hours"] = prompt_int(
-        "Refresh interval in hours",
-        default=int(config.get("server.refreshhours", DEFAULT_REFRESH_HOURS)),
+    answers["refresh_minutes"] = prompt_int(
+        "Refresh interval in minutes",
+        default=configured_refresh_minutes(config, INSTALLER_ANSWERS),
         minimum=1,
-        maximum=24,
-        key="refresh_hours",
+        maximum=24 * 60,
+        key="refresh_minutes",
     )
     answers["location"] = prompt_text(
         "Location for weather/map lookup",
@@ -501,6 +501,20 @@ def weather_provider_choices() -> list[tuple[str, str]]:
     ]
 
 
+def configured_refresh_minutes(
+    config: dict[str, str],
+    answers: dict[str, object] | None = None,
+) -> int:
+    answers = answers or {}
+    if "refresh_minutes" not in answers and "refresh_hours" in answers:
+        return round(float(answers["refresh_hours"]) * 60)
+    if "server.refreshminutes" in config:
+        return int(float(config["server.refreshminutes"]))
+    if "server.refreshhours" in config:
+        return round(float(config["server.refreshhours"]) * 60)
+    return DEFAULT_REFRESH_MINUTES
+
+
 def render_config(answers: dict[str, object], mode: str) -> str:
     token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
     alwayson = "true"
@@ -519,7 +533,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  enabled: true",
         f"  port: {answers['port']}",
         f"  alwayson: {alwayson}",
-        f"  refreshhours: {answers['refresh_hours']}",
+        f"  refreshminutes: {answers['refresh_minutes']}",
         "weather:",
         f"  service: {answers['weather_service']}",
         "  apikey: ${WEATHER_API_KEY}",

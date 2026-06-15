@@ -62,6 +62,71 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertFalse(settings.always_on)
         self.assertEqual(settings.refresh_seconds, 0)
 
+    def test_accepts_refresh_interval_in_minutes(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {
+                    "alwayson": True,
+                    "refreshminutes": 15,
+                },
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertTrue(settings.always_on)
+        self.assertEqual(settings.refresh_seconds, 15 * 60)
+
+    def test_legacy_fractional_hours_remain_supported(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {
+                    "alwayson": True,
+                    "refreshhours": 0.3,
+                },
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertEqual(settings.refresh_seconds, 18 * 60)
+
+    def test_refresh_minutes_take_precedence_over_legacy_hours(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {
+                    "alwayson": True,
+                    "refreshminutes": 15,
+                    "refreshhours": 3,
+                },
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertEqual(settings.refresh_seconds, 15 * 60)
+
     def test_rejects_zero_refresh_interval_in_always_on_mode(self):
         with self.assertRaisesRegex(
             ConfigurationError,

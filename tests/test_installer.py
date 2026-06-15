@@ -24,7 +24,7 @@ class InstallerCopyTests(unittest.TestCase):
     def test_rendered_config_uses_runtime_output_defaults(self):
         answers = {
             "port": 8080,
-            "refresh_hours": 3,
+            "refresh_minutes": 180,
             "weather_service": "openweathermapv3",
             "num_hourly_forecasts": 6,
             "metric": True,
@@ -57,6 +57,57 @@ class InstallerCopyTests(unittest.TestCase):
         self.assertIn(
             f"      height: {install_server.DEFAULT_IMAGE_HEIGHT}",
             config,
+        )
+
+    def test_rendered_config_uses_refresh_minutes(self):
+        answers = {
+            "port": 8080,
+            "refresh_minutes": 15,
+            "weather_service": "openweathermapv3",
+            "num_hourly_forecasts": 6,
+            "metric": True,
+            "netatmo_enabled": False,
+            "location": "Landry, FR",
+            "mqtt_weather_enabled": False,
+            "mqtt_weather_broker": "",
+            "mqtt_weather_port": 1883,
+            "mqtt_weather_base_topic": "",
+            "mqtt_diagnostics_enabled": False,
+            "mqtt_diagnostics_broker": "",
+            "mqtt_diagnostics_port": 1883,
+            "mqtt_diagnostics_topic": "",
+        }
+
+        config = install_server.render_config(answers, mode="systemd")
+
+        self.assertIn("  refreshminutes: 15", config)
+
+    def test_legacy_refresh_hours_are_converted_for_reconfiguration(self):
+        self.assertEqual(
+            install_server.configured_refresh_minutes(
+                {"server.refreshhours": "0.3"}
+            ),
+            18,
+        )
+
+    def test_refresh_minutes_take_precedence_during_reconfiguration(self):
+        self.assertEqual(
+            install_server.configured_refresh_minutes(
+                {
+                    "server.refreshminutes": "15",
+                    "server.refreshhours": "3",
+                }
+            ),
+            15,
+        )
+
+    def test_legacy_non_interactive_refresh_hours_are_converted(self):
+        self.assertEqual(
+            install_server.configured_refresh_minutes(
+                {},
+                {"refresh_hours": 0.25},
+            ),
+            15,
         )
 
     def test_preserves_committed_png_assets_and_ignores_generated_images(self):

@@ -5,7 +5,7 @@ server:
   # Keep true for Docker and for the browser/PWA viewer at /app.
   # One-shot mode exits and would be restarted repeatedly by Compose.
   alwayson: true
-  refreshhours: 3
+  refreshminutes: 180
 weather:
   # openweathermapv3, openweathermapv4, or accuweather
   service: openweathermapv3

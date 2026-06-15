@@ -437,9 +437,10 @@ Without `server.alwayson: true`, the producer generates one complete artifact
 set and exits. Gunicorn remains independent and continues serving the last
 successful artifact set. Docker Compose and the example Docker config use
 `server.alwayson: true`; one-shot producer mode is useful for scheduled refresh
-workflows. `server.refreshhours` is used only in always-on mode. Existing
-one-shot configurations may leave it at `0`; always-on mode requires a positive
-value.
+workflows. `server.refreshminutes` is used only in always-on mode and must be
+positive there. Existing `server.refreshhours` values remain supported as a
+deprecated fallback, including fractional values such as `0.3`, but new and
+reconfigured installations are written in minutes.
 
 To use it like an app, open `/app` on the device and use the browser's install
 or "Add to Home Screen" action. The client is intentionally simple: it caches
