@@ -149,6 +149,39 @@ class RealtimeProviderFactoryTests(unittest.TestCase):
             metric=True,
         )
 
+    @mock.patch("weather.netatmo.netatmo.NetatmoRealtimeService")
+    def test_builds_netatmo_with_data_dir_token_default(self, provider):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            result = build_realtime_provider(
+                {
+                    "source": "netatmo",
+                    "netatmo": {
+                        "client_id": "id",
+                        "client_secret": "secret",
+                        "refresh_token": "refresh",
+                    },
+                },
+                metric=True,
+                base_dir=temporary_dir,
+            )
+
+        self.assertIs(result, provider.return_value)
+        provider.assert_called_once_with(
+            client_id="id",
+            client_secret="secret",
+            refresh_token="refresh",
+            token_file=str(
+                pathlib.Path(temporary_dir)
+                / "data"
+                / "netatmo-token.json"
+            ),
+            device_id=None,
+            module_id=None,
+            wind_module_id=None,
+            rain_module_id=None,
+            metric=True,
+        )
+
 
 class CurrentConditionsOverlayTests(unittest.TestCase):
     def test_partial_overlay_preserves_forecast_temperature_range(self):

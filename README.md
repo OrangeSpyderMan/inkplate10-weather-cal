@@ -231,10 +231,6 @@ It keeps secrets out of committed YAML files:
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
   `/srv/inkplate/inkplate_venv`.
 
-The old server config path, `server/config.yaml`, is deprecated and will be
-removed in a future release. Move existing installs to
-`server/config/config.yaml` as soon as practical.
-
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system
 changes and exits cleanly if it cannot get the required privileges.

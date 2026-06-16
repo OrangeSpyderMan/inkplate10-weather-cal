@@ -48,7 +48,6 @@ DIAGNOSTICS_SERVICE_FILE = Path(
 )
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
-LEGACY_SERVER_CONFIG = Path("server/config.yaml")
 DEFAULT_PORT = 8080
 DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
@@ -180,7 +179,6 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         for path in (
             repo_root / DOCKER_ENV_FILE,
             repo_root / SERVER_CONFIG,
-            repo_root / LEGACY_SERVER_CONFIG,
         )
         if path.exists()
     ]
@@ -337,13 +335,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
 
 def existing_config_path(base_dir: Path) -> Path:
-    preferred = base_dir / SERVER_CONFIG
-    if preferred.exists():
-        return preferred
-    legacy = base_dir / LEGACY_SERVER_CONFIG
-    if legacy.exists():
-        return legacy
-    return preferred
+    return base_dir / SERVER_CONFIG
 
 
 def choose_existing_action(label: str, existing: list[Path]) -> str:
@@ -559,11 +551,7 @@ def configured_refresh_minutes(
 
 
 def render_config(answers: dict[str, object], mode: str) -> str:
-    token_file = (
-        "data/netatmo-token.json"
-        if mode in ("docker", "podman")
-        else "netatmo-token.json"
-    )
+    token_file = "data/netatmo-token.json"
     alwayson = "true"
     default_mqtt_broker = container_host_alias(mode)
     mqtt_weather_broker = (
@@ -959,8 +947,6 @@ def install_copy_ignore(repo_root: Path):
             relative = Path(directory).resolve().relative_to(repo_root.resolve())
         except ValueError:
             relative = Path()
-        if relative == Path("server"):
-            ignored.add("config.yaml")
         if relative == Path("server/config"):
             ignored.add("config.yaml")
         if relative == Path("server/views"):

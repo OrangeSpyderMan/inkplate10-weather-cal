@@ -20,7 +20,7 @@ current_conditions:
     client_id: ${NETATMO_CLIENT_ID:-}
     client_secret: ${NETATMO_CLIENT_SECRET:-}
     refresh_token: ${NETATMO_REFRESH_TOKEN:-}
-    token_file: netatmo-token.json
+    token_file: data/netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
     module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
     wind_module_id: ${NETATMO_WIND_MODULE_ID:-}

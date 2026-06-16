@@ -229,7 +229,7 @@ current_conditions:
     client_id: ${NETATMO_CLIENT_ID:-}
     client_secret: ${NETATMO_CLIENT_SECRET:-}
     refresh_token: ${NETATMO_REFRESH_TOKEN:-}
-    token_file: netatmo-token.json
+    token_file: data/netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
     module_id: ${NETATMO_MODULE_ID:-} # optional temperature/humidity module
     wind_module_id: ${NETATMO_WIND_MODULE_ID:-} # optional wind gauge
@@ -544,18 +544,9 @@ By default the server looks for config in:
 
 1. the file named by `INKPLATE_CONFIG_FILE`, when set
 2. `server/config/config.yaml`
-3. `server/config.yaml`
 
-The `server/config/config.yaml` path is the preferred layout for new installs
-because it can be mounted as a config directory without hiding application code.
-The legacy `server/config.yaml` path remains supported for existing installs
-for now, but it is deprecated and will be removed in a future release. Move
-existing configs to `server/config/config.yaml` as soon as practical:
-
-```bash
-mkdir -p server/config
-mv server/config.yaml server/config/config.yaml
-```
+The `server/config/config.yaml` path can be mounted as a config directory
+without hiding application code.
 
 Run the producer and web service manually in separate terminals:
 
@@ -649,9 +640,8 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:next
 Use `:main` for stable deployments. Use `:next` to test changes before they are
 promoted to `main`.
 
-Do not commit `server/config/config.yaml`, deprecated legacy
-`server/config.yaml`, or `.env`; keep API keys and refresh tokens in local
-files or runtime environment variables.
+Do not commit `server/config/config.yaml` or `.env`; keep API keys and refresh
+tokens in local files or runtime environment variables.
 
 Docker dependency updates are split across two mechanisms. Dependabot updates
 the Python packages, GitHub Actions, and Docker base image on the `next` branch.

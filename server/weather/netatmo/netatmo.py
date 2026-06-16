@@ -282,7 +282,7 @@ NetatmoCurrentTemperatureService = NetatmoRealtimeService
 
 
 def build_provider(config, *, metric=True, base_dir=None):
-    token_file = config.get("token_file", "netatmo-token.json")
+    token_file = config.get("token_file", "data/netatmo-token.json")
     if base_dir and not isabs(token_file):
         token_file = str(Path(base_dir) / token_file)
 
