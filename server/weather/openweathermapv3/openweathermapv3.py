@@ -1,5 +1,4 @@
 import requests
-import itertools
 from datetime import datetime, timedelta, timezone
 from ..service import WeatherService
 from ..models import ForecastData
@@ -69,13 +68,15 @@ class OpenWeatherMapv3Service(WeatherService):
         location_timezone = timezone(
             timedelta(seconds=int(data.get("timezone_offset", 0)))
         )
+        cutoff = self._forecast_cutoff(data, location_timezone)
+        selected = [
+            entry
+            for entry in data["hourly"]
+            if self._is_forecast_slot(entry, location_timezone, cutoff)
+        ][: self.num_hours]
+
         forecasts = []
-        for entry in itertools.islice(
-            data["hourly"],
-            5,
-            5 + self.num_hours * 3,
-            3,
-        ):
+        for entry in selected:
             forecast = {
                 "dt": datetime.fromtimestamp(
                     entry["dt"],
@@ -102,6 +103,19 @@ class OpenWeatherMapv3Service(WeatherService):
                 f"received {len(forecasts)}"
             )
         return forecasts
+
+    def _forecast_cutoff(self, data, location_timezone):
+        current_timestamp = data.get("current", {}).get("dt")
+        if current_timestamp is not None:
+            return datetime.fromtimestamp(
+                current_timestamp,
+                location_timezone,
+            )
+        return datetime.now(location_timezone)
+
+    def _is_forecast_slot(self, entry, location_timezone, cutoff):
+        timestamp = datetime.fromtimestamp(entry["dt"], location_timezone)
+        return timestamp > cutoff and timestamp.hour % 3 == 0
 
     def get_daily_summary(self):
         return self.fetch().current_dict()

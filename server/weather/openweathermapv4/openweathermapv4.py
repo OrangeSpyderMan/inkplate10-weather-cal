@@ -59,15 +59,11 @@ class OpenWeatherMapv4Service(WeatherService):
             required_records=required_records,
         )
         location_timezone = timezone(timedelta(seconds=timezone_offset))
+        cutoff = datetime.now(location_timezone)
         selected = [
             entry
             for entry in records
-            if datetime.fromtimestamp(
-                entry["dt"],
-                location_timezone,
-            ).hour
-            % self.HOURLY_STEP
-            == 0
+            if self._is_forecast_slot(entry, location_timezone, cutoff)
         ][: self.num_hours]
         if len(selected) < self.num_hours:
             raise ValueError(
@@ -96,6 +92,10 @@ class OpenWeatherMapv4Service(WeatherService):
             }
             for entry in selected
         ]
+
+    def _is_forecast_slot(self, entry, location_timezone, cutoff):
+        timestamp = datetime.fromtimestamp(entry["dt"], location_timezone)
+        return timestamp > cutoff and timestamp.hour % self.HOURLY_STEP == 0
 
     def _get_records(self, path, required_records=1):
         url = f"{self.baseurl}{path}"

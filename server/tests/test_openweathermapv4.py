@@ -71,6 +71,19 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         self.responses.append(response)
         return response
 
+    def freeze_provider_time(self, now):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                if tz is None:
+                    return now.replace(tzinfo=None)
+                return now.astimezone(tz)
+
+        return mock.patch(
+            "weather.openweathermapv4.openweathermapv4.datetime",
+            FixedDateTime,
+        )
+
     def test_resolves_location_with_geocoding_api(self):
         self.assertEqual((self.service.lat, self.service.lon), (45.572, 6.739))
         self.get.assert_called_once_with(
@@ -104,14 +117,22 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         )
 
     def test_fetch_returns_complete_typed_forecast(self):
-        forecast = self.service.fetch()
+        location_timezone = timezone(timedelta(hours=2))
+        now = datetime(2026, 6, 9, 9, 20, tzinfo=location_timezone)
+
+        with self.freeze_provider_time(now):
+            forecast = self.service.fetch()
 
         self.assertEqual(forecast.current.temperature.value, 16)
         self.assertEqual(len(forecast.hourly), 6)
         self.assertEqual(forecast.hourly[0].wind.unit, "m/s")
 
     def test_follows_hourly_pagination_for_all_six_forecast_slots(self):
-        forecasts = self.service.get_hourly_forecast()
+        location_timezone = timezone(timedelta(hours=2))
+        now = datetime(2026, 6, 9, 9, 20, tzinfo=location_timezone)
+
+        with self.freeze_provider_time(now):
+            forecasts = self.service.get_hourly_forecast()
 
         self.assertEqual(len(forecasts), 6)
         self.assertEqual(
@@ -147,6 +168,45 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
                 params=None,
                 timeout=20,
             ),
+        )
+
+    def test_hourly_forecast_skips_current_local_boundary(self):
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 10, 9, tzinfo=location_timezone)
+        now = start + timedelta(minutes=20)
+
+        def entry(hour_offset, temperature):
+            return {
+                "dt": int((start + timedelta(hours=hour_offset)).timestamp()),
+                "temp": temperature,
+                "humidity": 50,
+                "wind_speed": 1,
+                "pop": 0,
+                "weather": [{"icon": "01d"}],
+            }
+
+        page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 15 + offset) for offset in range(21)],
+        }
+
+        def request(url, params=None, timeout=None):
+            if url.endswith("/data/4.0/onecall/timeline/1h"):
+                return FakeResponse(page)
+            raise AssertionError(f"unexpected URL {url}")
+
+        self.get.side_effect = request
+
+        with self.freeze_provider_time(now):
+            forecasts = self.service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["12pm", "3pm", "6pm", "9pm", "12am", "3am"],
+        )
+        self.assertEqual(
+            [forecast["temperature"]["value"] for forecast in forecasts],
+            [18, 21, 24, 27, 30, 33],
         )
 
     def test_preserves_units_when_midnight_is_on_the_next_page(self):
@@ -187,7 +247,10 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
 
         self.get.side_effect = request
 
-        forecasts = self.service.get_hourly_forecast()
+        now = start - timedelta(minutes=1)
+
+        with self.freeze_provider_time(now):
+            forecasts = self.service.get_hourly_forecast()
 
         self.assertEqual(
             [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
@@ -203,6 +266,10 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
 
     def test_closes_all_http_responses(self):
         self.service.get_daily_summary()
-        self.service.get_hourly_forecast()
+        location_timezone = timezone(timedelta(hours=2))
+        now = datetime(2026, 6, 9, 9, 20, tzinfo=location_timezone)
+
+        with self.freeze_provider_time(now):
+            self.service.get_hourly_forecast()
 
         self.assertTrue(all(response.closed for response in self.responses))

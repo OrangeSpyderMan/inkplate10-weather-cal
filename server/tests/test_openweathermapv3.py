@@ -1,7 +1,7 @@
 import pathlib
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 
@@ -33,6 +33,7 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
             {
                 "timezone_offset": 7200,
                 "current": {
+                    "dt": start,
                     "temp": 12.4,
                     "weather": [{"icon": "01d"}],
                 },
@@ -63,7 +64,7 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
         self.assertEqual(len(forecast.hourly), 6)
         self.assertEqual(
             [item.temperature.value for item in forecast.hourly],
-            [15, 18, 21, 24, 27, 30],
+            [11, 14, 17, 20, 23, 26],
         )
         self.assertTrue(
             all(
@@ -88,6 +89,52 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
         )
         self.assertTrue(geocode.closed)
         self.assertTrue(onecall.closed)
+
+    @mock.patch("weather.openweathermapv3.openweathermapv3.requests.get")
+    def test_hourly_forecast_skips_current_local_boundary(self, get):
+        geocode = FakeResponse([{"lat": 45.572, "lon": 6.739}])
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, 9, tzinfo=location_timezone)
+        current = start + timedelta(minutes=20)
+        onecall = FakeResponse(
+            {
+                "timezone_offset": 7200,
+                "current": {
+                    "dt": int(current.timestamp()),
+                    "temp": 17.1,
+                    "weather": [{"icon": "03d"}],
+                },
+                "daily": [{"temp": {"min": 12.1, "max": 27.4}}],
+                "hourly": [
+                    {
+                        "dt": int((start + timedelta(hours=offset)).timestamp()),
+                        "temp": 20 + offset,
+                        "humidity": 60,
+                        "wind_speed": 3.5,
+                        "pop": 0.25,
+                        "weather": [{"icon": "01d"}],
+                    }
+                    for offset in range(24)
+                ],
+            }
+        )
+        get.side_effect = [geocode, onecall]
+        service = OpenWeatherMapv3Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+        )
+
+        forecast = service.fetch()
+
+        self.assertEqual(
+            [item.timestamp.strftime("%-I%p").lower() for item in forecast.hourly],
+            ["12pm", "3pm", "6pm", "9pm", "12am", "3am"],
+        )
+        self.assertEqual(
+            [item.temperature.value for item in forecast.hourly],
+            [23, 26, 29, 32, 35, 38],
+        )
 
 
 if __name__ == "__main__":
