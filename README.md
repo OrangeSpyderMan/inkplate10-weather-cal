@@ -317,6 +317,22 @@ Then install the Inkplate board package and required libraries (these libraries 
 make firmware-setup
 ```
 
+You can also let Make check the local firmware toolchain state and do the
+missing setup work before compiling:
+
+```bash
+make world
+```
+
+`world` installs the repo-local Arduino CLI if needed, installs the Inkplate
+board package or firmware libraries if they are missing, then runs
+`firmware-compile`. Pass the same build options you would pass to
+`firmware-compile`, for example:
+
+```bash
+make world CONFIG=firmware-config.yaml
+```
+
 Compile the firmware:
 
 ```bash

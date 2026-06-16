@@ -5,6 +5,7 @@ FIRMWARE_SKETCHBOOK_DIR ?= build/sketchbook
 export ARDUINO_DIRECTORIES_USER := $(CURDIR)/$(FIRMWARE_SKETCHBOOK_DIR)
 FIRMWARE_FQBN ?= Inkplate_Boards:esp32:Inkplate10V2
 FIRMWARE_CORE ?= Inkplate_Boards:esp32@8.1.0
+FIRMWARE_CORE_ID := $(firstword $(subst @, ,$(FIRMWARE_CORE)))
 FIRMWARE_BOARD_URL ?= https://github.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
 FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson Queue StreamUtils YAMLDuino ezTime SdFat
 FIRMWARE_UPLOAD_SPEED ?= 115200
@@ -29,7 +30,44 @@ endif
 
 FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=$(FIRMWARE_COMMON_BUILD_FLAGS) $(FIRMWARE_MODE_BUILD_FLAGS)"
 
-.PHONY: firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
+.PHONY: world firmware-world firmware-ensure-cli firmware-ensure-setup firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
+
+world: firmware-world
+
+firmware-world:
+	$(MAKE) firmware-ensure-cli
+	$(MAKE) firmware-ensure-setup
+	$(MAKE) firmware-compile
+
+firmware-ensure-cli:
+	@if command -v "$(ARDUINO_CLI)" >/dev/null 2>&1; then \
+		$(ARDUINO_CLI) version; \
+	else \
+		$(MAKE) firmware-install-cli; \
+	fi
+
+firmware-ensure-setup:
+	@missing_core=0; \
+	if ! { $(ARDUINO_CLI) core list | awk '$$1 == "$(FIRMWARE_CORE_ID)" { found = 1 } END { exit !found }'; }; then \
+		missing_core=1; \
+	fi; \
+	missing_libs=""; \
+	for lib in $(FIRMWARE_LIBRARIES); do \
+		if ! { $(ARDUINO_CLI) lib list "$$lib" | awk -v lib="$$lib" '$$1 == lib { found = 1 } END { exit !found }'; }; then \
+			missing_libs="$$missing_libs $$lib"; \
+		fi; \
+	done; \
+	if [ "$$missing_core" -eq 1 ] || [ -n "$$missing_libs" ]; then \
+		if [ "$$missing_core" -eq 1 ]; then \
+			echo "Missing firmware platform: $(FIRMWARE_CORE)"; \
+		fi; \
+		if [ -n "$$missing_libs" ]; then \
+			echo "Missing firmware libraries:$$missing_libs"; \
+		fi; \
+		$(MAKE) firmware-setup; \
+	else \
+		echo "Firmware platform and libraries are already installed."; \
+	fi
 
 firmware-install-cli:
 	bash bin/install_arduino_cli.sh
