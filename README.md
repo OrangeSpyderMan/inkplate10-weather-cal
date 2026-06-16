@@ -261,6 +261,10 @@ The Proxmox option directs you to the dedicated fresh-install-only preview:
 sudo ./bin/install_proxmox --dry-run
 ```
 
+Interactive Proxmox runs list available LXC storage and can create separate
+mounts for generated data and read-only config. Use `--storage`,
+`--data-storage`, and `--config-storage` for unattended storage selection.
+
 To deploy from this checkout to another machine over SSH, use the remote
 wrapper. It currently supports Proxmox and systemd targets:
 

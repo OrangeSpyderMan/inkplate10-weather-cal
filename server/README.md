@@ -736,14 +736,22 @@ It checks for Proxmox VE 9.x with `pve-container` 6.0.15 or newer, installs
 tags, resolves the selected image digest, creates an unprivileged DHCP-enabled
 LXC with `pct`, installs the generated configuration through `pct push`, and
 checks the readiness endpoint. Versioned release tags are offered first,
-followed by `main` and `next`.
+followed by `main` and `next`. Interactive runs list available LXC-capable
+Proxmox storage and ask where to place the root filesystem. By default the
+helper also offers separate Proxmox volumes for:
+
+- `/srv/inkplate/server/data` as a read-write generated-data mount
+- `/srv/inkplate/server/config` as a config/secrets mount that is made
+  read-only after bootstrap
+
+Use `--storage`, `--data-storage`, and `--config-storage` to choose these
+stores non-interactively. Use `--no-separate-mounts` only if you deliberately
+want config, secrets, and generated data to live on the CT root filesystem.
 
 The helper deliberately refuses existing CTIDs and does not yet perform
 upgrades, migration, backup, rollback, static network configuration, clustered
 placement, or HA setup. Treat the created container as a technical preview and
-test backup/restore before relying on it. It stores configuration, secrets, and
-generated data in the CT root disk so they are included in normal Proxmox
-container backups.
+test backup/restore before relying on it.
 
 Recommended image:
 

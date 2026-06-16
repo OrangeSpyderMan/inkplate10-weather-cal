@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,8 +26,19 @@ SPEC.loader.exec_module(install_server)
 IMAGE = "ghcr.io/orangespyderman/inkplate10-weather-cal"
 TEMPLATE_STORAGE = "local"
 OCI_ENTRYPOINT = "/srv/inkplate/server/container_entrypoint.py"
-CONFIG_PATH = "/srv/inkplate/server/config/config.yaml"
-ENV_PATH = "/srv/inkplate/server/config/weather.env"
+CONFIG_DIR = "/srv/inkplate/server/config"
+DATA_DIR = "/srv/inkplate/server/data"
+CONFIG_PATH = f"{CONFIG_DIR}/config.yaml"
+ENV_PATH = f"{CONFIG_DIR}/weather.env"
+
+
+class StoragePlan(NamedTuple):
+    root_storage: str
+    separate_mounts: bool
+    data_storage: str | None = None
+    config_storage: str | None = None
+    data_disk_gb: int | None = None
+    config_disk_gb: int | None = None
 
 
 def main() -> int:
@@ -44,10 +56,32 @@ def main() -> int:
     )
     parser.add_argument("--tag", help="OCI image tag; prompts from registry tags")
     parser.add_argument("--ctid", type=int, help="new Proxmox container ID")
-    parser.add_argument("--storage", default="local-lvm")
+    parser.add_argument(
+        "--storage",
+        help="Proxmox storage for the container root filesystem",
+    )
+    parser.add_argument(
+        "--separate-mounts",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "create separate mounts for /srv/inkplate/server/data and "
+            "/srv/inkplate/server/config"
+        ),
+    )
+    parser.add_argument(
+        "--data-storage",
+        help=f"Proxmox storage for the read-write {DATA_DIR} mount",
+    )
+    parser.add_argument(
+        "--config-storage",
+        help=f"Proxmox storage for the read-only {CONFIG_DIR} mount",
+    )
     parser.add_argument("--bridge", default="vmbr0")
     parser.add_argument("--hostname", default="inkplate-weather")
     parser.add_argument("--disk-gb", type=int, default=8)
+    parser.add_argument("--data-disk-gb", type=int, default=4)
+    parser.add_argument("--config-disk-gb", type=int, default=1)
     parser.add_argument("--memory", type=int, default=1024)
     parser.add_argument("--cores", type=int, default=2)
     parser.add_argument("--answers", type=Path)
@@ -67,7 +101,10 @@ def main() -> int:
 
     validate_arguments(args)
     validate_proxmox(args.dry_run)
-    validate_target(args.storage, args.bridge, args.dry_run)
+    print("Discovering Proxmox storage usable for LXC volumes.")
+    storage_options = available_storage(args.dry_run)
+    storage_plan = choose_storage_plan(args, storage_options)
+    validate_target(storage_plan, args.bridge, args.dry_run)
     ensure_skopeo(args.dry_run)
 
     tags = available_tags(args.dry_run, args.tag)
@@ -83,7 +120,15 @@ def main() -> int:
     print(f"Digest: {digest}")
     print(f"CTID: {ctid}")
     print(f"Hostname: {args.hostname}")
-    print(f"Root storage: {args.storage}:{args.disk_gb} GB")
+    print(f"Root storage: {storage_plan.root_storage}:{args.disk_gb} GB")
+    if storage_plan.separate_mounts:
+        print(f"Data mount: {storage_plan.data_storage}:{args.data_disk_gb} GB -> {DATA_DIR} (rw)")
+        print(
+            f"Config mount: {storage_plan.config_storage}:{args.config_disk_gb} GB "
+            f"-> {CONFIG_DIR} (ro after bootstrap)"
+        )
+    else:
+        print("Data/config storage: container root filesystem")
     print(f"Network: {args.bridge}, DHCP")
     print(f"Resources: {args.cores} cores, {args.memory} MiB")
     print()
@@ -115,12 +160,15 @@ def main() -> int:
         write_generated_file(config_file, config_text, 0o600, args.dry_run)
         write_generated_file(env_file, env_text, 0o600, args.dry_run)
 
+        print("Preparing OCI image archive and creating the LXC container.")
         pull_image(tag, archive_path, args.dry_run)
-        create_container(ctid, archive_volume, args, tag, digest)
+        create_container(ctid, archive_volume, args, storage_plan, tag, digest)
+        print("Bootstrapping generated config and secrets inside the container.")
         bootstrap_configuration(
             ctid,
             config_file,
             env_file,
+            storage_plan,
             args.dry_run,
         )
 
@@ -144,12 +192,21 @@ def validate_arguments(args) -> None:
         raise SystemExit("ERROR: --ctid must be between 100 and 999999999.")
     if args.disk_gb < 4:
         raise SystemExit("ERROR: --disk-gb must be at least 4.")
+    if args.data_disk_gb < 1:
+        raise SystemExit("ERROR: --data-disk-gb must be at least 1.")
+    if args.config_disk_gb < 1:
+        raise SystemExit("ERROR: --config-disk-gb must be at least 1.")
     if args.memory < 512:
         raise SystemExit("ERROR: --memory must be at least 512 MiB.")
     if args.cores < 1:
         raise SystemExit("ERROR: --cores must be positive.")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", args.hostname):
         raise SystemExit("ERROR: --hostname contains invalid characters.")
+    if (args.data_storage or args.config_storage) and args.separate_mounts is False:
+        raise SystemExit(
+            "ERROR: --data-storage/--config-storage cannot be used with "
+            "--no-separate-mounts."
+        )
 
 
 def validate_proxmox(dry_run: bool) -> None:
@@ -213,21 +270,115 @@ def ensure_skopeo(dry_run: bool) -> None:
     run(["apt-get", "install", "-y", "--no-install-recommends", "skopeo"])
 
 
-def validate_target(storage: str, bridge: str, dry_run: bool) -> None:
+def available_storage(dry_run: bool) -> list[tuple[str, str]]:
     if dry_run and not shutil.which("pvesm"):
-        print(f"Would check root storage {storage} and network bridge {bridge}.")
-        return
-    storage_result = subprocess.run(
-        ["pvesm", "status", "--storage", storage],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
+        print("Would list Proxmox storage with rootdir content support.")
+        return [
+            ("local-lvm", "LXC volume storage"),
+            ("local", "directory storage"),
+        ]
+    result = subprocess.run(
+        ["pvesm", "status", "--content", "rootdir"],
+        capture_output=True,
         text=True,
     )
-    if storage_result.returncode != 0:
+    if result.returncode != 0:
         raise SystemExit(
-            f"ERROR: Proxmox storage {storage!r} is unavailable: "
-            f"{storage_result.stderr.strip()}"
+            "ERROR: unable to list Proxmox storage with rootdir support: "
+            f"{result.stderr.strip()}"
         )
+    options = parse_storage_status(result.stdout)
+    if not options:
+        raise SystemExit("ERROR: no Proxmox storage with rootdir content support found.")
+    print("Available LXC storage:")
+    for name, description in options:
+        print(f"  - {name}: {description}")
+    return options
+
+
+def parse_storage_status(output: str) -> list[tuple[str, str]]:
+    options = []
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) < 6 or fields[0].lower() == "name":
+            continue
+        name, storage_type, status = fields[:3]
+        if status != "active":
+            continue
+        available = fields[5]
+        options.append((name, f"{storage_type}, {available} KiB available"))
+    return options
+
+
+def choose_storage_plan(args, storage_options: list[tuple[str, str]]) -> StoragePlan:
+    names = {name for name, _ in storage_options}
+    default = default_storage(storage_options)
+    root_storage = args.storage or install_server.prompt_choice(
+        "Root filesystem storage",
+        storage_options,
+        default=default,
+        key="proxmox_root_storage",
+    )
+    require_storage_choice(root_storage, names, "--storage")
+
+    if args.separate_mounts is not None:
+        separate_mounts = args.separate_mounts
+    elif args.data_storage or args.config_storage:
+        separate_mounts = True
+    else:
+        separate_mounts = install_server.prompt_yes_no(
+            "Create separate Proxmox mounts for config and generated data?",
+            default=True,
+            key="proxmox_separate_mounts",
+        )
+
+    if not separate_mounts:
+        return StoragePlan(root_storage=root_storage, separate_mounts=False)
+
+    data_storage = args.data_storage or install_server.prompt_choice(
+        f"Data mount storage ({DATA_DIR})",
+        storage_options,
+        default=root_storage,
+        key="proxmox_data_storage",
+    )
+    config_storage = args.config_storage or install_server.prompt_choice(
+        f"Config mount storage ({CONFIG_DIR})",
+        storage_options,
+        default=root_storage,
+        key="proxmox_config_storage",
+    )
+    require_storage_choice(data_storage, names, "--data-storage")
+    require_storage_choice(config_storage, names, "--config-storage")
+    return StoragePlan(
+        root_storage=root_storage,
+        separate_mounts=True,
+        data_storage=data_storage,
+        config_storage=config_storage,
+        data_disk_gb=args.data_disk_gb,
+        config_disk_gb=args.config_disk_gb,
+    )
+
+
+def default_storage(storage_options: list[tuple[str, str]]) -> str:
+    names = [name for name, _ in storage_options]
+    for candidate in ("local-lvm", "local-zfs", "local"):
+        if candidate in names:
+            return candidate
+    return names[0]
+
+
+def require_storage_choice(storage: str, names: set[str], option: str) -> None:
+    if storage not in names:
+        raise SystemExit(
+            f"ERROR: {option} must be one of the available LXC storages: "
+            f"{', '.join(sorted(names))}"
+        )
+
+
+def validate_target(storage_plan: StoragePlan, bridge: str, dry_run: bool) -> None:
+    if dry_run and not shutil.which("pvesm"):
+        print(f"Would check network bridge {bridge}.")
+        return
     if not Path("/sys/class/net", bridge).exists():
         raise SystemExit(f"ERROR: network bridge {bridge!r} does not exist.")
 
@@ -393,44 +544,59 @@ def pull_image(tag: str, archive_path: Path, dry_run: bool) -> None:
     )
 
 
-def create_container(ctid: int, archive_volume: str, args, tag: str, digest: str) -> None:
+def create_container(
+    ctid: int,
+    archive_volume: str,
+    args,
+    storage_plan: StoragePlan,
+    tag: str,
+    digest: str,
+) -> None:
     description = (
         "Inkplate Weather Calendar experimental OCI deployment\\n"
         f"Image: {IMAGE}:{tag}\\nDigest: {digest}"
     )
-    run(
-        [
-            "pct",
-            "create",
-            str(ctid),
-            archive_volume,
-            "--hostname",
-            args.hostname,
-            "--rootfs",
-            f"{args.storage}:{args.disk_gb}",
-            "--memory",
-            str(args.memory),
-            "--cores",
-            str(args.cores),
-            "--swap",
-            "512",
-            "--net0",
-            f"name=eth0,bridge={args.bridge},ip=dhcp,type=veth",
-            "--unprivileged",
-            "1",
-            "--onboot",
-            "1",
-            "--description",
-            description,
-        ],
-        dry_run=args.dry_run,
-    )
+    command = [
+        "pct",
+        "create",
+        str(ctid),
+        archive_volume,
+        "--hostname",
+        args.hostname,
+        "--rootfs",
+        f"{storage_plan.root_storage}:{args.disk_gb}",
+        "--memory",
+        str(args.memory),
+        "--cores",
+        str(args.cores),
+        "--swap",
+        "512",
+        "--net0",
+        f"name=eth0,bridge={args.bridge},ip=dhcp,type=veth",
+        "--unprivileged",
+        "1",
+        "--onboot",
+        "1",
+        "--description",
+        description,
+    ]
+    if storage_plan.separate_mounts:
+        command.extend(
+            [
+                "--mp0",
+                f"{storage_plan.data_storage}:{storage_plan.data_disk_gb},mp={DATA_DIR}",
+                "--mp1",
+                f"{storage_plan.config_storage}:{storage_plan.config_disk_gb},mp={CONFIG_DIR}",
+            ]
+        )
+    run(command, dry_run=args.dry_run)
 
 
 def bootstrap_configuration(
     ctid: int,
     config_file: Path,
     env_file: Path,
+    storage_plan: StoragePlan,
     dry_run: bool,
 ) -> None:
     run(["pct", "set", str(ctid), "--entrypoint", "/bin/sleep infinity"], dry_run)
@@ -455,11 +621,52 @@ def bootstrap_configuration(
         push_file(ctid, env_file, ENV_PATH, dry_run)
     finally:
         run(["pct", "stop", str(ctid)], dry_run, check=False)
+        if storage_plan.separate_mounts:
+            set_config_mount_read_only(ctid, storage_plan, dry_run)
         run(
             ["pct", "set", str(ctid), "--entrypoint", OCI_ENTRYPOINT],
             dry_run,
         )
     run(["pct", "start", str(ctid)], dry_run)
+
+
+def set_config_mount_read_only(
+    ctid: int,
+    storage_plan: StoragePlan,
+    dry_run: bool,
+) -> None:
+    mount = config_mount_value(ctid, storage_plan, dry_run)
+    run(["pct", "set", str(ctid), "--mp1", mount], dry_run)
+
+
+def config_mount_value(
+    ctid: int,
+    storage_plan: StoragePlan,
+    dry_run: bool,
+) -> str:
+    fallback = f"{storage_plan.config_storage}:{storage_plan.config_disk_gb},mp={CONFIG_DIR}"
+    if dry_run:
+        return with_mount_option(fallback, "ro", "1")
+    result = subprocess.run(
+        ["pct", "config", str(ctid)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    for line in result.stdout.splitlines():
+        if line.startswith("mp1:"):
+            return with_mount_option(line.split(":", 1)[1].strip(), "ro", "1")
+    raise SystemExit(f"ERROR: unable to find config mount mp1 for container {ctid}.")
+
+
+def with_mount_option(mount: str, key: str, value: str) -> str:
+    parts = [
+        part
+        for part in mount.split(",")
+        if part and part.split("=", 1)[0] != key
+    ]
+    parts.append(f"{key}={value}")
+    return ",".join(parts)
 
 
 def push_file(ctid: int, source: Path, destination: str, dry_run: bool) -> None:

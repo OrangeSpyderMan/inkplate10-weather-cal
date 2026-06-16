@@ -128,9 +128,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tag")
     parser.add_argument("--ctid", type=int)
     parser.add_argument("--storage")
+    parser.add_argument("--separate-mounts", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--data-storage")
+    parser.add_argument("--config-storage")
     parser.add_argument("--bridge")
     parser.add_argument("--hostname")
     parser.add_argument("--disk-gb", type=int)
+    parser.add_argument("--data-disk-gb", type=int)
+    parser.add_argument("--config-disk-gb", type=int)
     parser.add_argument("--memory", type=int)
     parser.add_argument("--cores", type=int)
     return parser
@@ -151,14 +156,23 @@ def validate_args(args) -> None:
         "tag",
         "ctid",
         "storage",
+        "separate_mounts",
+        "data_storage",
+        "config_storage",
         "bridge",
         "hostname",
         "disk_gb",
+        "data_disk_gb",
+        "config_disk_gb",
         "memory",
         "cores",
     )
     if args.mode != "proxmox":
-        used = [name for name in proxmox_only if getattr(args, name) is not None]
+        used = [
+            name
+            for name in proxmox_only
+            if getattr(args, name, None) is not None
+        ]
         if args.yes:
             used.append("yes")
         if used:
@@ -203,16 +217,25 @@ def remote_installer_args(args) -> list[str]:
             ("tag", "--tag"),
             ("ctid", "--ctid"),
             ("storage", "--storage"),
+            ("data_storage", "--data-storage"),
+            ("config_storage", "--config-storage"),
             ("bridge", "--bridge"),
             ("hostname", "--hostname"),
             ("disk_gb", "--disk-gb"),
+            ("data_disk_gb", "--data-disk-gb"),
+            ("config_disk_gb", "--config-disk-gb"),
             ("memory", "--memory"),
             ("cores", "--cores"),
         )
         for attribute, option in mappings:
-            value = getattr(args, attribute)
+            value = getattr(args, attribute, None)
             if value is not None:
                 command.extend([option, str(value)])
+        separate_mounts = getattr(args, "separate_mounts", None)
+        if separate_mounts is True:
+            command.append("--separate-mounts")
+        elif separate_mounts is False:
+            command.append("--no-separate-mounts")
         if args.yes:
             command.append("--yes")
     if args.answers is not None:

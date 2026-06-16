@@ -42,22 +42,40 @@ class ProxmoxInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "not available"):
             install_proxmox.choose_tag(["main", "next"], "v9.9.9")
 
+    def test_parses_active_rootdir_storage(self):
+        self.assertEqual(
+            install_proxmox.parse_storage_status(
+                "Name       Type     Status     Total Used Available %\n"
+                "local      dir      active  1000000  100    999900 1%\n"
+                "slow       dir      inactive 1000000  100    999900 1%\n"
+                "local-lvm  lvmthin  active  2000000  200   1999800 1%\n"
+            ),
+            [
+                ("local", "dir, 999900 KiB available"),
+                ("local-lvm", "lvmthin, 1999800 KiB available"),
+            ],
+        )
+
     @mock.patch.object(install_proxmox, "run")
     def test_create_uses_unprivileged_dhcp_container(self, run):
         args = types.SimpleNamespace(
             hostname="inkplate-weather",
-            storage="local-lvm",
             disk_gb=8,
             memory=1024,
             cores=2,
             bridge="vmbr0",
             dry_run=True,
         )
+        storage_plan = install_proxmox.StoragePlan(
+            root_storage="local-lvm",
+            separate_mounts=False,
+        )
 
         install_proxmox.create_container(
             123,
             "local:vztmpl/inkplate.tar",
             args,
+            storage_plan,
             "main",
             "sha256:abc",
         )
@@ -72,4 +90,53 @@ class ProxmoxInstallerTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--onboot") + 1],
             "1",
+        )
+
+    @mock.patch.object(install_proxmox, "run")
+    def test_create_can_add_separate_data_and_config_mounts(self, run):
+        args = types.SimpleNamespace(
+            hostname="inkplate-weather",
+            disk_gb=8,
+            memory=1024,
+            cores=2,
+            bridge="vmbr0",
+            dry_run=True,
+        )
+        storage_plan = install_proxmox.StoragePlan(
+            root_storage="fast",
+            separate_mounts=True,
+            data_storage="data-store",
+            config_storage="config-store",
+            data_disk_gb=16,
+            config_disk_gb=1,
+        )
+
+        install_proxmox.create_container(
+            123,
+            "local:vztmpl/inkplate.tar",
+            args,
+            storage_plan,
+            "main",
+            "sha256:abc",
+        )
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--rootfs") + 1], "fast:8")
+        self.assertEqual(
+            command[command.index("--mp0") + 1],
+            "data-store:16,mp=/srv/inkplate/server/data",
+        )
+        self.assertEqual(
+            command[command.index("--mp1") + 1],
+            "config-store:1,mp=/srv/inkplate/server/config",
+        )
+
+    def test_sets_mount_option_without_duplicating_existing_option(self):
+        self.assertEqual(
+            install_proxmox.with_mount_option(
+                "local-lvm:vm-123-disk-1,mp=/srv/inkplate/server/config,ro=0",
+                "ro",
+                "1",
+            ),
+            "local-lvm:vm-123-disk-1,mp=/srv/inkplate/server/config,ro=1",
         )
