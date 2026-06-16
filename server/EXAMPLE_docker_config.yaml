@@ -11,6 +11,8 @@ weather:
   service: openweathermapv3
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
+  forecastslicehours: 3
+  forecastleadminutes: 15
   metric: true
 current_conditions:
   source: weather # weather or netatmo

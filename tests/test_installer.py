@@ -102,6 +102,14 @@ class InstallerCopyTests(unittest.TestCase):
             f"      height: {install_server.DEFAULT_IMAGE_HEIGHT}",
             config,
         )
+        self.assertIn(
+            f"  forecastslicehours: {install_server.DEFAULT_FORECAST_SLICE_HOURS}",
+            config,
+        )
+        self.assertIn(
+            f"  forecastleadminutes: {install_server.DEFAULT_FORECAST_LEAD_MINUTES}",
+            config,
+        )
 
     def test_rendered_config_uses_refresh_minutes(self):
         answers = {

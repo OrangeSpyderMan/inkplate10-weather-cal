@@ -33,6 +33,8 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertEqual(settings.refresh_source, "server.refreshminutes")
         self.assertTrue(settings.weather_metric)
         self.assertEqual(settings.hourly_forecasts, 6)
+        self.assertEqual(settings.forecast_slice_hours, 3)
+        self.assertEqual(settings.forecast_lead_minutes, 15)
         self.assertEqual(settings.location, "Landry, FR")
         self.assertEqual(settings.realtime_config, {})
         self.assertEqual(settings.mqtt_weather_config, {})
@@ -85,6 +87,69 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertTrue(settings.always_on)
         self.assertEqual(settings.refresh_seconds, 15 * 60)
         self.assertEqual(settings.refresh_source, "server.refreshminutes")
+
+    def test_accepts_forecast_slice_settings(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {},
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                    "forecastslicehours": 2,
+                    "forecastleadminutes": 30,
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertEqual(settings.forecast_slice_hours, 2)
+        self.assertEqual(settings.forecast_lead_minutes, 30)
+
+    def test_rejects_non_positive_forecast_slice_hours(self):
+        with self.assertRaisesRegex(
+            ConfigurationError,
+            "weather.forecastslicehours 0 must be positive",
+        ):
+            ProducerConfig.from_config(
+                {
+                    "server": {},
+                    "weather": {
+                        "service": "openweathermapv3",
+                        "apikey": "weather-key",
+                        "forecastslicehours": 0,
+                    },
+                    "google": {
+                        "apikey": "google-key",
+                        "staticmaps_mapid": "map-id",
+                    },
+                    "location": "Landry, FR",
+                }
+            )
+
+    def test_rejects_negative_forecast_lead_minutes(self):
+        with self.assertRaisesRegex(
+            ConfigurationError,
+            "weather.forecastleadminutes -1 must be non-negative",
+        ):
+            ProducerConfig.from_config(
+                {
+                    "server": {},
+                    "weather": {
+                        "service": "openweathermapv3",
+                        "apikey": "weather-key",
+                        "forecastleadminutes": -1,
+                    },
+                    "google": {
+                        "apikey": "google-key",
+                        "staticmaps_mapid": "map-id",
+                    },
+                    "location": "Landry, FR",
+                }
+            )
 
     def test_legacy_fractional_hours_remain_supported(self):
         settings = ProducerConfig.from_config(

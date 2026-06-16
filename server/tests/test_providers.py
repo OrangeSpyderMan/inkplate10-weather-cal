@@ -36,6 +36,8 @@ class ForecastProviderFactoryTests(unittest.TestCase):
                     location="location",
                     metric=False,
                     num_hours=4,
+                    forecast_slice_hours=2,
+                    forecast_lead_minutes=30,
                 )
 
                 self.assertIs(result, provider.return_value)
@@ -44,6 +46,8 @@ class ForecastProviderFactoryTests(unittest.TestCase):
                     location="location",
                     metric=False,
                     num_hours=4,
+                    forecast_slice_hours=2,
+                    forecast_lead_minutes=30,
                 )
 
     def test_rejects_removed_openweathermap_v2_name(self):
@@ -76,6 +80,8 @@ class ForecastProviderFactoryTests(unittest.TestCase):
             "location",
             True,
             6,
+            3,
+            15,
         )
 
         self.assertIs(result, build_provider.return_value)
@@ -85,6 +91,8 @@ class ForecastProviderFactoryTests(unittest.TestCase):
             location="location",
             metric=True,
             num_hours=6,
+            forecast_slice_hours=3,
+            forecast_lead_minutes=15,
         )
 
 

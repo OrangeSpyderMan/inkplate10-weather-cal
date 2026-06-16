@@ -16,6 +16,8 @@ class ProducerConfig:
     weather_api_key: str
     weather_metric: bool
     hourly_forecasts: int
+    forecast_slice_hours: int
+    forecast_lead_minutes: int
     location: str
     google_api_key: str
     static_maps_id: str
@@ -48,6 +50,18 @@ class ProducerConfig:
             raise ConfigurationError(
                 f"num_hourly_forecasts {hourly_forecasts} must be non-negative"
             )
+        forecast_slice_hours = _positive_int(
+            config,
+            "weather",
+            "forecastslicehours",
+            default=3,
+        )
+        forecast_lead_minutes = _non_negative_int(
+            config,
+            "weather",
+            "forecastleadminutes",
+            default=15,
+        )
 
         refresh_seconds, refresh_key = _refresh_seconds(config)
         if always_on and refresh_seconds == 0:
@@ -110,6 +124,8 @@ class ProducerConfig:
                 )
             ),
             hourly_forecasts=hourly_forecasts,
+            forecast_slice_hours=forecast_slice_hours,
+            forecast_lead_minutes=forecast_lead_minutes,
             location=str(
                 get_prop(config, "location", required=True)
             ).strip(),
@@ -146,6 +162,44 @@ def producer_enabled(config):
             required=False,
         )
     )
+
+
+def _positive_int(config, *keys, default):
+    value = _integer_config(config, *keys, default=default)
+    if value <= 0:
+        raise ConfigurationError(
+            f"{'.'.join(keys)} {value:g} must be positive"
+        )
+    return value
+
+
+def _non_negative_int(config, *keys, default):
+    value = _integer_config(config, *keys, default=default)
+    if value < 0:
+        raise ConfigurationError(
+            f"{'.'.join(keys)} {value:g} must be non-negative"
+        )
+    return value
+
+
+def _integer_config(config, *keys, default):
+    value = get_prop_by_keys(
+        config,
+        *keys,
+        default=default,
+        required=False,
+    )
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ConfigurationError(
+            f"{'.'.join(keys)} {value!r} must be an integer"
+        ) from None
+    if parsed != float(value):
+        raise ConfigurationError(
+            f"{'.'.join(keys)} {value!r} must be an integer"
+        )
+    return parsed
 
 
 def _refresh_seconds(config):

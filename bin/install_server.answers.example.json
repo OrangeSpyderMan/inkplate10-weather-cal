@@ -10,6 +10,8 @@
   "google_api_key": "replace-with-google-api-key",
   "google_staticmaps_mapid": "replace-with-google-staticmaps-map-id",
   "num_hourly_forecasts": 6,
+  "forecast_slice_hours": 3,
+  "forecast_lead_minutes": 15,
   "metric": true,
   "netatmo_enabled": false,
   "mqtt_weather_enabled": false,

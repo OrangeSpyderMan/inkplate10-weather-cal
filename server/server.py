@@ -95,6 +95,8 @@ def run():
         settings.location,
         settings.weather_metric,
         settings.hourly_forecasts,
+        settings.forecast_slice_hours,
+        settings.forecast_lead_minutes,
     )
     realtime_svc = build_realtime_provider(
         settings.realtime_config,
@@ -154,6 +156,8 @@ def build_weather_service(
     location,
     metric,
     num_hourly_forecasts,
+    forecast_slice_hours,
+    forecast_lead_minutes,
 ):
     return build_forecast_provider(
         service_type,
@@ -161,6 +165,8 @@ def build_weather_service(
         location=location,
         metric=metric,
         num_hours=num_hourly_forecasts,
+        forecast_slice_hours=forecast_slice_hours,
+        forecast_lead_minutes=forecast_lead_minutes,
     )
 
 

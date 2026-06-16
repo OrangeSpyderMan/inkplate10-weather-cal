@@ -6,13 +6,24 @@ from ..models import ForecastData
 
 
 class AccuweatherService(WeatherService):
-    def __init__(self, apikey, location, num_hours=6, metric=True, mock=False):
+    def __init__(
+        self,
+        apikey,
+        location,
+        num_hours=6,
+        metric=True,
+        forecast_slice_hours=3,
+        forecast_lead_minutes=15,
+        mock=False,
+    ):
         super().__init__(
             apikey,
             "https://dataservice.accuweather.com",
             "accuweather",
             num_hours,
             metric,
+            forecast_slice_hours,
+            forecast_lead_minutes,
         )
         self.location_key = self._get_location_key(location)
 
@@ -163,4 +174,6 @@ def build_provider(config):
         location=config["location"],
         metric=config.get("metric", True),
         num_hours=config.get("num_hours", 6),
+        forecast_slice_hours=config.get("forecast_slice_hours", 3),
+        forecast_lead_minutes=config.get("forecast_lead_minutes", 15),
     )

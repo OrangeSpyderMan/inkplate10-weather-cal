@@ -52,6 +52,8 @@ LEGACY_SERVER_CONFIG = Path("server/config.yaml")
 DEFAULT_PORT = 8080
 DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
+DEFAULT_FORECAST_SLICE_HOURS = 3
+DEFAULT_FORECAST_LEAD_MINUTES = 15
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
 WEATHER_PROVIDER_LABELS = {
@@ -423,6 +425,27 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         maximum=12,
         key="num_hourly_forecasts",
     )
+    answers["forecast_slice_hours"] = prompt_int(
+        "Forecast slot spacing in hours",
+        default=int(
+            config.get("weather.forecastslicehours", DEFAULT_FORECAST_SLICE_HOURS)
+        ),
+        minimum=1,
+        maximum=24,
+        key="forecast_slice_hours",
+    )
+    answers["forecast_lead_minutes"] = prompt_int(
+        "Forecast lead time in minutes",
+        default=int(
+            config.get(
+                "weather.forecastleadminutes",
+                DEFAULT_FORECAST_LEAD_MINUTES,
+            )
+        ),
+        minimum=0,
+        maximum=180,
+        key="forecast_lead_minutes",
+    )
     answers["metric"] = prompt_yes_no("Use metric units?", default=parse_bool(config.get("weather.metric", "true")), key="metric")
 
     current_source = config.get(
@@ -560,6 +583,12 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"  service: {answers['weather_service']}",
         "  apikey: ${WEATHER_API_KEY}",
         f"  num_hourly_forecasts: {answers['num_hourly_forecasts']}",
+        "  forecastslicehours: {}".format(
+            answers.get("forecast_slice_hours", DEFAULT_FORECAST_SLICE_HOURS)
+        ),
+        "  forecastleadminutes: {}".format(
+            answers.get("forecast_lead_minutes", DEFAULT_FORECAST_LEAD_MINUTES)
+        ),
         f"  metric: {yaml_bool(bool(answers['metric']))}",
         "current_conditions:",
         f"  source: {'netatmo' if answers['netatmo_enabled'] else 'weather'}",

@@ -5,13 +5,24 @@ from ..models import ForecastData
 
 
 class OpenWeatherMapv3Service(WeatherService):
-    def __init__(self, apikey, location, num_hours=6, metric=True, mock=False):
+    def __init__(
+        self,
+        apikey,
+        location,
+        num_hours=6,
+        metric=True,
+        forecast_slice_hours=3,
+        forecast_lead_minutes=15,
+        mock=False,
+    ):
         super().__init__(
             apikey,
             "https://api.openweathermap.org",
             "openweathermapv3",
             num_hours,
             metric,
+            forecast_slice_hours,
+            forecast_lead_minutes,
         )
         self.lat, self.lon = self._get_location_coords(location)
 
@@ -107,15 +118,20 @@ class OpenWeatherMapv3Service(WeatherService):
     def _forecast_cutoff(self, data, location_timezone):
         current_timestamp = data.get("current", {}).get("dt")
         if current_timestamp is not None:
-            return datetime.fromtimestamp(
+            cutoff = datetime.fromtimestamp(
                 current_timestamp,
                 location_timezone,
             )
-        return datetime.now(location_timezone)
+        else:
+            cutoff = datetime.now(location_timezone)
+        return cutoff + timedelta(minutes=self.forecast_lead_minutes)
 
     def _is_forecast_slot(self, entry, location_timezone, cutoff):
         timestamp = datetime.fromtimestamp(entry["dt"], location_timezone)
-        return timestamp > cutoff and timestamp.hour % 3 == 0
+        return (
+            timestamp > cutoff
+            and self.is_forecast_slice(timestamp)
+        )
 
     def get_daily_summary(self):
         return self.fetch().current_dict()
@@ -157,4 +173,6 @@ def build_provider(config):
         location=config["location"],
         metric=config.get("metric", True),
         num_hours=config.get("num_hours", 6),
+        forecast_slice_hours=config.get("forecast_slice_hours", 3),
+        forecast_lead_minutes=config.get("forecast_lead_minutes", 15),
     )

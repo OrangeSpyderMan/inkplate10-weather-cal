@@ -136,6 +136,136 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
             [23, 26, 29, 32, 35, 38],
         )
 
+    @mock.patch("weather.openweathermapv3.openweathermapv3.requests.get")
+    def test_hourly_forecast_uses_lead_time_before_slice_boundary(self, get):
+        geocode = FakeResponse([{"lat": 45.572, "lon": 6.739}])
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, 15, tzinfo=location_timezone)
+        current = datetime(2026, 6, 16, 17, 59, tzinfo=location_timezone)
+        onecall = FakeResponse(
+            {
+                "timezone_offset": 7200,
+                "current": {
+                    "dt": int(current.timestamp()),
+                    "temp": 17.1,
+                    "weather": [{"icon": "03d"}],
+                },
+                "daily": [{"temp": {"min": 12.1, "max": 27.4}}],
+                "hourly": [
+                    {
+                        "dt": int((start + timedelta(hours=offset)).timestamp()),
+                        "temp": 20 + offset,
+                        "humidity": 60,
+                        "wind_speed": 3.5,
+                        "pop": 0.25,
+                        "weather": [{"icon": "01d"}],
+                    }
+                    for offset in range(24)
+                ],
+            }
+        )
+        get.side_effect = [geocode, onecall]
+        service = OpenWeatherMapv3Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+        )
+
+        forecast = service.fetch()
+
+        self.assertEqual(
+            [item.timestamp.strftime("%-I%p").lower() for item in forecast.hourly],
+            ["9pm", "12am", "3am", "6am", "9am", "12pm"],
+        )
+
+    @mock.patch("weather.openweathermapv3.openweathermapv3.requests.get")
+    def test_hourly_forecast_uses_configured_slice_hours(self, get):
+        geocode = FakeResponse([{"lat": 45.572, "lon": 6.739}])
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, 9, tzinfo=location_timezone)
+        current = start + timedelta(minutes=20)
+        onecall = FakeResponse(
+            {
+                "timezone_offset": 7200,
+                "current": {
+                    "dt": int(current.timestamp()),
+                    "temp": 17.1,
+                    "weather": [{"icon": "03d"}],
+                },
+                "daily": [{"temp": {"min": 12.1, "max": 27.4}}],
+                "hourly": [
+                    {
+                        "dt": int((start + timedelta(hours=offset)).timestamp()),
+                        "temp": 20 + offset,
+                        "humidity": 60,
+                        "wind_speed": 3.5,
+                        "pop": 0.25,
+                        "weather": [{"icon": "01d"}],
+                    }
+                    for offset in range(16)
+                ],
+            }
+        )
+        get.side_effect = [geocode, onecall]
+        service = OpenWeatherMapv3Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+            forecast_slice_hours=2,
+            forecast_lead_minutes=0,
+        )
+
+        forecast = service.fetch()
+
+        self.assertEqual(
+            [item.timestamp.strftime("%-I%p").lower() for item in forecast.hourly],
+            ["10am", "12pm", "2pm", "4pm", "6pm", "8pm"],
+        )
+
+    @mock.patch("weather.openweathermapv3.openweathermapv3.requests.get")
+    def test_hourly_forecast_supports_slice_hours_across_midnight(self, get):
+        geocode = FakeResponse([{"lat": 45.572, "lon": 6.739}])
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, tzinfo=location_timezone)
+        current = start
+        onecall = FakeResponse(
+            {
+                "timezone_offset": 7200,
+                "current": {
+                    "dt": int(current.timestamp()),
+                    "temp": 17.1,
+                    "weather": [{"icon": "03d"}],
+                },
+                "daily": [{"temp": {"min": 12.1, "max": 27.4}}],
+                "hourly": [
+                    {
+                        "dt": int((start + timedelta(hours=offset)).timestamp()),
+                        "temp": 20 + offset,
+                        "humidity": 60,
+                        "wind_speed": 3.5,
+                        "pop": 0.25,
+                        "weather": [{"icon": "01d"}],
+                    }
+                    for offset in range(48)
+                ],
+            }
+        )
+        get.side_effect = [geocode, onecall]
+        service = OpenWeatherMapv3Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+            forecast_slice_hours=7,
+            forecast_lead_minutes=0,
+        )
+
+        forecast = service.fetch()
+
+        self.assertEqual(
+            [item.timestamp.strftime("%-I%p").lower() for item in forecast.hourly],
+            ["1am", "8am", "3pm", "10pm", "5am", "12pm"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

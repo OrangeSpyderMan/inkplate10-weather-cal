@@ -154,11 +154,19 @@ This is the API that has had the most testing.
 
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-The server samples the hourly forecast at local three-hour boundaries. The
-number of forecast slots is configured with `weather.num_hourly_forecasts` and
-is treated as an exact count. The example config uses 6, which is the
+The server samples the hourly forecast at local wall-clock boundaries. The
+spacing is configured with `weather.forecastslicehours`, defaulting to 3, so
+the default slots are midnight, 3am, 6am, 9am, and so on. Values that do not
+divide evenly into 24 still use exact spacing across day boundaries; for
+example, 7-hour slices move through the wall-clock hours over multiple days.
+The number of forecast slots is configured with `weather.num_hourly_forecasts`
+and is treated as an exact count. The example config uses 6, which is the
 recommended maximum for the current Inkplate 10 portrait layout. Larger values
 need layout tuning so the forecast row remains readable.
+
+`weather.forecastleadminutes` defaults to 15. It shifts the forecast selection
+cutoff forward before choosing slots, so an artifact rendered shortly before a
+slice boundary does not show that nearly expired slot after the Inkplate wakes.
 
 ### OpenWeatherMapv4 API
 
@@ -169,6 +177,8 @@ weather:
   service: openweathermapv4
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
+  forecastslicehours: 3
+  forecastleadminutes: 15
   metric: true
 ```
 

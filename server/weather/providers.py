@@ -50,6 +50,8 @@ def build_forecast_provider(
     location,
     metric=True,
     num_hours=6,
+    forecast_slice_hours=3,
+    forecast_lead_minutes=15,
 ):
     name = _provider_name(provider_name, "weather.service")
     if name in REMOVED_FORECAST_PROVIDERS:
@@ -70,6 +72,8 @@ def build_forecast_provider(
             "location": location,
             "metric": metric,
             "num_hours": num_hours,
+            "forecast_slice_hours": forecast_slice_hours,
+            "forecast_lead_minutes": forecast_lead_minutes,
         }
     )
 

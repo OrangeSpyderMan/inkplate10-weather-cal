@@ -209,6 +209,125 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
             [18, 21, 24, 27, 30, 33],
         )
 
+    def test_hourly_forecast_uses_lead_time_before_slice_boundary(self):
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, 15, tzinfo=location_timezone)
+        now = datetime(2026, 6, 16, 17, 59, tzinfo=location_timezone)
+
+        def entry(hour_offset, temperature):
+            return {
+                "dt": int((start + timedelta(hours=hour_offset)).timestamp()),
+                "temp": temperature,
+                "humidity": 50,
+                "wind_speed": 1,
+                "pop": 0,
+                "weather": [{"icon": "01d"}],
+            }
+
+        page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 15 + offset) for offset in range(24)],
+        }
+
+        def request(url, params=None, timeout=None):
+            if url.endswith("/data/4.0/onecall/timeline/1h"):
+                return FakeResponse(page)
+            raise AssertionError(f"unexpected URL {url}")
+
+        self.get.side_effect = request
+
+        with self.freeze_provider_time(now):
+            forecasts = self.service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["9pm", "12am", "3am", "6am", "9am", "12pm"],
+        )
+
+    def test_hourly_forecast_uses_configured_slice_hours(self):
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 10, 9, tzinfo=location_timezone)
+        now = start + timedelta(minutes=20)
+        service = OpenWeatherMapv4Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+            forecast_slice_hours=2,
+            forecast_lead_minutes=0,
+        )
+
+        def entry(hour_offset, temperature):
+            return {
+                "dt": int((start + timedelta(hours=hour_offset)).timestamp()),
+                "temp": temperature,
+                "humidity": 50,
+                "wind_speed": 1,
+                "pop": 0,
+                "weather": [{"icon": "01d"}],
+            }
+
+        page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 15 + offset) for offset in range(16)],
+        }
+
+        def request(url, params=None, timeout=None):
+            if url.endswith("/data/4.0/onecall/timeline/1h"):
+                return FakeResponse(page)
+            raise AssertionError(f"unexpected URL {url}")
+
+        self.get.side_effect = request
+
+        with self.freeze_provider_time(now):
+            forecasts = service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["10am", "12pm", "2pm", "4pm", "6pm", "8pm"],
+        )
+
+    def test_hourly_forecast_supports_slice_hours_across_midnight(self):
+        location_timezone = timezone(timedelta(hours=2))
+        start = datetime(2026, 6, 16, tzinfo=location_timezone)
+        now = start
+        service = OpenWeatherMapv4Service(
+            "weather-key",
+            "Landry,FR",
+            num_hours=6,
+            forecast_slice_hours=7,
+            forecast_lead_minutes=0,
+        )
+
+        def entry(hour_offset, temperature):
+            return {
+                "dt": int((start + timedelta(hours=hour_offset)).timestamp()),
+                "temp": temperature,
+                "humidity": 50,
+                "wind_speed": 1,
+                "pop": 0,
+                "weather": [{"icon": "01d"}],
+            }
+
+        page = {
+            "timezone_offset": 7200,
+            "data": [entry(offset, 15 + offset) for offset in range(48)],
+        }
+
+        def request(url, params=None, timeout=None):
+            if url.endswith("/data/4.0/onecall/timeline/1h"):
+                return FakeResponse(page)
+            raise AssertionError(f"unexpected URL {url}")
+
+        self.get.side_effect = request
+
+        with self.freeze_provider_time(now):
+            forecasts = service.get_hourly_forecast()
+
+        self.assertEqual(
+            [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
+            ["1am", "8am", "3pm", "10pm", "5am", "12pm"],
+        )
+
     def test_preserves_units_when_midnight_is_on_the_next_page(self):
         location_timezone = timezone(timedelta(hours=2))
         start = datetime(2026, 6, 10, 9, tzinfo=location_timezone)
@@ -233,7 +352,7 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
         }
         second_page = {
             "timezone_offset": 7200,
-            "data": [entry(offset, 12 + offset - 15) for offset in range(15, 21)],
+            "data": [entry(offset, 12 + offset - 15) for offset in range(15, 22)],
         }
 
         def request(url, params=None, timeout=None):
@@ -254,11 +373,11 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
 
         self.assertEqual(
             [forecast["dt"].strftime("%-I%p").lower() for forecast in forecasts],
-            ["9am", "12pm", "3pm", "6pm", "9pm", "12am"],
+            ["12pm", "3pm", "6pm", "9pm", "12am", "3am"],
         )
         self.assertEqual(
             [forecast["temperature"]["value"] for forecast in forecasts],
-            [15, 18, 21, 24, 27, 12],
+            [18, 21, 24, 27, 12, 15],
         )
 
     def test_normalizes_kelvin_temperature_from_malformed_page(self):
