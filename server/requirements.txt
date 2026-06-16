@@ -1,4 +1,4 @@
-selenium==4.44.0
+selenium==4.45.0
 airium==0.2.7
 packaging==26.2
 PyYAML==6.0.3
