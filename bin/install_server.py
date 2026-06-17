@@ -8,6 +8,7 @@ before the server virtualenv and Python package dependencies exist.
 from __future__ import annotations
 
 import argparse
+import filecmp
 import getpass
 import json
 import os
@@ -19,6 +20,20 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SERVER_DIR = REPO_ROOT / "server"
+sys.path.insert(0, str(SERVER_DIR))
+
+from output_profiles import (  # noqa: E402
+    DEFAULT_HEIGHT as DEFAULT_IMAGE_HEIGHT,
+    DEFAULT_OUTPUT_FILENAME,
+    DEFAULT_OUTPUT_PROFILE,
+    DEFAULT_RENDERER,
+    DEFAULT_WIDTH as DEFAULT_IMAGE_WIDTH,
+)
+from weather.providers import FORECAST_PROVIDERS  # noqa: E402
 
 
 APP_USER = "inkplate"
@@ -33,14 +48,18 @@ DIAGNOSTICS_SERVICE_FILE = Path(
 )
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
-LEGACY_SERVER_CONFIG = Path("server/config.yaml")
 DEFAULT_PORT = 8080
-DEFAULT_REFRESH_HOURS = 3
+DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
+DEFAULT_FORECAST_SLICE_HOURS = 3
+DEFAULT_FORECAST_LEAD_MINUTES = 15
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
-DEFAULT_IMAGE_WIDTH = 825
-DEFAULT_IMAGE_HEIGHT = 1200
+WEATHER_PROVIDER_LABELS = {
+    "openweathermapv4": "OpenWeatherMap One Call 4.0",
+    "openweathermapv3": "OpenWeatherMap One Call 3.0",
+    "accuweather": "AccuWeather",
+}
 PRIVILEGE_PREFIX: list[str] = []
 INSTALLER_ANSWERS: dict[str, object] = {}
 NON_INTERACTIVE = False
@@ -57,7 +76,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("docker", "systemd"),
+        choices=("docker", "podman", "proxmox", "systemd"),
         help="install mode; prompts when omitted",
     )
     parser.add_argument(
@@ -86,16 +105,28 @@ def main() -> int:
         "Install type",
         [
             ("docker", "Docker Compose install from this checkout"),
+            ("podman", "Podman Compose install from this checkout"),
+            ("proxmox", "Experimental Proxmox VE 9 OCI/LXC installer"),
             ("systemd", "Native systemd install under /srv/inkplate"),
         ],
         default="docker",
     )
 
-    if mode not in ("docker", "systemd"):
-        raise SystemExit("ERROR: install mode must be 'docker' or 'systemd'.")
+    if mode not in ("docker", "podman", "proxmox", "systemd"):
+        raise SystemExit(
+            "ERROR: install mode must be 'docker', 'podman', 'proxmox', "
+            "or 'systemd'."
+        )
 
-    if mode == "docker":
-        install_docker(repo_root, args.dry_run)
+    if mode in ("docker", "podman"):
+        install_compose(repo_root, args.dry_run, mode)
+    elif mode == "proxmox":
+        print(
+            "Proxmox VE support is experimental and uses a dedicated installer."
+        )
+        print("Run: ./bin/install_proxmox")
+        print("Preview first with: ./bin/install_proxmox --dry-run")
+        return 0
     else:
         install_systemd(repo_root, args.dry_run)
 
@@ -141,28 +172,28 @@ def ensure_repo_root(repo_root: Path) -> None:
         raise SystemExit(1)
 
 
-def install_docker(repo_root: Path, dry_run: bool) -> None:
+def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
+    label = "Docker" if mode == "docker" else "Podman"
     existing = [
         path
         for path in (
             repo_root / DOCKER_ENV_FILE,
             repo_root / SERVER_CONFIG,
-            repo_root / LEGACY_SERVER_CONFIG,
         )
         if path.exists()
     ]
-    action = choose_existing_action("Docker", existing)
+    action = choose_existing_action(label, existing)
     if action == "abort":
         print("No changes made.")
         return
 
-    if action in ("fresh", "reconfigure"):
+    if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(repo_root))
-        answers = collect_answers(current_env, current_config, mode="docker")
+        answers = collect_answers(current_env, current_config, mode=mode)
         write_text_atomic(
             repo_root / SERVER_CONFIG,
-            render_config(answers, mode="docker"),
+            render_config(answers, mode=mode),
             dry_run=dry_run,
             mode=0o600,
         )
@@ -173,12 +204,16 @@ def install_docker(repo_root: Path, dry_run: bool) -> None:
             mode=0o600,
         )
 
-    check_docker_compose(dry_run)
-    if prompt_yes_no("Start or update the Docker container now?", default=True, key="start_now"):
-        run(["docker", "compose", "up", "--build", "-d"], dry_run=dry_run)
-        print("Logs: docker compose logs -f")
+    compose_command = check_compose_runtime(mode, dry_run)
+    if prompt_yes_no(
+        f"Start or update the {label} containers now?",
+        default=True,
+        key="start_now",
+    ):
+        run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+        print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
-        print("Start later with: docker compose up --build -d")
+        print(f"Start later with: {' '.join(compose_command)} up --build -d")
 
 
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
@@ -200,7 +235,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
     validate_native_platform(dry_run)
 
-    if action in ("fresh", "update"):
+    if action in ("fresh", "update", "update_reconfigure"):
         install_native_prerequisites(dry_run)
         ensure_system_user(dry_run)
         copy_repo(repo_root, INSTALL_DIR, dry_run)
@@ -208,7 +243,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         refresh_dependencies(dry_run)
         install_geckodriver(repo_root, dry_run)
 
-    if action in ("fresh", "reconfigure"):
+    if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
         answers = collect_answers(current_env, current_config, mode="systemd")
@@ -229,7 +264,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         run(["chown", f"{APP_USER}:{APP_GROUP}", str(INSTALL_DIR / SERVER_CONFIG)], sudo=True, dry_run=dry_run)
         run(["chown", "root:root", str(NATIVE_ENV_FILE)], sudo=True, dry_run=dry_run)
 
-    if action in ("fresh", "update"):
+    if action in ("fresh", "update", "update_reconfigure"):
         run(
             ["bin/install_service", "--unit-file", "bin/inkplate.service", "--no-start"],
             sudo=True,
@@ -300,13 +335,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
 
 def existing_config_path(base_dir: Path) -> Path:
-    preferred = base_dir / SERVER_CONFIG
-    if preferred.exists():
-        return preferred
-    legacy = base_dir / LEGACY_SERVER_CONFIG
-    if legacy.exists():
-        return legacy
-    return preferred
+    return base_dir / SERVER_CONFIG
 
 
 def choose_existing_action(label: str, existing: list[Path]) -> str:
@@ -320,6 +349,10 @@ def choose_existing_action(label: str, existing: list[Path]) -> str:
         "How should the installer continue?",
         [
             ("update", "update app/dependencies and preserve config/secrets"),
+            (
+                "update_reconfigure",
+                "update app/dependencies and rewrite config/secrets",
+            ),
             ("reconfigure", "rewrite config/secrets only"),
             ("abort", "make no changes"),
         ],
@@ -341,12 +374,12 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         maximum=65535,
         key="port",
     )
-    answers["refresh_hours"] = prompt_int(
-        "Refresh interval in hours",
-        default=int(config.get("server.refreshhours", DEFAULT_REFRESH_HOURS)),
+    answers["refresh_minutes"] = prompt_int(
+        "Refresh interval in minutes",
+        default=configured_refresh_minutes(config, INSTALLER_ANSWERS),
         minimum=1,
-        maximum=24,
-        key="refresh_hours",
+        maximum=24 * 60,
+        key="refresh_minutes",
     )
     answers["location"] = prompt_text(
         "Location for weather/map lookup",
@@ -355,11 +388,7 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     )
     answers["weather_service"] = prompt_choice(
         "Weather provider",
-        [
-            ("openweathermapv4", "OpenWeatherMap One Call 4.0"),
-            ("openweathermapv3", "OpenWeatherMap One Call 3.0"),
-            ("accuweather", "AccuWeather"),
-        ],
+        weather_provider_choices(),
         default=config.get("weather.service", DEFAULT_WEATHER),
         key="weather_service",
     )
@@ -388,11 +417,35 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         maximum=12,
         key="num_hourly_forecasts",
     )
+    answers["forecast_slice_hours"] = prompt_int(
+        "Forecast slot spacing in hours",
+        default=int(
+            config.get("weather.forecastslicehours", DEFAULT_FORECAST_SLICE_HOURS)
+        ),
+        minimum=1,
+        maximum=24,
+        key="forecast_slice_hours",
+    )
+    answers["forecast_lead_minutes"] = prompt_int(
+        "Forecast lead time in minutes",
+        default=int(
+            config.get(
+                "weather.forecastleadminutes",
+                DEFAULT_FORECAST_LEAD_MINUTES,
+            )
+        ),
+        minimum=0,
+        maximum=180,
+        key="forecast_lead_minutes",
+    )
     answers["metric"] = prompt_yes_no("Use metric units?", default=parse_bool(config.get("weather.metric", "true")), key="metric")
 
-    current_source = config.get("current_temperature.source", "weather")
+    current_source = config.get(
+        "current_conditions.source",
+        config.get("current_temperature.source", "weather"),
+    )
     answers["netatmo_enabled"] = prompt_yes_no(
-        "Use Netatmo for live current temperature?",
+        "Use Netatmo for live current conditions?",
         default=current_source == "netatmo",
         key="netatmo_enabled",
     )
@@ -401,22 +454,24 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         answers["netatmo_client_secret"] = prompt_secret("Netatmo client secret", default=env.get("NETATMO_CLIENT_SECRET", ""), required=True, key="netatmo_client_secret")
         answers["netatmo_refresh_token"] = prompt_secret("Netatmo refresh token", default=env.get("NETATMO_REFRESH_TOKEN", ""), required=True, key="netatmo_refresh_token")
         answers["netatmo_device_id"] = prompt_text("Netatmo device ID (optional)", default=env.get("NETATMO_DEVICE_ID", ""), required=False, key="netatmo_device_id")
-        answers["netatmo_module_id"] = prompt_text("Netatmo module ID (optional)", default=env.get("NETATMO_MODULE_ID", ""), required=False, key="netatmo_module_id")
+        answers["netatmo_module_id"] = prompt_text("Netatmo temperature/humidity module ID (optional)", default=env.get("NETATMO_MODULE_ID", ""), required=False, key="netatmo_module_id")
+        answers["netatmo_wind_module_id"] = prompt_text("Netatmo wind module ID (optional)", default=env.get("NETATMO_WIND_MODULE_ID", ""), required=False, key="netatmo_wind_module_id")
+        answers["netatmo_rain_module_id"] = prompt_text("Netatmo rain module ID (optional)", default=env.get("NETATMO_RAIN_MODULE_ID", ""), required=False, key="netatmo_rain_module_id")
     else:
         answers["netatmo_client_id"] = env.get("NETATMO_CLIENT_ID", "")
         answers["netatmo_client_secret"] = env.get("NETATMO_CLIENT_SECRET", "")
         answers["netatmo_refresh_token"] = env.get("NETATMO_REFRESH_TOKEN", "")
         answers["netatmo_device_id"] = env.get("NETATMO_DEVICE_ID", "")
         answers["netatmo_module_id"] = env.get("NETATMO_MODULE_ID", "")
+        answers["netatmo_wind_module_id"] = env.get("NETATMO_WIND_MODULE_ID", "")
+        answers["netatmo_rain_module_id"] = env.get("NETATMO_RAIN_MODULE_ID", "")
 
     answers["mqtt_weather_enabled"] = prompt_yes_no(
         "Publish weather data to MQTT?",
         default=parse_bool(config.get("mqtt.weather.enabled", "false")),
         key="mqtt_weather_enabled",
     )
-    default_mqtt_broker = (
-        "host.docker.internal" if mode == "docker" else "localhost"
-    )
+    default_mqtt_broker = container_host_alias(mode)
     answers["mqtt_weather_broker"] = prompt_text(
         "MQTT weather publisher broker",
         default=config.get("mqtt.weather.broker", default_mqtt_broker),
@@ -468,12 +523,37 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     return answers
 
 
-def render_config(answers: dict[str, object], mode: str) -> str:
-    token_file = "data/netatmo-token.json" if mode == "docker" else "netatmo-token.json"
-    alwayson = "true"
-    default_mqtt_broker = (
-        "host.docker.internal" if mode == "docker" else "localhost"
+def weather_provider_choices() -> list[tuple[str, str]]:
+    ordered_names = [
+        name for name in WEATHER_PROVIDER_LABELS if name in FORECAST_PROVIDERS
+    ]
+    ordered_names.extend(
+        sorted(set(FORECAST_PROVIDERS) - set(ordered_names))
     )
+    return [
+        (name, WEATHER_PROVIDER_LABELS.get(name, name))
+        for name in ordered_names
+    ]
+
+
+def configured_refresh_minutes(
+    config: dict[str, str],
+    answers: dict[str, object] | None = None,
+) -> int:
+    answers = answers or {}
+    if "refresh_minutes" not in answers and "refresh_hours" in answers:
+        return round(float(answers["refresh_hours"]) * 60)
+    if "server.refreshminutes" in config:
+        return int(float(config["server.refreshminutes"]))
+    if "server.refreshhours" in config:
+        return round(float(config["server.refreshhours"]) * 60)
+    return DEFAULT_REFRESH_MINUTES
+
+
+def render_config(answers: dict[str, object], mode: str) -> str:
+    token_file = "data/netatmo-token.json"
+    alwayson = "true"
+    default_mqtt_broker = container_host_alias(mode)
     mqtt_weather_broker = (
         answers["mqtt_weather_broker"] or default_mqtt_broker
     )
@@ -486,13 +566,19 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  enabled: true",
         f"  port: {answers['port']}",
         f"  alwayson: {alwayson}",
-        f"  refreshhours: {answers['refresh_hours']}",
+        f"  refreshminutes: {answers['refresh_minutes']}",
         "weather:",
         f"  service: {answers['weather_service']}",
         "  apikey: ${WEATHER_API_KEY}",
         f"  num_hourly_forecasts: {answers['num_hourly_forecasts']}",
+        "  forecastslicehours: {}".format(
+            answers.get("forecast_slice_hours", DEFAULT_FORECAST_SLICE_HOURS)
+        ),
+        "  forecastleadminutes: {}".format(
+            answers.get("forecast_lead_minutes", DEFAULT_FORECAST_LEAD_MINUTES)
+        ),
         f"  metric: {yaml_bool(bool(answers['metric']))}",
-        "current_temperature:",
+        "current_conditions:",
         f"  source: {'netatmo' if answers['netatmo_enabled'] else 'weather'}",
         "  netatmo:",
         "    client_id: ${NETATMO_CLIENT_ID:-}",
@@ -501,19 +587,21 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"    token_file: {token_file}",
         "    device_id: ${NETATMO_DEVICE_ID:-}",
         "    module_id: ${NETATMO_MODULE_ID:-}",
+        "    wind_module_id: ${NETATMO_WIND_MODULE_ID:-}",
+        "    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-}",
         "google:",
         "  apikey: ${GOOGLE_API_KEY}",
         "  staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}",
         f"location: {answers['location']}",
         "outputs:",
-        "  default: inkplate10-portrait",
+        f"  default: {DEFAULT_OUTPUT_PROFILE}",
         "  profiles:",
-        "    inkplate10-portrait:",
+        f"    {DEFAULT_OUTPUT_PROFILE}:",
         "      enabled: true",
-        "      renderer: firefox",
+        f"      renderer: {DEFAULT_RENDERER}",
         f"      width: {DEFAULT_IMAGE_WIDTH}",
         f"      height: {DEFAULT_IMAGE_HEIGHT}",
-        "      filename: calendar.png",
+        f"      filename: {DEFAULT_OUTPUT_FILENAME}",
         "mqtt:",
         "  weather:",
         f"    enabled: {yaml_bool(bool(answers['mqtt_weather_enabled']))}",
@@ -549,6 +637,8 @@ def render_env(answers: dict[str, object], include_optional: bool) -> str:
                 "NETATMO_REFRESH_TOKEN": str(answers["netatmo_refresh_token"]),
                 "NETATMO_DEVICE_ID": str(answers["netatmo_device_id"]),
                 "NETATMO_MODULE_ID": str(answers["netatmo_module_id"]),
+                "NETATMO_WIND_MODULE_ID": str(answers["netatmo_wind_module_id"]),
+                "NETATMO_RAIN_MODULE_ID": str(answers["netatmo_rain_module_id"]),
             }
         )
     lines = [
@@ -557,6 +647,21 @@ def render_env(answers: dict[str, object], include_optional: bool) -> str:
     lines.extend(f"{key}={format_env_value(value)}" for key, value in values.items())
     lines.append("")
     return "\n".join(lines)
+
+
+def container_host_alias(mode: str) -> str:
+    if mode == "docker":
+        return "host.docker.internal"
+    if mode == "podman":
+        return "host.containers.internal"
+    return "localhost"
+
+
+def check_compose_runtime(mode: str, dry_run: bool) -> list[str]:
+    if mode == "docker":
+        check_docker_compose(dry_run)
+        return ["docker", "compose"]
+    return check_podman_compose(dry_run)
 
 
 def check_docker_compose(dry_run: bool) -> None:
@@ -583,6 +688,51 @@ def check_docker_compose(dry_run: bool) -> None:
             f"daemon. {socket_hint}\nDocker error: {docker_info.stderr.strip()}"
         )
     print("Docker check: docker compose and daemon access are available.")
+
+
+def check_podman_compose(dry_run: bool) -> list[str]:
+    if dry_run:
+        print("Would check: podman info")
+        print("Would check: podman compose version or podman-compose version")
+        return ["podman", "compose"]
+    if not shutil.which("podman"):
+        raise SystemExit("ERROR: podman was not found on PATH.")
+    podman_info = subprocess.run(
+        ["podman", "info"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if podman_info.returncode != 0:
+        raise SystemExit(
+            "ERROR: Podman is installed but is not usable by this user.\n"
+            f"Podman error: {podman_info.stderr.strip()}"
+        )
+
+    native_compose = subprocess.run(
+        ["podman", "compose", "version"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if native_compose.returncode == 0:
+        print("Podman check: podman compose is available.")
+        return ["podman", "compose"]
+
+    if shutil.which("podman-compose"):
+        external_compose = subprocess.run(
+            ["podman-compose", "version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if external_compose.returncode == 0:
+            print("Podman check: podman-compose is available.")
+            return ["podman-compose"]
+
+    raise SystemExit(
+        "ERROR: neither 'podman compose' nor 'podman-compose' is available."
+    )
 
 
 def docker_socket_hint() -> str:
@@ -708,8 +858,35 @@ def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
         ignore = install_copy_ignore(repo_root)
         shutil.copytree(repo_root, tmp_path, ignore=ignore)
         run(["cp", "-a", f"{tmp_path}/.", str(install_dir)], sudo=True)
+    verify_installed_runtime(repo_root, install_dir)
     run(["mkdir", "-p", str(install_dir / "server" / "config"), str(install_dir / "server" / "data")], sudo=True)
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(install_dir)], sudo=True)
+
+
+def verify_installed_runtime(repo_root: Path, install_dir: Path) -> None:
+    runtime_files = (
+        Path("server/server.py"),
+        Path("server/producer_config.py"),
+        Path("bin/install_server.py"),
+    )
+    mismatches = []
+    for relative in runtime_files:
+        try:
+            matches = filecmp.cmp(
+                repo_root / relative,
+                install_dir / relative,
+                shallow=False,
+            )
+        except OSError:
+            matches = False
+        if not matches:
+            mismatches.append(str(relative))
+    if mismatches:
+        raise SystemExit(
+            "ERROR: installed application files do not match the checkout: "
+            + ", ".join(mismatches)
+        )
+    print("Verified installed application files match the checkout.")
 
 
 def ensure_venv(dry_run: bool) -> None:
@@ -770,8 +947,6 @@ def install_copy_ignore(repo_root: Path):
             relative = Path(directory).resolve().relative_to(repo_root.resolve())
         except ValueError:
             relative = Path()
-        if relative == Path("server"):
-            ignored.add("config.yaml")
         if relative == Path("server/config"):
             ignored.add("config.yaml")
         if relative == Path("server/views"):

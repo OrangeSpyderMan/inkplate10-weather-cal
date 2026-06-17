@@ -23,7 +23,7 @@ class ArtifactStoreTests(unittest.TestCase):
             snapshot.generated_at.isoformat.return_value = (
                 "2026-06-09T00:00:00+00:00"
             )
-            snapshot.to_payload.return_value = {"schema_version": "1.0"}
+            snapshot.to_payload.return_value = {"schema_version": "2.0"}
 
             store.write_snapshot(snapshot)
             output_path = store.output_path(
@@ -44,7 +44,7 @@ class ArtifactStoreTests(unittest.TestCase):
 
             self.assertEqual(
                 json.loads(store.snapshot_path.read_text(encoding="utf-8")),
-                {"schema_version": "1.0"},
+                {"schema_version": "2.0"},
             )
             self.assertEqual(
                 store.output_path(DEFAULT_OUTPUT_PROFILE, "calendar.png"),
@@ -62,11 +62,152 @@ class ArtifactStoreTests(unittest.TestCase):
                 ready["outputs"][DEFAULT_OUTPUT_PROFILE]["path"],
                 "outputs/inkplate10-portrait/calendar.png",
             )
+            self.assertEqual(
+                ready["outputs"][DEFAULT_OUTPUT_PROFILE]["sha256"],
+                "8f8cbb7dcf46e0bc7d53265749a6c17d"
+                "116093a6ba95e442764060c76fd4a86c",
+            )
+            self.assertEqual(
+                ready["snapshot"]["sha256"],
+                ArtifactStore.file_sha256(store.snapshot_path),
+            )
             self.assertTrue(store.producer_cycle_complete(profiles))
 
             output_path.write_bytes(b"new output")
 
             self.assertFalse(store.producer_cycle_complete(profiles))
+
+    def test_detects_content_changes_when_file_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            snapshot = mock.Mock()
+            snapshot.generated_at.isoformat.return_value = (
+                "2026-06-09T00:00:00+00:00"
+            )
+            snapshot.to_payload.return_value = {"value": "old"}
+            profile = OutputProfile(
+                DEFAULT_OUTPUT_PROFILE,
+                "firefox",
+                825,
+                1200,
+            )
+            profiles = {DEFAULT_OUTPUT_PROFILE: profile}
+
+            store.write_snapshot(snapshot)
+            output_path = store.output_path(
+                DEFAULT_OUTPUT_PROFILE,
+                profile.filename,
+            )
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"old")
+            store.write_ready(snapshot, profiles)
+            original_stat = output_path.stat()
+
+            output_path.write_bytes(b"new")
+            os.utime(
+                output_path,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
+
+            self.assertFalse(store.producer_cycle_complete(profiles))
+
+    def test_upgrades_legacy_ready_manifest_when_signatures_match(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            profile = OutputProfile(
+                DEFAULT_OUTPUT_PROFILE,
+                "firefox",
+                825,
+                1200,
+            )
+            profiles = {DEFAULT_OUTPUT_PROFILE: profile}
+            ArtifactStore.write_json(
+                store.snapshot_path,
+                {"schema_version": "1.0"},
+            )
+            output_path = store.output_path(
+                DEFAULT_OUTPUT_PROFILE,
+                profile.filename,
+            )
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"legacy output")
+            ArtifactStore.write_json(
+                store.ready_path,
+                {
+                    "generated_at": "2026-06-09T00:00:00+00:00",
+                    "snapshot": {
+                        "path": store.snapshot_path.name,
+                        "signature": store.file_signature(store.snapshot_path),
+                    },
+                    "outputs": {
+                        DEFAULT_OUTPUT_PROFILE: {
+                            "path": str(output_path.relative_to(store.root)),
+                            "signature": store.file_signature(output_path),
+                            "renderer": profile.renderer,
+                        }
+                    },
+                },
+            )
+
+            self.assertTrue(store.producer_cycle_complete(profiles))
+
+            ready = json.loads(store.ready_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                ready["snapshot"]["sha256"],
+                store.file_sha256(store.snapshot_path),
+            )
+            self.assertEqual(
+                ready["outputs"][DEFAULT_OUTPUT_PROFILE]["sha256"],
+                store.file_sha256(output_path),
+            )
+
+    def test_does_not_upgrade_legacy_manifest_with_changed_output(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            profile = OutputProfile(
+                DEFAULT_OUTPUT_PROFILE,
+                "firefox",
+                825,
+                1200,
+            )
+            profiles = {DEFAULT_OUTPUT_PROFILE: profile}
+            ArtifactStore.write_json(
+                store.snapshot_path,
+                {"schema_version": "1.0"},
+            )
+            output_path = store.output_path(
+                DEFAULT_OUTPUT_PROFILE,
+                profile.filename,
+            )
+            output_path.parent.mkdir(parents=True)
+            output_path.write_bytes(b"legacy output")
+            output_signature = store.file_signature(output_path)
+            ArtifactStore.write_json(
+                store.ready_path,
+                {
+                    "generated_at": "2026-06-09T00:00:00+00:00",
+                    "snapshot": {
+                        "path": store.snapshot_path.name,
+                        "signature": store.file_signature(store.snapshot_path),
+                    },
+                    "outputs": {
+                        DEFAULT_OUTPUT_PROFILE: {
+                            "path": str(output_path.relative_to(store.root)),
+                            "signature": output_signature,
+                            "renderer": profile.renderer,
+                        }
+                    },
+                },
+            )
+            output_path.write_bytes(b"changed output")
+
+            self.assertFalse(store.producer_cycle_complete(profiles))
+
+            ready = json.loads(store.ready_path.read_text(encoding="utf-8"))
+            self.assertNotIn(
+                "sha256",
+                ready["outputs"][DEFAULT_OUTPUT_PROFILE],
+            )
 
     def test_removes_only_stale_temporary_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary_dir:

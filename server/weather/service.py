@@ -1,16 +1,36 @@
 import os
 import json
+from abc import ABC, abstractmethod
+
+from .models import CurrentConditions, ForecastData
 
 
-class WeatherService:
+class ProviderConfigurationError(ValueError):
+    pass
+
+
+class ForecastProvider(ABC):
     def __init__(
-        self, apikey, baseurl, service_name, num_hours=6, metric=True
+        self,
+        apikey,
+        baseurl,
+        service_name,
+        num_hours=6,
+        metric=True,
+        forecast_slice_hours=3,
+        forecast_lead_minutes=15,
     ):
         self.baseurl = baseurl
         self.service_name = service_name
         self.apikey = apikey
         self.units = "metric" if metric else "imperial"
         self.num_hours = num_hours
+        self.forecast_slice_hours = forecast_slice_hours
+        self.forecast_lead_minutes = forecast_lead_minutes
+
+    def is_forecast_slice(self, timestamp):
+        local_hour_index = timestamp.toordinal() * 24 + timestamp.hour
+        return local_hour_index % self.forecast_slice_hours == 0
 
     def get_icon(self, icon_key):
         icon_key = str(icon_key)
@@ -29,8 +49,16 @@ class WeatherService:
 
         return f"icon/{icon_map[icon_key]}"
 
-    def get_daily_summary(self):
-        raise NotImplementedError("get_current_conditions not implemented")
+    @abstractmethod
+    def fetch(self) -> ForecastData:
+        """Return a complete normalized forecast."""
 
-    def get_hourly_forecast(self):
-        raise NotImplementedError("get_forecast not implemented")
+
+class RealtimeProvider(ABC):
+    @abstractmethod
+    def get_current_conditions(self) -> CurrentConditions:
+        """Return a partial normalized current-conditions overlay."""
+
+
+# Backwards-compatible name for existing forecast provider implementations.
+WeatherService = ForecastProvider

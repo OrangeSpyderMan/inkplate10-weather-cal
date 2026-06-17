@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ ! -f "server/server.py" ] || [ ! -f "bin/install_proxmox.py" ]; then
+  echo "ERROR: run this installer from the repository root." >&2
+  exit 1
+fi
+
+exec python3 bin/install_proxmox.py "$@"

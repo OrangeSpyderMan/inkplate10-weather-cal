@@ -41,6 +41,11 @@ The server publishes after each successful weather refresh. The diagnostic
 listener subscribes when it connects and subscribes again after reconnecting.
 MQTT failures do not stop image rendering or HTTP serving.
 
+Optional realtime-provider fields are included in the retained `/current`
+payload. Netatmo wind data uses `value`, `unit`, and optional `gust` and
+`direction`; rain data uses `value`, `unit`, and optional `last_hour` and
+`last_24_hours`.
+
 Enable diagnostic publishing in the Inkplate configuration, either the SD-card
 `config.yaml` or the YAML passed to `make firmware-upload CONFIG=...`:
 
@@ -186,7 +191,7 @@ Full snapshot:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "generated_at": "2026-06-04T09:00:00+00:00",
   "source": "openweathermapv3",
   "units": "metric",
@@ -211,6 +216,10 @@ Full snapshot:
         "unit": "\u00b0C",
         "value": 18
       },
+      "wind": {
+        "unit": "m/s",
+        "value": 4.2
+      },
       "rain_probability": 100
     }
   ]
@@ -223,6 +232,10 @@ for lightweight display clients. With OpenWeatherMap v4, `current.alerts` is
 also present. Its `active` value indicates whether the current record contains
 alert IDs, and `ids` contains those OpenWeather alert identifiers. Other
 providers may omit this field.
+
+Schema `2.0` standardizes normalized wind measurements on `wind.value`.
+Schema `1.0` clients that consumed the OpenWeatherMap v4-specific `wind.real`
+field must migrate to `wind.value`.
 
 The same canonical payload is available over HTTP at `/api/v1/weather`.
 

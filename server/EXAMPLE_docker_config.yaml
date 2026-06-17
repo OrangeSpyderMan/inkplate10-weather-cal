@@ -5,14 +5,16 @@ server:
   # Keep true for Docker and for the browser/PWA viewer at /app.
   # One-shot mode exits and would be restarted repeatedly by Compose.
   alwayson: true
-  refreshhours: 3
+  refreshminutes: 180
 weather:
   # openweathermapv3, openweathermapv4, or accuweather
   service: openweathermapv3
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
+  forecastslicehours: 3
+  forecastleadminutes: 15
   metric: true
-current_temperature:
+current_conditions:
   source: weather # weather or netatmo
   netatmo:
     client_id: ${NETATMO_CLIENT_ID:-}
@@ -21,6 +23,8 @@ current_temperature:
     token_file: data/netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-}
     module_id: ${NETATMO_MODULE_ID:-}
+    wind_module_id: ${NETATMO_WIND_MODULE_ID:-}
+    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-}
 google:
   apikey: ${GOOGLE_API_KEY}
   staticmaps_mapid: ${GOOGLE_STATICMAPS_MAPID}

@@ -100,6 +100,35 @@ def register_routes(app):
             as_attachment=False,
         )
 
+    @app.get("/api/v1/outputs/<profile_name>/status")
+    def output_status(profile_name):
+        profile = _profiles(app).get(profile_name)
+        if profile is None:
+            abort(404)
+
+        store = _store(app)
+        if not store.output_status({profile_name: profile})[profile_name]:
+            return jsonify({"error": "output is not available"}), 503
+
+        try:
+            with store.ready_path.open(encoding="utf-8") as ready_file:
+                ready = json.load(ready_file)
+            output = ready["outputs"][profile_name]
+            sha256 = output["sha256"]
+            generated_at = ready["generated_at"]
+        except (KeyError, OSError, TypeError, json.JSONDecodeError):
+            return jsonify({"error": "output is not available"}), 503
+
+        return jsonify(
+            {
+                "profile": profile.name,
+                "filename": profile.filename,
+                "url": f"/outputs/{profile.name}/{profile.filename}",
+                "generated_at": generated_at,
+                "sha256": sha256,
+            }
+        )
+
     @app.get("/calendar.png")
     def legacy_calendar_output():
         response = _send_default_output(app, as_attachment=True)

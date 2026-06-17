@@ -5,13 +5,18 @@ import os
 import sys
 import time
 import logging.config
-from utils import get_prop, get_prop_by_keys
 from mqtt_publisher import MqttWeatherPublisher
 from artifacts import ArtifactStore
 from configuration import load_config
-from output_profiles import load_output_profiles
+from producer_config import ProducerConfig, producer_enabled
 from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
+from weather.models import CurrentConditions
+from weather.providers import (
+    ConfigurationError,
+    build_forecast_provider,
+    build_realtime_provider,
+)
 from google.api import GoogleAPIService
 
 cwd = os.path.dirname(os.path.realpath(__file__))
@@ -37,11 +42,35 @@ def configure_logging(debug):
 def main():
     global log
 
+    try:
+        return run()
+    except (ConfigurationError, KeyError) as exc:
+        if log is None:
+            logging.basicConfig()
+            logging.getLogger("server").error("Configuration error: %s", exc)
+        else:
+            log.error("Configuration error: %s", exc)
+        return 1
+
+
+def run():
+    global log
+
     config_path, config = load_config()
 
-    debug = get_prop(config, "debug", default=False)
+    debug = bool(config.get("debug", False))
     log = configure_logging(debug)
     log.info(f"Loaded config from {config_path}")
+    if not producer_enabled(config):
+        log.info("Producer is disabled by server.enabled")
+        return 0
+
+    settings = ProducerConfig.from_config(config)
+    log.info(
+        "Producer refresh interval: %s seconds (from %s)",
+        settings.refresh_seconds,
+        settings.refresh_source,
+    )
     removed_temporary_files = artifact_store.cleanup_stale_temporary_files()
     if removed_temporary_files:
         log.info(
@@ -49,221 +78,152 @@ def main():
             len(removed_temporary_files),
         )
 
-    google_apikey = get_prop_by_keys(config, "google", "apikey", required=True)
-    weather_service_type = get_prop_by_keys(config, "weather", "service", required=True)
-    if weather_service_type not in [
-        "accuweather",
-        "openweathermap",
-        "openweathermapv3",
-        "openweathermapv4",
-    ]:
-        log.error(f"not a supported weather service {weather_service_type}")
-        sys.exit(1)
-
-    weather_apikey = get_prop_by_keys(config, "weather", "apikey", required=True)
-    weather_metric = get_prop_by_keys(config, "weather", "metric", default=True)
-    weather_num_hourly_forecasts = get_prop_by_keys(
-        config, "weather", "num_hourly_forecasts", default=6
-    )
-    if weather_num_hourly_forecasts < 0:
-        log.error(
-            f"num_hourly_forecasts {weather_num_hourly_forecasts} must be non-negative"
-        )
-        sys.exit(1)
-
-    staticmaps_mapid = get_prop_by_keys(
-        config, "google", "staticmaps_mapid", required=True
-    )
-
-    location = get_prop(config, "location", required=True).strip().replace(" ", "")
-
-    server_enabled = get_prop_by_keys(config, "server", "enabled", default=True)
-    server_always_on = get_prop_by_keys(config, "server", "alwayson", default=False)
-    server_refresh_seconds = 3600 * get_prop_by_keys(
-        config, "server", "refreshhours", default=3
-    )
-    output_profiles, default_output_profile = load_output_profiles(config)
-    output_renderers = build_output_renderers(output_profiles)
+    output_renderers = build_output_renderers(settings.output_profiles)
     log.info(
         "Enabled output profiles: %s (default: %s)",
-        ", ".join(output_profiles),
-        default_output_profile,
+        ", ".join(settings.output_profiles),
+        settings.default_output_profile,
     )
 
-    mqtt_config = get_prop(config, "mqtt", default={}, required=False) or {}
     weather_publisher = build_mqtt_weather_publisher(
-        mqtt_config.get("weather", {}) or {}
+        settings.mqtt_weather_config
     )
 
-    gapi = GoogleAPIService(google_apikey)
+    weather_svc = build_weather_service(
+        settings.weather_service,
+        settings.weather_api_key,
+        settings.location,
+        settings.weather_metric,
+        settings.hourly_forecasts,
+        settings.forecast_slice_hours,
+        settings.forecast_lead_minutes,
+    )
+    realtime_svc = build_realtime_provider(
+        settings.realtime_config,
+        metric=settings.weather_metric,
+        base_dir=os.path.abspath(cwd),
+    )
+
+    gapi = GoogleAPIService(settings.google_api_key)
     map_file = os.path.join(cwd, "views", "html", "map.png")
-    gapi.save_static_map(staticmaps_mapid, location, map_file)
+    gapi.save_static_map(
+        settings.static_maps_id,
+        settings.location,
+        map_file,
+    )
     map_url = "map.png"
 
-    weather_svc = None
-    if weather_service_type == "accuweather":
-        from weather.accuweather.accuweather import AccuweatherService
-
-        weather_svc = AccuweatherService(
-            weather_apikey,
-            location,
-            metric=weather_metric,
-            num_hours=weather_num_hourly_forecasts,
-        )
-    elif weather_service_type == "openweathermap":
-        log.error(
-            f"{weather_service_type} is no longer supported.   Please use the V3 API (openweathermapv3)"
-        )
-        sys.exit(1)
-
-    elif weather_service_type == "openweathermapv3":
-        from weather.openweathermapv3.openweathermapv3 import OpenWeatherMapv3Service
-
-        weather_svc = OpenWeatherMapv3Service(
-            weather_apikey,
-            location,
-            metric=weather_metric,
-            num_hours=weather_num_hourly_forecasts,
-        )
-    elif weather_service_type == "openweathermapv4":
-        from weather.openweathermapv4.openweathermapv4 import (
-            OpenWeatherMapv4Service,
-        )
-
-        weather_svc = OpenWeatherMapv4Service(
-            weather_apikey,
-            location,
-            metric=weather_metric,
-            num_hours=weather_num_hourly_forecasts,
-        )
-    else:
-        log.error(f"not a supported weather service {weather_service_type}")
-        sys.exit(1)
-
-    current_temperature_svc = build_current_temperature_service(
-        config, weather_metric
-    )
-
-    # bail early if http server is not enabled
-    if not server_enabled:
-        sys.exit(0)
-
-    if server_always_on:
+    if settings.always_on:
         while True:
             if not produce_artifacts(
                 weather_svc,
-                current_temperature_svc,
-                weather_service_type,
-                weather_metric,
+                realtime_svc,
+                settings.weather_service,
+                settings.weather_metric,
                 weather_publisher,
                 map_url,
-                output_profiles,
+                settings.output_profiles,
                 output_renderers,
                 artifact_store,
             ):
                 log.error("Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
-            log.info(f"Sleeping for {server_refresh_seconds} seconds before refresh")
-            time.sleep(server_refresh_seconds)
+            log.info(
+                "Sleeping for %s seconds before refresh",
+                settings.refresh_seconds,
+            )
+            time.sleep(settings.refresh_seconds)
 
     else:
         success = produce_artifacts(
             weather_svc,
-            current_temperature_svc,
-            weather_service_type,
-            weather_metric,
+            realtime_svc,
+            settings.weather_service,
+            settings.weather_metric,
             weather_publisher,
             map_url,
-            output_profiles,
+            settings.output_profiles,
             output_renderers,
             artifact_store,
         )
-        sys.exit(0 if success else 1)
+        return 0 if success else 1
 
 
-def build_current_temperature_service(config, metric):
-    current_temperature_config = get_prop(
-        config, "current_temperature", default={}, required=False
-    )
-    if current_temperature_config is None:
-        current_temperature_config = {}
-
-    source = str(current_temperature_config.get("source", "weather")).lower()
-    if source == "weather":
-        return None
-
-    if source != "netatmo":
-        log.error(f"not a supported current temperature source {source}")
-        sys.exit(1)
-
-    netatmo_config = current_temperature_config.get(
-        "netatmo", current_temperature_config
-    )
-    token_file = netatmo_config.get("token_file", "netatmo-token.json")
-    if not os.path.isabs(token_file):
-        token_file = os.path.join(cwd, token_file)
-
-    from weather.netatmo.netatmo import NetatmoCurrentTemperatureService
-
-    return NetatmoCurrentTemperatureService(
-        client_id=get_required_current_temperature_config(
-            netatmo_config, "client_id"
-        ),
-        client_secret=get_required_current_temperature_config(
-            netatmo_config, "client_secret"
-        ),
-        refresh_token=get_required_current_temperature_config(
-            netatmo_config, "refresh_token"
-        ),
-        token_file=token_file,
-        device_id=get_optional_current_temperature_config(
-            netatmo_config, "device_id"
-        ),
-        module_id=get_optional_current_temperature_config(
-            netatmo_config, "module_id"
-        ),
+def build_weather_service(
+    service_type,
+    apikey,
+    location,
+    metric,
+    num_hourly_forecasts,
+    forecast_slice_hours,
+    forecast_lead_minutes,
+):
+    return build_forecast_provider(
+        service_type,
+        apikey=apikey,
+        location=location,
         metric=metric,
+        num_hours=num_hourly_forecasts,
+        forecast_slice_hours=forecast_slice_hours,
+        forecast_lead_minutes=forecast_lead_minutes,
     )
 
 
-def get_required_current_temperature_config(config, key):
-    if key not in config or config[key] is None or config[key] == "":
-        log.error(f"current_temperature.netatmo.{key} is required")
-        sys.exit(1)
-
-    return config[key]
-
-
-def get_optional_current_temperature_config(config, key):
-    value = config.get(key)
-    if value == "":
-        return None
-
-    return value
-
-
-def apply_current_temperature_override(daily_summary, current_temperature_svc):
-    if current_temperature_svc is None:
-        return
-
-    daily_summary["temperature"].update(
-        current_temperature_svc.get_current_temperature()
+def build_current_conditions_service(config, metric):
+    realtime_config = config.get("current_conditions")
+    if realtime_config is None:
+        realtime_config = config.get("current_temperature", {})
+    return build_realtime_provider(
+        realtime_config,
+        metric=metric,
+        base_dir=os.path.abspath(cwd),
     )
+
+
+def apply_current_conditions(daily_summary, realtime_svc):
+    legacy_dict = isinstance(daily_summary, dict)
+    conditions = (
+        CurrentConditions.from_dict(daily_summary)
+        if legacy_dict
+        else daily_summary
+    )
+    if realtime_svc is None:
+        return conditions
+
+    try:
+        current_conditions = realtime_svc.get_current_conditions()
+    except Exception as exc:
+        log.warning(
+            "Realtime conditions unavailable; using forecast conditions: %s",
+            exc,
+        )
+        return conditions
+
+    if isinstance(current_conditions, dict):
+        current_conditions = CurrentConditions.from_dict(current_conditions)
+    result = conditions.overlay(current_conditions)
+    if legacy_dict:
+        daily_summary.clear()
+        daily_summary.update(result.to_dict())
+    return result
 
 
 def build_weather_snapshot(
-    weather_svc, current_temperature_svc, weather_service_type, weather_metric
+    weather_svc, realtime_svc, weather_service_type, weather_metric
 ):
-    daily_summary = weather_svc.get_daily_summary()
-    hourly_forecasts = weather_svc.get_hourly_forecast()
-    apply_current_temperature_override(daily_summary, current_temperature_svc)
+    forecast = weather_svc.fetch().validate()
+    forecast.current = apply_current_conditions(
+        forecast.current,
+        realtime_svc,
+    )
 
     return WeatherSnapshot(
-        daily_summary=daily_summary,
-        hourly_forecasts=hourly_forecasts,
+        daily_summary=None,
+        hourly_forecasts=None,
         weather_source=weather_service_type,
         metric=weather_metric,
+        forecast=forecast,
     )
 
 
@@ -295,7 +255,7 @@ def render_outputs(
 
 def produce_artifacts(
     weather_svc,
-    current_temperature_svc,
+    realtime_svc,
     weather_service_type,
     weather_metric,
     weather_publisher,
@@ -308,7 +268,7 @@ def produce_artifacts(
     try:
         snapshot = build_weather_snapshot(
             weather_svc,
-            current_temperature_svc,
+            realtime_svc,
             weather_service_type,
             weather_metric,
         )
@@ -362,4 +322,4 @@ def publish_weather_snapshot(weather_publisher, snapshot):
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

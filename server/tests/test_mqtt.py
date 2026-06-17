@@ -174,7 +174,7 @@ class MqttWeatherPublisherTests(unittest.TestCase):
         client.publish.return_value = result
         snapshot = mock.Mock()
         snapshot.to_payload.return_value = {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "generated_at": "2026-06-05T00:00:00+00:00",
             "source": "test",
             "units": "metric",

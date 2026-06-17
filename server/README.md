@@ -48,9 +48,10 @@ From the repository root, run:
 ./bin/install_server
 ```
 
-The installer walks through Docker Compose or native systemd installation. It
-uses the same defaults as the server code and example config: OpenWeatherMap v3,
-port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
+The installer walks through Docker Compose, Podman Compose, or native systemd
+installation, and links to the dedicated experimental Proxmox VE 9 installer.
+It uses the same defaults as the server code and example config: OpenWeatherMap
+v3, port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
 images, and MQTT disabled.
 
 It prompts for the location, weather API key, Google Static Maps API key, Google
@@ -58,23 +59,55 @@ Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
 publishing, optional MQTT diagnostic listening, and whether to start the service
 or container. Secrets are written outside committed YAML:
 
-- Docker: `.env` plus `server/config/config.yaml`
+- Docker or Podman: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
   `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
-Docker mode runs as the current user and expects that user to be able to run
-`docker compose`. Native systemd mode needs root privileges for package
-installation, `/srv/inkplate`, `/etc/inkplate/weather.env`, Geckodriver, and
-systemd service management. Run it as root or as a user that can elevate with
-`sudo`, `doas`, or `run0`; the installer checks this before making system
-changes. Docker mode checks that `docker compose` is available and that the
-current user can talk to the Docker daemon before starting the container.
+Docker and Podman modes run as the current user. Docker expects `docker compose`
+and daemon access. Podman expects either `podman compose` or `podman-compose`
+and supports rootless operation. Native systemd mode needs root privileges for
+package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
+Geckodriver, and systemd service management. Run it as root or as a user that
+can elevate with `sudo`, `doas`, or `run0`; the installer checks this before
+making system changes. Container modes validate their selected runtime before
+starting.
 
 Use dry-run mode to preview actions:
 
 ```bash
 ./bin/install_server --dry-run
 ```
+
+### Remote installation
+
+`bin/install_remote` can run the Proxmox or systemd installer on another host
+over SSH without keeping a permanent repository checkout there:
+
+```bash
+./bin/install_remote root@pve1 --mode proxmox
+./bin/install_remote admin@server1 --mode systemd
+```
+
+It uses normal SSH host-key verification, streams a temporary archive containing
+only Git-tracked files, and never copies local `.env` or generated server
+configuration. An answers file can be included as a protected `0600` file:
+
+```bash
+./bin/install_remote root@pve1 \
+  --mode proxmox \
+  --answers deployment.json \
+  --non-interactive \
+  --yes
+```
+
+Interactive runs allocate a remote TTY. Non-interactive systemd deployments
+therefore need passwordless privilege elevation if the remote account is not
+root. Proxmox deployment either logs in as root or uses `sudo`; interactive
+runs can prompt for the sudo password, while `--non-interactive` requires
+passwordless sudo. A successful run removes the temporary remote workspace; a
+failed run retains it and prints the path. Use `--dry-run` for a connection-free
+local preview, or `--remote-dry-run` to connect and exercise the target
+installer's own dry-run checks.
 
 For CI or repeatable testing, use the example JSON answers file:
 
@@ -87,13 +120,16 @@ dry-run testing. Copy it and replace those values before using it for a real
 non-interactive install.
 
 Re-run the installer to update an existing install. It will detect existing
-Docker or systemd files and offer to update the application while preserving
-config/secrets, reconfigure config/secrets, or abort.
+Docker, Podman, or systemd files and offer to update the application while
+preserving config/secrets, update and reconfigure together, reconfigure
+config/secrets only, or abort. Use the combined option when a release changes
+both application code and configuration keys.
 
 Logs:
 
 ```bash
 docker compose logs -f
+podman compose logs -f
 sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
@@ -102,22 +138,15 @@ group, start a new login session or run `newgrp docker` before retrying.
 
 ### AccuWeather API
 
-This is the least tested API.
+This provider follows AccuWeather's current Core Weather API contract, using
+HTTPS and Bearer authentication. It is covered by mocked contract tests but is
+not exercised against the live API in CI.
  
 In order to obtain an API Key, you will need to:
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
-2. Create an app in [https://developer.accuweather.com/user/me/apps](https://developer.accuweather.com/user/me/apps).
-3. Enter some details about the app's usage and purpose.
-4. Generate API key.
+2. Select a Core Weather API plan and generate an API key.
 
 Make sure you update the config `weather.apikey` with your generated api key and update `weather.service` to `accuweather`.
-
-### OpenWeatherMap API
-
-[DEPRECATED]
-This provider is no longer supported in this version. Use
-[OpenWeatherMapv3](#openweathermapv3-api) or
-[OpenWeatherMapv4](#openweathermapv4-api) instead.
 
 ### OpenWeatherMapv3 API
 
@@ -125,11 +154,19 @@ This is the API that has had the most testing.
 
 In order to obtain an API Key, you will need to sign up to OpenWeatherMap and [generate an API key](https://home.openweathermap.org/api_keys).
 
-The server samples the hourly forecast at local three-hour boundaries. The
-number of forecast slots is configured with `weather.num_hourly_forecasts` and
-is treated as an exact count. The example config uses 6, which is the
+The server samples the hourly forecast at local wall-clock boundaries. The
+spacing is configured with `weather.forecastslicehours`, defaulting to 3, so
+the default slots are midnight, 3am, 6am, 9am, and so on. Values that do not
+divide evenly into 24 still use exact spacing across day boundaries; for
+example, 7-hour slices move through the wall-clock hours over multiple days.
+The number of forecast slots is configured with `weather.num_hourly_forecasts`
+and is treated as an exact count. The example config uses 6, which is the
 recommended maximum for the current Inkplate 10 portrait layout. Larger values
 need layout tuning so the forecast row remains readable.
+
+`weather.forecastleadminutes` defaults to 15. It shifts the forecast selection
+cutoff forward before choosing slots, so an artifact rendered shortly before a
+slice boundary does not show that nearly expired slot after the Inkplate wakes.
 
 ### OpenWeatherMapv4 API
 
@@ -140,6 +177,8 @@ weather:
   service: openweathermapv4
   apikey: ${WEATHER_API_KEY}
   num_hourly_forecasts: 6
+  forecastslicehours: 3
+  forecastleadminutes: 15
   metric: true
 ```
 
@@ -171,30 +210,60 @@ lookup is not currently performed.
 OpenWeatherMap v3 remains the default while v4 output is compared on real
 servers.
 
-### Current temperature source
+### Realtime conditions source
 
-By default the current temperature shown on the display comes from the configured weather provider:
+By default current conditions come from the configured forecast provider:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: weather
 ```
 
-You can optionally use a Netatmo Weather Station for only the current temperature while keeping the configured weather provider for the icon, min/max temperature, hourly forecast, and rain chart:
+You can overlay realtime Netatmo measurements while keeping the configured
+provider for icons, min/max temperature, and hourly forecasts:
 
 ```yaml
-current_temperature:
+current_conditions:
   source: netatmo
   netatmo:
     client_id: ${NETATMO_CLIENT_ID:-}
     client_secret: ${NETATMO_CLIENT_SECRET:-}
     refresh_token: ${NETATMO_REFRESH_TOKEN:-}
-    token_file: netatmo-token.json
+    token_file: data/netatmo-token.json
     device_id: ${NETATMO_DEVICE_ID:-} # optional; omit to use the first station
-    module_id: ${NETATMO_MODULE_ID:-} # optional; omit to use the station indoor temperature
+    module_id: ${NETATMO_MODULE_ID:-} # optional temperature/humidity module
+    wind_module_id: ${NETATMO_WIND_MODULE_ID:-} # optional wind gauge
+    rain_module_id: ${NETATMO_RAIN_MODULE_ID:-} # optional rain gauge
 ```
 
-The Netatmo integration uses the refresh token to request access tokens and stores refreshed token data in `token_file`. If `module_id` is set, the temperature is read from that module. Otherwise the station `dashboard_data.Temperature` value is used.
+The Netatmo integration uses the refresh token to request access tokens and
+stores refreshed token data in `token_file`. Temperature and humidity are read
+from `module_id`, or from the station when it is omitted. Optional wind and rain
+modules add normalized wind speed, gust, direction, current rain, one-hour
+rainfall, and 24-hour rainfall to the API and MQTT snapshot. The existing
+`current_temperature` configuration key remains accepted for migration, but new
+configurations should use `current_conditions`.
+
+### Provider interfaces
+
+Forecast providers implement the normalized `ForecastProvider` interface:
+
+- `fetch() -> ForecastData`
+
+Realtime providers implement `RealtimeProvider.get_current_conditions()` and
+return a partial `CurrentConditions` overlay. The supported provider boundary
+uses dataclasses for temperature, wind, rain, current conditions, hourly
+forecasts, and the complete forecast. Renderers and external API clients still
+receive the normalized schema `2.0` dictionary representation.
+
+Providers are registered in
+`weather/providers.py`, which keeps construction, supported names, and lazy
+imports in one place. OpenWeatherMap v2 is no longer registered; supported
+OpenWeatherMap providers are v3 and v4.
+
+Normalized wind measurements use `value` and `unit`, with optional `gust` and
+`direction`. Normalized rain measurements use `value` and `unit`, with optional
+`last_hour` and `last_24_hours`.
 
 ### MQTT weather publishing
 
@@ -249,11 +318,26 @@ endpoint returns `503` until a snapshot is available. Provider-specific
 optional fields are preserved; for example, OpenWeatherMap v4 active alert IDs
 are exposed under `current.alerts`.
 
+The current payload schema is `2.0`. Wind measurements use `wind.value`;
+the OpenWeatherMap v4-specific `wind.real` field from schema `1.0` has been
+removed.
+
 Generated display artifacts use named output profiles:
 
 ```text
 GET /outputs/inkplate10-portrait/calendar.png
 ```
+
+Battery-powered clients can check a small content-hash manifest before
+downloading an output:
+
+```text
+GET /api/v1/outputs/inkplate10-portrait/status
+```
+
+The response includes the output URL and a SHA-256 of its content. The hash
+changes only when the rendered image bytes change, unlike timestamp-based HTTP
+validators.
 
 Output profiles are configured independently:
 
@@ -291,12 +375,20 @@ Operational endpoints are:
 ```text
 GET /api/v1/health
 GET /api/v1/ready
+GET /api/v1/outputs/<profile>/status
 ```
 
 Health reports whether the Gunicorn web application is running. Readiness
-returns `200` only when the snapshot and output signatures match the completion
-marker written at the end of a successful producer cycle. During an update or
-after an incomplete first cycle it returns `503`.
+returns `200` only when the snapshot and output signatures and SHA-256 hashes
+match the completion marker written at the end of a successful producer cycle.
+During an update or after an incomplete first cycle it returns `503`. Readiness
+markers created before hashes were added are upgraded in place when their
+recorded file signatures still match, so deployment does not require an
+immediate successful weather-provider request.
+
+The per-output status endpoint returns the completed output's SHA-256 and
+generation time. Firmware can compare that hash with its retained value and
+avoid downloading and driving an unchanged image to the e-paper panel.
 
 Snapshots and rendered outputs use stable paths and are atomically replaced, so
 the data directory does not accumulate historical versions. On startup, the
@@ -330,6 +422,8 @@ NETATMO_CLIENT_SECRET
 NETATMO_REFRESH_TOKEN
 NETATMO_DEVICE_ID
 NETATMO_MODULE_ID
+NETATMO_WIND_MODULE_ID
+NETATMO_RAIN_MODULE_ID
 ```
 
 Empty runtime values do not satisfy required config placeholders such as
@@ -389,7 +483,10 @@ Without `server.alwayson: true`, the producer generates one complete artifact
 set and exits. Gunicorn remains independent and continues serving the last
 successful artifact set. Docker Compose and the example Docker config use
 `server.alwayson: true`; one-shot producer mode is useful for scheduled refresh
-workflows.
+workflows. `server.refreshminutes` is used only in always-on mode and must be
+positive there. Existing `server.refreshhours` values remain supported as a
+deprecated fallback, including fractional values such as `0.3`, but new and
+reconfigured installations are written in minutes.
 
 To use it like an app, open `/app` on the device and use the browser's install
 or "Add to Home Screen" action. The client is intentionally simple: it caches
@@ -447,18 +544,9 @@ By default the server looks for config in:
 
 1. the file named by `INKPLATE_CONFIG_FILE`, when set
 2. `server/config/config.yaml`
-3. `server/config.yaml`
 
-The `server/config/config.yaml` path is the preferred layout for new installs
-because it can be mounted as a config directory without hiding application code.
-The legacy `server/config.yaml` path remains supported for existing installs
-for now, but it is deprecated and will be removed in a future release. Move
-existing configs to `server/config/config.yaml` as soon as practical:
-
-```bash
-mkdir -p server/config
-mv server/config.yaml server/config/config.yaml
-```
+The `server/config/config.yaml` path can be mounted as a config directory
+without hiding application code.
 
 Run the producer and web service manually in separate terminals:
 
@@ -482,26 +570,27 @@ should be updated to the absolute path of your checkout.
 For a managed native service, prefer `./bin/install_server` unless you need to
 repair individual systemd pieces manually.
 
-## Running in Docker
+## Running with Docker or Podman
 
-The repository root contains the Dockerfile and `docker-compose.yml`. The image
-installs Firefox, Geckodriver, Gunicorn, and the required Python modules, then
-runs as an unprivileged `inkplate` user.
+The repository root contains the Dockerfile and a Compose file that works with
+Docker Compose or Podman Compose. The image installs Firefox, Geckodriver,
+Gunicorn, and the required Python modules, then runs as an unprivileged
+`inkplate` user.
 
 ### Configure
 
-Create a Docker server config from the example:
+Create a container server config from the example:
 
 ```bash
 cp server/config/EXAMPLE_config.yaml server/config/config.yaml
 ```
 
-For Docker Compose, keep `server.alwayson: true`. The producer service uses
-`restart: unless-stopped`, so a successful one-shot producer would otherwise be
-started repeatedly.
+For either Compose runtime, keep `server.alwayson: true`. The producer service
+uses `restart: unless-stopped`, so a successful one-shot producer would
+otherwise be started repeatedly.
 
-Create a local `.env` file in the repository root. Docker Compose reads this
-file and passes the values into the container:
+Create a local `.env` file in the repository root. Compose reads this file and
+passes the values into the container:
 
 ```bash
 cp .env.example .env
@@ -514,12 +603,14 @@ WEATHER_API_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_STATICMAPS_MAPID=...
 
-# Optional, only when current_temperature.source is netatmo
+# Optional, only when current_conditions.source is netatmo
 NETATMO_CLIENT_ID=
 NETATMO_CLIENT_SECRET=
 NETATMO_REFRESH_TOKEN=
 NETATMO_DEVICE_ID=
 NETATMO_MODULE_ID=
+NETATMO_WIND_MODULE_ID=
+NETATMO_RAIN_MODULE_ID=
 ```
 
 Compose runs separate `inkplate` web, `producer`, and `diagnostics` services.
@@ -529,15 +620,15 @@ Netatmo token file to `data/netatmo-token.json` so refreshed tokens survive
 container replacement. Compose requires explicit values for
 `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_STATICMAPS_MAPID`.
 
-### Docker MQTT broker
+### Container MQTT broker
 
 If either MQTT feature is enabled, the server needs a reachable MQTT broker.
 Configure `mqtt.weather.broker` and `mqtt.diagnostics.broker` independently; they
 may point to the same broker.
 
-For a simple local Docker broker, this repository includes an optional Compose
-override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the broker command,
-matching server config, and security notes.
+For a simple local container broker, this repository includes an optional
+Compose override. See [MQTT Weather and Diagnostics](../docs/mqtt.md) for the
+broker command, matching server config, and security notes.
 
 The published OCI images are:
 
@@ -549,9 +640,8 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:next
 Use `:main` for stable deployments. Use `:next` to test changes before they are
 promoted to `main`.
 
-Do not commit `server/config/config.yaml`, deprecated legacy
-`server/config.yaml`, or `.env`; keep API keys and refresh tokens in local
-files or runtime environment variables.
+Do not commit `server/config/config.yaml` or `.env`; keep API keys and refresh
+tokens in local files or runtime environment variables.
 
 Docker dependency updates are split across two mechanisms. Dependabot updates
 the Python packages, GitHub Actions, and Docker base image on the `next` branch.
@@ -565,12 +655,16 @@ Run from the root of your cloned repository:
 
 ```bash
 docker compose up --build
+# or
+podman compose up --build
 ```
 
 Or detach it:
 
 ```bash
 docker compose up --build -d
+# or
+podman compose up --build -d
 ```
 
 To use the published image instead of building locally, change the shared
@@ -592,13 +686,13 @@ The browser/PWA viewer is available from:
 http://localhost:8080/app
 ```
 
-`localhost` is correct when testing from the Docker host. The Inkplate firmware
-must use the host's LAN hostname or IP address in `calendar.url`.
+`localhost` is correct when testing from the container host. The Inkplate
+firmware must use the host's LAN hostname or IP address in `calendar.url`.
 
-Set each enabled MQTT broker to an address reachable from inside the container. On
-Docker Desktop, `host.docker.internal` usually points to the host. On Linux, you
-may prefer to run the MQTT broker as another Compose service or use the host's
-LAN IP.
+Set each enabled MQTT broker to an address reachable from inside the container.
+The installer defaults to `host.docker.internal` for Docker and
+`host.containers.internal` for Podman. On Linux, you may prefer to run the MQTT
+broker as another Compose service or use the host's LAN IP.
 
 There is a sample crontab called [docker-errorlog](docker-errorlog) that can be
 used to check the Docker logs for ERROR messages. By default that runs every
@@ -629,6 +723,36 @@ Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
 usable as an OCI source, but treat this as newer and less tested than Docker
 Compose until it has been exercised on your Proxmox host.
 
+The repository includes an experimental fresh-install-only helper. Run it from
+the repository checkout on the Proxmox host:
+
+```bash
+sudo ./bin/install_proxmox --dry-run
+sudo ./bin/install_proxmox
+```
+
+It checks for Proxmox VE 9.x with `pve-container` 6.0.15 or newer, installs
+`skopeo` with permission when needed, queries GHCR for the currently published
+tags, resolves the selected image digest, creates an unprivileged DHCP-enabled
+LXC with `pct`, installs the generated configuration through `pct push`, and
+checks the readiness endpoint. Versioned release tags are offered first,
+followed by `main` and `next`. Interactive runs list available LXC-capable
+Proxmox storage and ask where to place the root filesystem. By default the
+helper also offers separate Proxmox volumes for:
+
+- `/srv/inkplate/server/data` as a read-write generated-data mount
+- `/srv/inkplate/server/config` as a config/secrets mount that is made
+  read-only after bootstrap
+
+Use `--storage`, `--data-storage`, and `--config-storage` to choose these
+stores non-interactively. Use `--no-separate-mounts` only if you deliberately
+want config, secrets, and generated data to live on the CT root filesystem.
+
+The helper deliberately refuses existing CTIDs and does not yet perform
+upgrades, migration, backup, rollback, static network configuration, clustered
+placement, or HA setup. Treat the created container as a technical preview and
+test backup/restore before relying on it.
+
 Recommended image:
 
 ```text
@@ -637,11 +761,13 @@ ghcr.io/orangespyderman/inkplate10-weather-cal:main
 
 Use the `:next` tag only when you want to test upcoming changes.
 
-If the Proxmox host pulls directly from GHCR without registry credentials, make
-the GitHub package public. Otherwise, configure registry credentials in Proxmox
-before creating the container.
+The helper can pull a public GHCR package anonymously. For a private package,
+authenticate on the Proxmox host with `skopeo login ghcr.io` before running the
+helper. A manual Proxmox-managed pull may instead use registry credentials
+configured in Proxmox.
 
-Configure the container with:
+For a manual OCI deployment instead of the helper, configure the container
+with:
 
 - environment variables from `.env.example`
 - port `8080` exposed to your LAN
@@ -653,7 +779,7 @@ Configure the container with:
 
 Fill in at least `WEATHER_API_KEY`, `GOOGLE_API_KEY`, and
 `GOOGLE_STATICMAPS_MAPID`; leave Netatmo values empty unless
-`current_temperature.source` is set to `netatmo`. The supported variable names
+`current_conditions.source` is set to `netatmo`. The supported variable names
 are listed in `.env.example`.
 
 Do not mount a directory over `/srv/inkplate/server`; that path contains the
@@ -686,6 +812,7 @@ http://<container-ip-or-hostname>:8080/app
 Known caveats:
 
 - Proxmox OCI support is newer than standard Docker/Podman workflows.
+- `bin/install_proxmox` currently supports fresh installations only.
 - Proxmox mount and environment-variable management is not the same as Compose.
 - Firefox/Geckodriver should be tested on the target Proxmox host.
 - The renderer is tuned for Inkplate 10 portrait output at `825x1200`.

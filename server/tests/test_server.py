@@ -48,6 +48,25 @@ class ProducerTests(unittest.TestCase):
             str(SERVER_DIR / "logging.dev.ini"),
         )
 
+    @mock.patch("server.ProducerConfig.from_config")
+    @mock.patch("server.configure_logging")
+    @mock.patch("server.load_config")
+    def test_disabled_producer_exits_before_loading_provider_configuration(
+        self,
+        load_config,
+        configure_logging,
+        from_config,
+    ):
+        load_config.return_value = (
+            "/config.yaml",
+            {"server": {"enabled": False}},
+        )
+        configure_logging.return_value = mock.Mock()
+
+        self.assertEqual(server.run(), 0)
+
+        from_config.assert_not_called()
+
     def test_rejects_unregistered_renderer_before_production(self):
         profiles = {
             "future": OutputProfile(
@@ -112,6 +131,26 @@ class ProducerTests(unittest.TestCase):
             800,
             600,
             {"layout": "compact"},
+        )
+
+    def test_realtime_failure_preserves_forecast_conditions(self):
+        daily_summary = {
+            "temperature": {
+                "unit": "\N{DEGREE SIGN}C",
+                "value": 10,
+                "min": 5,
+                "max": 15,
+            }
+        }
+        realtime = mock.Mock()
+        realtime.get_current_conditions.side_effect = RuntimeError("offline")
+
+        server.apply_current_conditions(daily_summary, realtime)
+
+        self.assertEqual(daily_summary["temperature"]["value"], 10)
+        server.log.warning.assert_called_once_with(
+            "Realtime conditions unavailable; using forecast conditions: %s",
+            mock.ANY,
         )
 
     @mock.patch("server.render_outputs")

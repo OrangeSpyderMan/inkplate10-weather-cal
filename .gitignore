@@ -117,6 +117,7 @@ workspace.code-workspace
 .wget-hsts
 server/REAL_config.yaml
 server/config.yaml
+server/data/netatmo-token.json
 server/netatmo-token.json
 .tools/arduino-cli
 

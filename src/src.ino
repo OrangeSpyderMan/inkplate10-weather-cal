@@ -1,28 +1,7 @@
 #include <ArduinoJson.h>
-#include <ArduinoYaml.h>
-#include <StreamUtils.h>
 
+#include "config.h"
 #include "lib.h"
-
-#if defined(EMBEDDED_CONFIG)
-#include "embedded_config.h"
-#endif
-
-bool isMissingConfigValue(const char *value)
-{
-    return value == nullptr || value[0] == '\0';
-}
-
-void failConfig(const char *msg)
-{
-    log(LOG_ERROR, msg);
-    displayError("Config error", msg, configDiagnostics(CONFIG_SOURCE));
-    sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
-    while (true)
-    {
-        delay(1000);
-    }
-}
 
 void setup()
 {
@@ -73,136 +52,14 @@ void setup()
     // Init err state.
     esp_err_t err = ESP_OK;
 
-    StaticJsonDocument<768> doc;
-
-#if defined(EMBEDDED_CONFIG)
-    DeserializationError dse = deserializeYml(doc, EMBEDDED_CONFIG_YAML);
-#else
-    // SD mode uses the card only as a configuration source.
-    if (!board.sdCardInit())
+    StaticJsonDocument<CONFIG_YAML_DOCUMENT_CAPACITY> configDocument;
+    RuntimeConfig config;
+    if (!loadRuntimeConfig(configDocument, config))
     {
-        const char *errMsg = "SD card init failure";
-        log(LOG_ERROR, errMsg);
-        displayError("Storage error", errMsg);
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
+        return;
     }
-
-    // Attempt to get config yaml file.
-    SdFat &sd = board.getSdFat();
-    File file = sd.open(CONFIG_FILE_PATH, FILE_READ);
-    if (!file)
-    {
-        const char *errMsg = "Failed to open config file";
-        logf(LOG_ERROR, errMsg);
-        displayError("Config error", errMsg, configDiagnostics(CONFIG_FILE_PATH));
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
-    }
-
-    ReadBufferingStream bufferedFile(file, 64);
-    DeserializationError dse = deserializeYml(doc, bufferedFile);
-#endif
-
-    if (dse)
-    {
-        const char *errMsg = "Failed to load configuration";
-        logf(LOG_ERROR, "failed to deserialize YAML: %s", dse.c_str());
-        String diagnostics = configDiagnostics(CONFIG_SOURCE);
-        diagnostics = appendDiagnostic(diagnostics, "Parser: ", dse.c_str());
-        displayError("Config error", errMsg, diagnostics);
-        sleep(CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL);
-    }
-#if !defined(EMBEDDED_CONFIG)
-    file.close();
-    board.sdCardSleep();
-#endif
-
-    JsonObject displayCfg = doc["display"];
-    int displayRotation =
-        displayCfg["rotation"] | CONFIG_DEFAULT_DISPLAY_ROTATION;
-    if (displayRotation < 0 || displayRotation > 3)
-    {
-        failConfig("Invalid display.rotation");
-    }
-    board.setRotation(displayRotation);
-
-    // Assign config values.
-    JsonObject calendarCfg = doc["calendar"];
-    const char *calendarUrl = calendarCfg["url"];
-    int calendarRetries = calendarCfg["retries"] | 3;
-    const int calendarRefreshInterval =
-        calendarCfg["refresh_interval"] | CONFIG_DEFAULT_CALENDAR_DAILY_REFRESH_INTERVAL;
-
-    // Wifi config.
-    JsonObject wifiCfg = doc["wifi"];
-    const char *wifiSSID = wifiCfg["ssid"];
-    const char *wifiPass = wifiCfg["pass"] | "";
-    int wifiRetries = wifiCfg["retries"] | 6;
-
-    // NTP config.
-    const char *ntpHost = doc["ntp"]["host"];
-    const char *ntpTimezone = doc["ntp"]["timezone"];
-
-    // Optional remote diagnostic logging config.
-    JsonObject mqttLoggerCfg = doc["mqtt_logger"];
-    bool mqttLoggerEnabled = mqttLoggerCfg["enabled"] | false;
-    const char *mqttLoggerBroker = mqttLoggerCfg["broker"];
-    int mqttLoggerPort = mqttLoggerCfg["port"] | 1883;
-    const char *mqttLoggerClientID = mqttLoggerCfg["clientId"];
-    const char *mqttLoggerTopic = mqttLoggerCfg["topic"];
-    int mqttLoggerRetries = mqttLoggerCfg["retries"] | 3;
-    mqttDebugEnabled = mqttLoggerCfg["debug"] | false;
-
-    if (isMissingConfigValue(calendarUrl))
-    {
-        failConfig("Missing calendar.url");
-    }
-    if (calendarRefreshInterval <= 0)
-    {
-        failConfig("Invalid calendar.refresh_interval");
-    }
-    if (calendarRetries < 0)
-    {
-        failConfig("Invalid calendar.retries");
-    }
-    if (isMissingConfigValue(wifiSSID))
-    {
-        failConfig("Missing wifi.ssid");
-    }
-    if (wifiRetries < 0)
-    {
-        failConfig("Invalid wifi.retries");
-    }
-    if (isMissingConfigValue(ntpHost))
-    {
-        failConfig("Missing ntp.host");
-    }
-    if (isMissingConfigValue(ntpTimezone))
-    {
-        failConfig("Missing ntp.timezone");
-    }
-    if (mqttLoggerEnabled)
-    {
-        if (isMissingConfigValue(mqttLoggerBroker))
-        {
-            failConfig("Missing mqtt_logger.broker");
-        }
-        if (mqttLoggerPort <= 0)
-        {
-            failConfig("Invalid mqtt_logger.port");
-        }
-        if (isMissingConfigValue(mqttLoggerClientID))
-        {
-            failConfig("Missing mqtt_logger.clientId");
-        }
-        if (isMissingConfigValue(mqttLoggerTopic))
-        {
-            failConfig("Missing mqtt_logger.topic");
-        }
-        if (mqttLoggerRetries < 0)
-        {
-            failConfig("Invalid mqtt_logger.retries");
-        }
-    }
+    board.setRotation(config.displayRotation);
+    mqttDebugEnabled = config.mqttDebugEnabled;
 
     logTagged(
         LOG_INFO, "WAKE", "cause=%s firmware=%s",
@@ -228,7 +85,7 @@ void setup()
                     batteryDiagnostics(bvolt));
                 batteryLowWarningDisplayed = true;
             }
-            sleep(calendarRefreshInterval);
+            sleep(config.calendarRefreshInterval);
         }
 
         batteryLowWarningDisplayed = false;
@@ -239,22 +96,29 @@ void setup()
     }
 
     // Attempt to connect to WiFi.
-    err = configureWiFi(wifiSSID, wifiPass, wifiRetries);
+    err = configureWiFi(config.wifiSSID, config.wifiPass, config.wifiRetries);
     if (err == ESP_ERR_TIMEOUT)
     {
         const char *errMsg = "wifi connect timeout";
         log(LOG_ERROR, errMsg);
         String diagnostics = networkDiagnostics();
-        diagnostics = appendDiagnostic(diagnostics, "SSID: ", wifiSSID);
-        diagnostics = appendDiagnostic(diagnostics, "Retries configured: ", String(wifiRetries));
+        diagnostics = appendDiagnostic(diagnostics, "SSID: ", config.wifiSSID);
+        diagnostics = appendDiagnostic(
+            diagnostics,
+            "Retries configured: ",
+            String(config.wifiRetries));
         displayError("WiFi error", errMsg, diagnostics);
-        sleep(calendarRefreshInterval);
+        sleep(config.calendarRefreshInterval);
     }
 
-    if (mqttLoggerEnabled)
+    if (config.mqttLoggerEnabled)
     {
-        err = configureMQTT(mqttLoggerBroker, mqttLoggerPort, mqttLoggerTopic,
-                            mqttLoggerClientID, mqttLoggerRetries);
+        err = configureMQTT(
+            config.mqttLoggerBroker,
+            config.mqttLoggerPort,
+            config.mqttLoggerTopic,
+            config.mqttLoggerClientID,
+            config.mqttLoggerRetries);
         if (err != ESP_OK)
         {
             log(LOG_WARNING,
@@ -263,7 +127,7 @@ void setup()
     }
 
     // Attempt to synchronize clocks with network time.
-    err = configureTime(ntpHost, ntpTimezone);
+    err = configureTime(config.ntpHost, config.ntpTimezone);
     if (err != ESP_OK)
     {
         log(LOG_WARNING, "failed to synchronize RTC with network time");
@@ -283,33 +147,70 @@ void setup()
              dateTime(lastSleepTime, RFC3339).c_str());
     }
 
-    // Reset err state.
+    char candidateSignature[65] = "";
+    bool refreshRequired = true;
+    if (config.calendarStatusUrl[0] != '\0')
+    {
+        err = fetchCalendarSignature(
+            config.calendarStatusUrl,
+            candidateSignature,
+            sizeof(candidateSignature));
+        if (err == ESP_OK &&
+            strcmp(candidateSignature, displayedCalendarSignature) == 0)
+        {
+            logTagged(LOG_INFO, "REFRESH", "status=unchanged");
+            refreshRequired = false;
+        }
+        else if (err != ESP_OK)
+        {
+            log(LOG_WARNING,
+                "calendar status unavailable; falling back to image refresh");
+        }
+    }
+
+    if (!refreshRequired)
+    {
+        sleep(config.calendarRefreshInterval);
+    }
+
+    // Limit radio-on retries to one immediate retry. Further recovery happens
+    // after a short deep-sleep interval.
     err = ESP_FAIL;
-    const char *errMsg;
+    const int maxAttempts = config.calendarRetries > 0 ? 2 : 1;
     int attempts = 0;
-    do
+    for (; attempts < maxAttempts; ++attempts)
     {
         logf(LOG_DEBUG, "calendar refresh attempt #%d", attempts + 1);
 
-        err = displayImage(calendarUrl);
+        err = displayImage(config.calendarUrl);
         if (err != ESP_OK)
         {
-            errMsg = "image display error";
-            log(LOG_ERROR, errMsg);
+            log(LOG_ERROR, "image display error");
             continue;
         }
-    } while (err != ESP_OK && ++attempts <= calendarRetries);
+        if (candidateSignature[0] != '\0')
+        {
+            snprintf(
+                displayedCalendarSignature,
+                sizeof(displayedCalendarSignature),
+                "%s",
+                candidateSignature);
+        }
+        break;
+    }
 
     // E-ink retains the previous image, so a failed refresh should not replace
     // a valid forecast with an error screen.
     if (err != ESP_OK)
     {
-        logf(LOG_ERROR, "%s after %d attempts", errMsg, attempts);
-        logf(LOG_ERROR, "calendar URL: %s", calendarUrl);
+        logf(LOG_ERROR, "image display error after %d attempts", attempts);
+        logf(LOG_ERROR, "calendar URL: %s", config.calendarUrl);
+        sleepForSeconds(
+            static_cast<uint32_t>(config.calendarRetryIntervalMinutes) * 60UL);
     }
 
     // Deep sleep until next refresh time
-    sleep(calendarRefreshInterval);
+    sleep(config.calendarRefreshInterval);
 }
 
 void loop() {}

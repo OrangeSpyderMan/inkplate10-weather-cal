@@ -29,8 +29,10 @@ Both a server and client are required. The main workload is on the server, which
 
 1. Wakes from deep sleep and attempts to connect to WiFi.
 2. Optionally connects to MQTT to publish diagnostic logs.
-3. Attempts to get current network time and update real-time clock.
-4. Downloads and renders the server-hosted PNG directly over HTTP.
+3. Uses the RTC for timekeeping and refreshes it from NTP when synchronization
+   is due.
+4. Optionally checks the output status and downloads the server-hosted PNG only
+   when its content has changed.
 5. Returns to deep sleep for the configured refresh interval.
 
 #### Features:
@@ -39,7 +41,8 @@ Both a server and client are required. The main workload is on the server, which
   - approx 21µA in deep sleep
   - approx 240mA awake
   - approx 30 seconds awake time daily
-- Real-time clock is synchronized from NTP after wake.
+- Real-time clock is normally synchronized from NTP at most once every 24
+  hours; the retained RTC is used between synchronizations.
 - Daylight savings time handled automatically.
 - Battery voltage is checked before WiFi starts; low readings are confirmed
   before a refresh is skipped.
@@ -108,8 +111,10 @@ display:
   rotation: 1
 calendar:
   url: http://<server-host>:8080/calendar.png
+  status_url: http://<server-host>:8080/api/v1/outputs/inkplate10-portrait/status
   refresh_interval: 3
-  retries: 3
+  retries: 1
+  retry_interval_minutes: 15
 wifi:
   ssid: XXXX
   pass: XXXX
@@ -137,10 +142,30 @@ Likely parameters you'll need to change are:
 - `wifi.ssid` - the SSID of your WiFi network.
 - `wifi.pass` - the WiFi password.
 - `calendar.url` - the hostname or IP address of your server which the client will attempt to download the image from. Do not use `localhost` here unless the server is running on the Inkplate itself.
+- `calendar.status_url` - optional small JSON manifest containing the rendered
+  image SHA-256. When it matches the retained signature, the firmware skips the
+  image download and e-paper refresh. Omit it when using an older or third-party
+  server.
 - `calendar.refresh_interval` - how often you want the device to wake up and check for a new image.
-- `ntp.timezone` - the timezone you live in (in "Olson" format), otherwise the client might not wake at the expected time.
+- `calendar.retries` - whether to make one immediate image retry while awake.
+  Set to `0` to disable it; values above `1` are accepted for compatibility but
+  still result in only one immediate retry.
+- `calendar.retry_interval_minutes` - deep-sleep interval after both image
+  attempts fail. Defaults to 15 minutes.
+- `ntp.timezone` - the timezone used for local timestamps and daylight-saving
+  rules, in Olson format such as `Europe/Dublin`.
 - `mqtt_logger.broker` - the MQTT broker reachable from the Inkplate when remote diagnostics are enabled.
 - `mqtt_logger.debug` - publish detailed diagnostics over MQTT; defaults to `false`. Serial logging remains verbose.
+
+The firmware uses the Inkplate RTC between wake cycles and refreshes it from NTP
+at most once every 24 hours. A cold boot, invalid RTC value, or clock moving
+backwards forces an immediate NTP synchronization.
+
+When `calendar.status_url` is configured, an unchanged SHA-256 skips both the
+PNG download and e-paper update. If the status endpoint is unavailable or
+invalid, the firmware falls back to downloading the image. Failed image
+attempts are limited to one immediate retry before the device returns to deep
+sleep for `calendar.retry_interval_minutes`.
 
 See the [server](/server) for info on server setup.
 
@@ -156,6 +181,7 @@ The server also exposes versioned data and output endpoints:
 /api/v1/weather
 /api/v1/health
 /api/v1/ready
+/api/v1/outputs/inkplate10-portrait/status
 /outputs/inkplate10-portrait/calendar.png
 ```
 
@@ -166,9 +192,10 @@ Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`
 continues to serve the configured default.
 
-The server supports AccuWeather and OpenWeatherMap One Call 3.0. One Call 4.0
-is also available as the opt-in `openweathermapv4` provider; it requires
-OpenWeather's separate One Call by Call subscription.
+The server supports AccuWeather and OpenWeatherMap One Call 3.0 and 4.0.
+OpenWeatherMap v2 has been removed. Forecast and optional realtime providers
+use explicit normalized interfaces so additional integrations can be added
+without extending the producer entry point.
 
 ## MQTT
 
@@ -184,8 +211,8 @@ and example clients such as the
 ## Server Installation
 
 The recommended server setup is the interactive installer. It can configure
-either Docker Compose from this checkout or native producer and web systemd
-services under `/srv/inkplate` on a Debian/Ubuntu-style host or LXC.
+Docker Compose, Podman Compose, native producer and web systemd services under
+`/srv/inkplate`, or hand off to the experimental Proxmox VE 9 OCI installer.
 
 Run it from the repository root:
 
@@ -198,15 +225,11 @@ Map ID, location, optional Netatmo details, optional MQTT weather publishing,
 optional MQTT diagnostic listening, and whether to start the service/container.
 It keeps secrets out of committed YAML files:
 
-- Docker installs write secrets to `.env` and config to
+- Docker and Podman installs write secrets to `.env` and config to
   `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
   `/srv/inkplate/inkplate_venv`.
-
-The old server config path, `server/config.yaml`, is deprecated and will be
-removed in a future release. Move existing installs to
-`server/config/config.yaml` as soon as practical.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system
@@ -225,13 +248,38 @@ For CI or repeatable testing, use a JSON answers file:
 ```
 
 Re-run the installer later to update an existing install. It will detect
-existing Docker or systemd files and offer to update the application while
-preserving config/secrets, reconfigure config/secrets, or abort.
+existing Docker, Podman, or systemd files and offer to update the application
+while preserving config/secrets, reconfigure config/secrets, or abort.
+
+The Proxmox option directs you to the dedicated fresh-install-only preview:
+
+```bash
+sudo ./bin/install_proxmox --dry-run
+```
+
+Interactive Proxmox runs list available LXC storage and can create separate
+mounts for generated data and read-only config. Use `--storage`,
+`--data-storage`, and `--config-storage` for unattended storage selection.
+
+To deploy from this checkout to another machine over SSH, use the remote
+wrapper. It currently supports Proxmox and systemd targets:
+
+```bash
+./bin/install_remote root@pve1 --mode proxmox
+./bin/install_remote admin@server1 --mode systemd
+```
+
+The wrapper uploads only Git-tracked files plus an explicitly supplied answers
+file, runs the normal installer on the target, and removes its temporary remote
+workspace after success. It preserves the workspace after a failure and prints
+its location for diagnosis. `--dry-run` previews locally without connecting;
+`--remote-dry-run` connects and runs the selected installer's own dry-run.
 
 For troubleshooting:
 
 ```bash
 docker compose logs -f
+podman compose logs -f
 sudo journalctl -u inkplate-producer -u inkplate -u inkplate-diagnostics -f
 ```
 
@@ -265,6 +313,22 @@ Then install the Inkplate board package and required libraries (these libraries 
 make firmware-setup
 ```
 
+You can also let Make check the local firmware toolchain state and do the
+missing setup work before compiling:
+
+```bash
+make world
+```
+
+`world` installs the repo-local Arduino CLI if needed, installs the Inkplate
+board package or firmware libraries if they are missing, then runs
+`firmware-compile`. Pass the same build options you would pass to
+`firmware-compile`, for example:
+
+```bash
+make world CONFIG=firmware-config.yaml
+```
+
 Compile the firmware:
 
 ```bash
@@ -282,6 +346,9 @@ make firmware-compile FIRMWARE_VERSION=v3.1.0
 
 The version is printed in serial boot diagnostics and included in the MQTT
 `WAKE` event.
+
+Maintainer release steps are documented in
+[docs/releasing.md](docs/releasing.md).
 
 This is the generic build used by CI and release binaries. It expects
 `/config.yaml` on an SD card but renders the calendar image directly from HTTP.

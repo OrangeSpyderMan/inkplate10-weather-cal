@@ -1,6 +1,7 @@
 #ifndef LIB_H
 #define LIB_H
 #include <Inkplate.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <cppQueue.h>
@@ -48,6 +49,7 @@
 #define ESP_ERR_ERRNO_BASE (0)
 #define ESP_ERR_EDRAW (1 + ESP_ERR_ERRNO_BASE) // Draw error
 #define ESP_ERR_ENTP (2 + ESP_ERR_ERRNO_BASE)  // NTP error
+#define ESP_ERR_EMANIFEST (3 + ESP_ERR_ERRNO_BASE) // Manifest error
 
 // Enum of log verbosity levels.
 #define LOG_CRIT 0
@@ -68,6 +70,12 @@ extern RTC_DATA_ATTR time_t lastBootTime;
 extern RTC_DATA_ATTR time_t lastSleepTime;
 // Whether the retained e-ink display already shows the critical battery warning.
 extern RTC_DATA_ATTR bool batteryLowWarningDisplayed;
+// Signature of the retained error screen, or zero after a successful refresh.
+extern RTC_DATA_ATTR uint32_t displayedErrorSignature;
+// RTC epoch of the last successful NTP synchronization.
+extern RTC_DATA_ATTR time_t lastNtpSyncTime;
+// SHA-256 of the last image successfully driven to the panel.
+extern RTC_DATA_ATTR char displayedCalendarSignature[65];
 // Whether routine debug and informational messages should be sent over MQTT.
 extern bool mqttDebugEnabled;
 // The log message queue.
@@ -99,6 +107,19 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries);
   - ESP_ERR_EDRAW if downloading or drawing the image fails.
 */
 esp_err_t displayImage(const char *url);
+
+/**
+  Fetch the content signature for a rendered calendar output.
+
+  @param url manifest URL.
+  @param signature destination buffer for the 64-character SHA-256.
+  @param signatureSize destination buffer size.
+  @returns ESP_OK when a valid signature is read, otherwise ESP_ERR_EMANIFEST.
+*/
+esp_err_t fetchCalendarSignature(
+    const char *url,
+    char *signature,
+    size_t signatureSize);
 
 /**
   Stop MQTT and WiFi after delivering any outstanding diagnostics.
@@ -139,13 +160,15 @@ String networkDiagnostics();
 void displayMessage(const char *msg);
 
 /**
-  Connect to an NTP server and synchronize the on-board real-time clock.
+  Configure local timezone rules and synchronize the on-board real-time clock
+  from NTP when the retained synchronization interval has elapsed or the RTC is
+  invalid.
 
   @param ntpHost the hostname of the NTP server (eg. pool.ntp.org).
   @param timezoneName the name of the timezone in Olson format (eg.
   Europe/Dublin)
   @returns the esp_err_t code:
-  - ESP_OK if successful.
+  - ESP_OK if the retained RTC is valid or synchronization succeeds.
   - ESP_ERR_ENTP if updating the NTP client fails.
 */
 esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
@@ -157,6 +180,13 @@ esp_err_t configureTime(const char *ntpHost, const char *timezoneName);
 
 */
 void sleep(const int sleepHours);
+
+/**
+  Enter deep sleep for a duration in seconds.
+
+  @param sleepSeconds number of seconds before the timer wakeup.
+*/
+void sleepForSeconds(const uint32_t sleepSeconds);
 
 /**
   Connect to a MQTT broker for remote diagnostic logging.

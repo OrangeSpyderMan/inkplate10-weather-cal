@@ -22,6 +22,8 @@ x-inkplate-service: &inkplate-service
     NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
     NETATMO_DEVICE_ID: ${NETATMO_DEVICE_ID:-}
     NETATMO_MODULE_ID: ${NETATMO_MODULE_ID:-}
+    NETATMO_WIND_MODULE_ID: ${NETATMO_WIND_MODULE_ID:-}
+    NETATMO_RAIN_MODULE_ID: ${NETATMO_RAIN_MODULE_ID:-}
   volumes:
     - ./server/config:/srv/inkplate/server/config:ro
     - inkplate-data:/srv/inkplate/server/data

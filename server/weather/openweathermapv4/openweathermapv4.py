@@ -1,21 +1,32 @@
+import math
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
 from ..service import WeatherService
+from ..models import ForecastData
 
 
 class OpenWeatherMapv4Service(WeatherService):
-    HOURLY_STEP = 3
-
-    def __init__(self, apikey, location, num_hours=6, metric=True, mock=False):
+    def __init__(
+        self,
+        apikey,
+        location,
+        num_hours=6,
+        metric=True,
+        forecast_slice_hours=3,
+        forecast_lead_minutes=15,
+        mock=False,
+    ):
         super().__init__(
             apikey,
             "https://api.openweathermap.org",
             "openweathermapv4",
             num_hours,
             metric,
+            forecast_slice_hours,
+            forecast_lead_minutes,
         )
         self.lat, self.lon = self._get_location_coords(location)
 
@@ -45,22 +56,30 @@ class OpenWeatherMapv4Service(WeatherService):
             },
         }
 
+    def fetch(self):
+        return ForecastData.from_dicts(
+            self.get_daily_summary(),
+            self.get_hourly_forecast(),
+        ).validate()
+
     def get_hourly_forecast(self):
-        required_records = self.HOURLY_STEP * self.num_hours + 3
+        required_records = (
+            self.forecast_slice_hours * self.num_hours
+            + math.ceil(self.forecast_lead_minutes / 60)
+            + 2
+        )
         records, timezone_offset = self._get_records(
             "/data/4.0/onecall/timeline/1h",
             required_records=required_records,
         )
         location_timezone = timezone(timedelta(seconds=timezone_offset))
+        cutoff = datetime.now(location_timezone) + timedelta(
+            minutes=self.forecast_lead_minutes
+        )
         selected = [
             entry
             for entry in records
-            if datetime.fromtimestamp(
-                entry["dt"],
-                location_timezone,
-            ).hour
-            % self.HOURLY_STEP
-            == 0
+            if self._is_forecast_slot(entry, location_timezone, cutoff)
         ][: self.num_hours]
         if len(selected) < self.num_hours:
             raise ValueError(
@@ -82,13 +101,20 @@ class OpenWeatherMapv4Service(WeatherService):
                 },
                 "wind": {
                     "unit": "m/s" if self.units == "metric" else "mph",
-                    "real": entry["wind_speed"],
+                    "value": entry["wind_speed"],
                 },
                 "humidity": entry["humidity"],
                 "rain_probability": round(entry.get("pop", 0) * 100),
             }
             for entry in selected
         ]
+
+    def _is_forecast_slot(self, entry, location_timezone, cutoff):
+        timestamp = datetime.fromtimestamp(entry["dt"], location_timezone)
+        return (
+            timestamp > cutoff
+            and self.is_forecast_slice(timestamp)
+        )
 
     def _get_records(self, path, required_records=1):
         url = f"{self.baseurl}{path}"
@@ -180,3 +206,14 @@ class OpenWeatherMapv4Service(WeatherService):
         if self.units == "metric":
             return celsius
         return celsius * 9 / 5 + 32
+
+
+def build_provider(config):
+    return OpenWeatherMapv4Service(
+        apikey=config["apikey"],
+        location=config["location"],
+        metric=config.get("metric", True),
+        num_hours=config.get("num_hours", 6),
+        forecast_slice_hours=config.get("forecast_slice_hours", 3),
+        forecast_lead_minutes=config.get("forecast_lead_minutes", 15),
+    )
