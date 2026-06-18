@@ -15,6 +15,15 @@ SPEC.loader.exec_module(install_server)
 
 
 class InstallerCopyTests(unittest.TestCase):
+    def test_gitignore_covers_installer_secret_backups(self):
+        gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+        self.assertIn("/.env.bak.*", gitignore.splitlines())
+        self.assertIn(
+            "/server/config/config.yaml.bak.*",
+            gitignore.splitlines(),
+        )
+
     def test_keyboard_interrupt_exits_cleanly(self):
         stderr = io.StringIO()
 

@@ -70,6 +70,7 @@ __pypackages__/
 
 # Environments
 .env
+/.env.bak.*
 .venv
 env/
 venv/
@@ -84,6 +85,7 @@ workspace.code-workspace
 # gen'd files
 /server/config.yaml
 /server/config/config.yaml
+/server/config/config.yaml.bak.*
 **/*.log
 **/*.log.*
 **/*.html
