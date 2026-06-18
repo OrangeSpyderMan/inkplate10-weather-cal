@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import getpass
+import ipaddress
 import json
 import os
 import platform
@@ -49,6 +50,7 @@ DIAGNOSTICS_SERVICE_FILE = Path(
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
 DEFAULT_PORT = 8080
+DEFAULT_HOST = "0.0.0.0"
 DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
 DEFAULT_FORECAST_SLICE_HOURS = 3
@@ -367,6 +369,11 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     print("-------------")
 
     answers: dict[str, object] = {}
+    answers["host"] = prompt_ip_address(
+        "Server bind IP",
+        default=config.get("server.host", DEFAULT_HOST),
+        key="host",
+    )
     answers["port"] = prompt_int(
         "Server port",
         default=int(config.get("server.port", DEFAULT_PORT)),
@@ -564,6 +571,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "---",
         "server:",
         "  enabled: true",
+        f"  host: {json.dumps(str(answers.get('host', DEFAULT_HOST)))}",
         f"  port: {answers['port']}",
         f"  alwayson: {alwayson}",
         f"  refreshminutes: {answers['refresh_minutes']}",
@@ -1167,6 +1175,22 @@ def prompt_text(label: str, default: str = "", required: bool = True, key: str |
         if not required:
             return ""
         print("This value is required.")
+
+
+def prompt_ip_address(label: str, default: str, key: str) -> str:
+    while True:
+        value = prompt_text(label, default=default, key=key)
+        try:
+            ipaddress.ip_address(value)
+        except ValueError:
+            if key in INSTALLER_ANSWERS or NON_INTERACTIVE:
+                raise SystemExit(
+                    f"ERROR: {key} must be an IPv4 or IPv6 address"
+                )
+            print("Please enter an IPv4 or IPv6 address.")
+            default = value
+            continue
+        return value
 
 
 def prompt_secret(label: str, default: str = "", required: bool = True, key: str | None = None) -> str:

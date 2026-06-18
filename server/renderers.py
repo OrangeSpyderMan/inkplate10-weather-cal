@@ -22,6 +22,7 @@ class FirefoxCalendarRenderer:
             map_url=map_url,
             daily_summary=snapshot.daily_summary,
             hourly_forecasts=snapshot.hourly_forecasts,
+            generated_at=snapshot.generated_at,
         )
         page.save()
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import ipaddress
 import os
 import sys
 from pathlib import Path
@@ -12,7 +13,16 @@ SERVER_DIR = Path(__file__).resolve().parent
 
 
 def gunicorn_argv(config):
-    port = (config.get("server") or {}).get("port", 8080)
+    server_config = config.get("server") or {}
+    host = str(server_config.get("host", "0.0.0.0")).strip()
+    port = server_config.get("port", 8080)
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise ValueError(
+            f"server.host must be an IPv4 or IPv6 address, got {host!r}"
+        ) from exc
+    bind_host = f"[{host}]" if address.version == 6 else host
     workers = int(os.environ.get("INKPLATE_WEB_WORKERS", "1"))
     threads = int(os.environ.get("INKPLATE_WEB_THREADS", "2"))
     return [
@@ -22,7 +32,7 @@ def gunicorn_argv(config):
         "--chdir",
         str(SERVER_DIR),
         "--bind",
-        f"0.0.0.0:{port}",
+        f"{bind_host}:{port}",
         "--workers",
         str(workers),
         "--threads",

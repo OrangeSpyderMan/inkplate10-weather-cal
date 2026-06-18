@@ -188,19 +188,107 @@ class MqttWeatherPublisherTests(unittest.TestCase):
         publisher.log = mock.Mock()
         publisher.publish_snapshot(snapshot)
 
-        self.assertEqual(client.publish.call_count, 4)
+        self.assertEqual(client.publish.call_count, 7)
         publisher.log.info.assert_called_once_with(
-            "Publishing weather snapshot to MQTT broker %s:%s under %s",
+            "Publishing MQTT %s to broker %s:%s under %s",
+            "weather snapshot",
             "broker",
             1884,
             "inkplate/weather",
         )
         self.assertEqual(
             result.wait_for_publish.call_args_list,
-            [mock.call(timeout=5)] * 4,
+            [mock.call(timeout=5)] * 7,
         )
+        self.assertEqual(
+            [call.args[0] for call in client.publish.call_args_list],
+            [
+                "inkplate/weather",
+                "inkplate/weather/generated_at",
+                "inkplate/weather/current",
+                "inkplate/weather/hourly",
+                "inkplate/weather/status",
+                "inkplate/weather/current/rain",
+                "inkplate/weather/current/wind",
+            ],
+        )
+        self.assertEqual(client.publish.call_args_list[-2].args[1], "")
+        self.assertEqual(client.publish.call_args_list[-1].args[1], "")
         client.loop_stop.assert_called_once_with()
         client.disconnect.assert_called_once_with()
+
+    @mock.patch("mqtt_publisher.create_mqtt_client")
+    def test_publishes_dedicated_current_measurements(self, create_client):
+        client = create_client.return_value
+        result = mock.Mock(rc=mqtt_publisher.mqtt.MQTT_ERR_SUCCESS)
+        client.publish.return_value = result
+        snapshot = mock.Mock()
+        snapshot.to_payload.return_value = {
+            "schema_version": "2.0",
+            "generated_at": "2026-06-05T00:00:00+00:00",
+            "source": "test",
+            "units": "metric",
+            "current": {
+                "rain": {"value": 0.4, "rate_unit": "mm/h"},
+                "wind": {"value": 18, "unit": "kmh"},
+            },
+            "hourly": [],
+        }
+
+        publisher = mqtt_publisher.MqttWeatherPublisher(broker="broker")
+        publish_result = publisher.publish_snapshot(snapshot)
+
+        self.assertTrue(publish_result["success"])
+        rain_call = client.publish.call_args_list[-2]
+        wind_call = client.publish.call_args_list[-1]
+        self.assertIn('"value": 0.4', rain_call.args[1])
+        self.assertIn('"value": 18', wind_call.args[1])
+        self.assertTrue(rain_call.kwargs["retain"])
+        self.assertTrue(wind_call.kwargs["retain"])
+
+    @mock.patch("mqtt_publisher.create_mqtt_client")
+    def test_publish_failure_is_nonfatal_and_sanitized(self, create_client):
+        create_client.return_value.connect.side_effect = OSError("offline")
+        publisher = mqtt_publisher.MqttWeatherPublisher(broker="broker")
+
+        result = publisher.publish_server_status({"producer": {"state": "ready"}})
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "OSError: offline")
+        create_client.return_value.loop_start.assert_not_called()
+        create_client.return_value.disconnect.assert_not_called()
+
+    @mock.patch("mqtt_publisher.create_mqtt_client")
+    def test_publishes_retained_server_status_topic(self, create_client):
+        client = create_client.return_value
+        client.publish.return_value = mock.Mock(
+            rc=mqtt_publisher.mqtt.MQTT_ERR_SUCCESS
+        )
+        publisher = mqtt_publisher.MqttWeatherPublisher(
+            broker="broker",
+            base_topic="inkplate/weather-calendar",
+        )
+        publisher.log = mock.Mock()
+
+        result = publisher.publish_server_status(
+            {"schema_version": "1.0", "producer": {"state": "ready"}}
+        )
+
+        self.assertTrue(result["success"])
+        publisher.log.info.assert_called_once_with(
+            "Publishing MQTT %s to broker %s:%s under %s",
+            "server status",
+            "broker",
+            1883,
+            "inkplate/weather-calendar",
+        )
+        call = client.publish.call_args
+        self.assertEqual(
+            call.args[0],
+            "inkplate/weather-calendar/server/status",
+        )
+        self.assertIn('"state": "ready"', call.args[1])
+        self.assertTrue(call.kwargs["retain"])
 
 
 if __name__ == "__main__":

@@ -2,6 +2,36 @@ import datetime as dt
 from .page import Page
 
 
+def display_wind(wind):
+    value = wind["value"]
+    unit = wind["unit"]
+    if unit == "m/s":
+        value = value * 3.6
+        unit = "km/h"
+    elif unit == "kmh":
+        unit = "km/h"
+    return _measurement_text(value), unit
+
+
+def _measurement_text(value):
+    rounded = round(float(value), 1)
+    return str(int(rounded)) if rounded.is_integer() else str(rounded)
+
+
+def last_refreshed_text(generated_at):
+    if generated_at is None:
+        return None
+    if generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=dt.timezone.utc)
+    generated_at = generated_at.astimezone(dt.timezone.utc)
+    return "Last Refreshed: {}, {} {} {}".format(
+        generated_at.strftime("%H:%M UTC"),
+        generated_at.day,
+        generated_at.strftime("%B"),
+        generated_at.year,
+    )
+
+
 class CalendarPage(Page):
     def __init__(
         self,
@@ -18,6 +48,7 @@ class CalendarPage(Page):
         map_url = kwargs["map_url"]
         daily_summary = kwargs["daily_summary"]
         hourly_forecasts = kwargs["hourly_forecasts"]
+        refreshed_text = last_refreshed_text(kwargs.get("generated_at"))
 
         hours = []
         temps = []
@@ -45,6 +76,8 @@ class CalendarPage(Page):
             str(current_temperature["value"]) + "\N{DEGREE SIGN}"
         )
         current_temperature_is_live = current_temperature.get("live", False)
+        current_rain = daily_summary.get("rain")
+        current_wind = daily_summary.get("wind")
         temperature_unit = current_temperature["unit"]
         if hourly_forecasts:
             temperature_unit = hourly_forecasts[0]["temperature"]["unit"]
@@ -93,11 +126,7 @@ class CalendarPage(Page):
 
                         with a.h4(id="temp", klass=temp_class):
                             if current_temperature_is_live:
-                                with a.div(klass="live-radio"):
-                                    a.span(klass="live-radio-mast")
-                                    with a.span(klass="live-radio-waves"):
-                                        a.span()
-                                        a.span()
+                                self._live_radio()
                             a(current_temperature_text)
 
                         with a.div(id="icon-container", klass="numcircle"):
@@ -107,7 +136,67 @@ class CalendarPage(Page):
                                     id="weather-alert",
                                     title="Active weather alert",
                                 ):
-                                    a.span(_t="!")
+                                    a.img(
+                                        src="icon/siren.png",
+                                        alt="",
+                                    )
+
+                        if current_rain is not None:
+                            rain_class = "numcircle measurement-circle text-center"
+                            if current_rain.get("live", False):
+                                rain_class += " live-icon"
+                            with a.div(id="rain", klass=rain_class):
+                                if current_rain.get("live", False):
+                                    self._live_radio()
+                                a.span(
+                                    klass="measurement-value",
+                                    _t=_measurement_text(current_rain["value"]),
+                                )
+                                a.span(
+                                    klass="measurement-unit",
+                                    _t=current_rain.get(
+                                        "rate_unit",
+                                        current_rain["unit"] + "/h",
+                                    ),
+                                )
+
+                        if current_wind is not None:
+                            wind_class = "numcircle measurement-circle text-center"
+                            if current_wind.get("live", False):
+                                wind_class += " live-icon"
+                            wind_value, wind_unit = display_wind(current_wind)
+                            with a.div(id="wind", klass=wind_class):
+                                if current_wind.get("live", False):
+                                    self._live_radio()
+                                if current_wind.get("direction") is not None:
+                                    with a.div(
+                                        klass="wind-compass-badge",
+                                        style=(
+                                            "--wind-direction: "
+                                            f"{float(current_wind['direction']) % 360:g}deg"
+                                        ),
+                                    ):
+                                        a.img(
+                                            src="icon/compass.png",
+                                            alt="",
+                                            klass="wind-compass",
+                                        )
+                                with a.span(klass="wind-speed"):
+                                    a.span(
+                                        klass="measurement-value",
+                                        _t=wind_value,
+                                    )
+                                    a.span(
+                                        klass="measurement-unit",
+                                        _t=wind_unit,
+                                    )
+                                a.span(
+                                    klass="wind-direction",
+                                    _t=current_wind.get(
+                                        "direction_cardinal",
+                                        "",
+                                    ),
+                                )
 
                 with a.div(id="map-container"):
                     a.img(src=map_url, id="map")
@@ -151,6 +240,8 @@ class CalendarPage(Page):
                             width=chart_width,
                             height=chart_height,
                         )
+                        if refreshed_text is not None:
+                            a.div(id="last-refreshed", _t=refreshed_text)
 
                 with a.script():
                     a("""
@@ -281,3 +372,11 @@ class CalendarPage(Page):
                         temperature_axis_max,
                         rain_axis_max,
                     ))
+
+    def _live_radio(self):
+        a = self.airium
+        with a.div(klass="live-radio"):
+            a.span(klass="live-radio-mast")
+            with a.span(klass="live-radio-waves"):
+                a.span()
+                a.span()

@@ -113,6 +113,19 @@ class OpenWeatherMapv4ServiceTests(unittest.TestCase):
                     "min": 10,
                     "max": 24,
                 },
+                "wind": {
+                    "unit": "m/s",
+                    "value": 2.3,
+                    "gust": 4.1,
+                    "direction": 225,
+                },
+                "rain": {
+                    "unit": "mm",
+                    "value": 0.7,
+                    "last_hour": 0.7,
+                    "rate_unit": "mm/h",
+                    "rate_basis": "last_hour_average",
+                },
             },
         )
 

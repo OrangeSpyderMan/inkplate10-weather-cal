@@ -181,12 +181,17 @@ The server also exposes versioned data and output endpoints:
 /api/v1/weather
 /api/v1/health
 /api/v1/ready
+/api/v1/status
 /api/v1/outputs/inkplate10-portrait/status
 /outputs/inkplate10-portrait/calendar.png
 ```
 
 `/calendar.png` remains available as a compatibility alias for existing
 Inkplate firmware.
+
+The browser-oriented operational dashboard is available at `/status`. It
+polls the status API and reports producer refresh state, providers, output
+readiness, MQTT publication state, and sanitized failures.
 
 Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`
@@ -220,9 +225,10 @@ Run it from the repository root:
 ./bin/install_server
 ```
 
-The installer prompts for the weather provider, API keys, Google Static Maps
-Map ID, location, optional Netatmo details, optional MQTT weather publishing,
-optional MQTT diagnostic listening, and whether to start the service/container.
+The installer prompts for the server bind IP and port, weather provider, API
+keys, Google Static Maps Map ID, location, optional Netatmo details, optional
+MQTT weather publishing, optional MQTT diagnostic listening, and whether to
+start the service/container.
 It keeps secrets out of committed YAML files:
 
 - Docker and Podman installs write secrets to `.env` and config to

@@ -114,6 +114,8 @@ class NetatmoRealtimeService(RealtimeProvider):
             live=True,
             unit="mm" if self.metric else "in",
             value=round(data["Rain"] * factor, 2),
+            rate_unit="mm/h" if self.metric else "in/h",
+            rate_basis="instantaneous",
             last_hour=(
                 round(data["sum_rain_1"] * factor, 2)
                 if "sum_rain_1" in data
