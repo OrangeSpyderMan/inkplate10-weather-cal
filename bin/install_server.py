@@ -177,6 +177,7 @@ def ensure_repo_root(repo_root: Path) -> None:
 
 def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
     label = "Docker" if mode == "docker" else "Podman"
+    compose_command = check_compose_runtime(mode, dry_run)
     existing = [
         path
         for path in (
@@ -207,7 +208,6 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             mode=0o600,
         )
 
-    compose_command = check_compose_runtime(mode, dry_run)
     if prompt_yes_no(
         f"Start or update the {label} containers now?",
         default=True,
@@ -480,54 +480,77 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         key="mqtt_weather_enabled",
     )
     default_mqtt_broker = container_host_alias(mode)
-    answers["mqtt_weather_broker"] = prompt_text(
-        "MQTT weather publisher broker",
-        default=config.get("mqtt.weather.broker", default_mqtt_broker),
-        required=False,
-        key="mqtt_weather_broker",
-    )
-    answers["mqtt_weather_port"] = prompt_int(
-        "MQTT weather publisher port",
-        default=int(config.get("mqtt.weather.port", 1883)),
-        minimum=1,
-        maximum=65535,
-        key="mqtt_weather_port",
-    )
-    answers["mqtt_weather_base_topic"] = prompt_text(
-        "MQTT weather base topic",
-        default=config.get(
+    if answers["mqtt_weather_enabled"]:
+        answers["mqtt_weather_broker"] = prompt_text(
+            "MQTT weather publisher broker",
+            default=config.get("mqtt.weather.broker", default_mqtt_broker),
+            required=False,
+            key="mqtt_weather_broker",
+        )
+        answers["mqtt_weather_port"] = prompt_int(
+            "MQTT weather publisher port",
+            default=int(config.get("mqtt.weather.port", 1883)),
+            minimum=1,
+            maximum=65535,
+            key="mqtt_weather_port",
+        )
+        answers["mqtt_weather_base_topic"] = prompt_text(
+            "MQTT weather base topic",
+            default=config.get(
+                "mqtt.weather.base_topic", "inkplate/weather-calendar"
+            ),
+            required=False,
+            key="mqtt_weather_base_topic",
+        )
+    else:
+        answers["mqtt_weather_broker"] = config.get(
+            "mqtt.weather.broker", default_mqtt_broker
+        )
+        answers["mqtt_weather_port"] = int(
+            config.get("mqtt.weather.port", 1883)
+        )
+        answers["mqtt_weather_base_topic"] = config.get(
             "mqtt.weather.base_topic", "inkplate/weather-calendar"
-        ),
-        required=False,
-        key="mqtt_weather_base_topic",
-    )
+        )
     answers["mqtt_diagnostics_enabled"] = prompt_yes_no(
         "Listen for Inkplate diagnostics on MQTT?",
         default=parse_bool(config.get("mqtt.diagnostics.enabled", "false")),
         key="mqtt_diagnostics_enabled",
     )
-    answers["mqtt_diagnostics_broker"] = prompt_text(
-        "MQTT diagnostic listener broker",
-        default=config.get("mqtt.diagnostics.broker", default_mqtt_broker),
-        required=False,
-        key="mqtt_diagnostics_broker",
-    )
-    answers["mqtt_diagnostics_port"] = prompt_int(
-        "MQTT diagnostic listener port",
-        default=int(config.get("mqtt.diagnostics.port", 1883)),
-        minimum=1,
-        maximum=65535,
-        key="mqtt_diagnostics_port",
-    )
-    answers["mqtt_diagnostics_topic"] = prompt_text(
-        "MQTT diagnostic topic",
-        default=config.get(
+    if answers["mqtt_diagnostics_enabled"]:
+        answers["mqtt_diagnostics_broker"] = prompt_text(
+            "MQTT diagnostic listener broker",
+            default=config.get("mqtt.diagnostics.broker", default_mqtt_broker),
+            required=False,
+            key="mqtt_diagnostics_broker",
+        )
+        answers["mqtt_diagnostics_port"] = prompt_int(
+            "MQTT diagnostic listener port",
+            default=int(config.get("mqtt.diagnostics.port", 1883)),
+            minimum=1,
+            maximum=65535,
+            key="mqtt_diagnostics_port",
+        )
+        answers["mqtt_diagnostics_topic"] = prompt_text(
+            "MQTT diagnostic topic",
+            default=config.get(
+                "mqtt.diagnostics.topic",
+                "inkplate/weather-calendar/diagnostics",
+            ),
+            required=False,
+            key="mqtt_diagnostics_topic",
+        )
+    else:
+        answers["mqtt_diagnostics_broker"] = config.get(
+            "mqtt.diagnostics.broker", default_mqtt_broker
+        )
+        answers["mqtt_diagnostics_port"] = int(
+            config.get("mqtt.diagnostics.port", 1883)
+        )
+        answers["mqtt_diagnostics_topic"] = config.get(
             "mqtt.diagnostics.topic",
             "inkplate/weather-calendar/diagnostics",
-        ),
-        required=False,
-        key="mqtt_diagnostics_topic",
-    )
+        )
     return answers
 
 

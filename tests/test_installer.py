@@ -69,6 +69,110 @@ class InstallerCopyTests(unittest.TestCase):
 
         self.assertEqual(command, ["podman-compose"])
 
+    @mock.patch.object(install_server.shutil, "which", return_value="/usr/bin/docker")
+    @mock.patch.object(install_server.subprocess, "run")
+    def test_docker_check_requires_compose_and_daemon_access(self, run, which):
+        run.side_effect = [
+            mock.Mock(returncode=0),
+            mock.Mock(returncode=0, stderr=""),
+        ]
+
+        command = install_server.check_compose_runtime(
+            "docker",
+            dry_run=False,
+        )
+
+        self.assertEqual(command, ["docker", "compose"])
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            ["docker", "compose", "version"],
+        )
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            ["docker", "info"],
+        )
+
+    @mock.patch.object(install_server.shutil, "which", return_value="/usr/bin/docker")
+    @mock.patch.object(install_server.subprocess, "run")
+    def test_docker_check_rejects_unavailable_daemon(self, run, which):
+        run.side_effect = [
+            mock.Mock(returncode=0),
+            mock.Mock(returncode=1, stderr="permission denied"),
+        ]
+
+        with self.assertRaisesRegex(SystemExit, "cannot talk to the Docker daemon"):
+            install_server.check_compose_runtime("docker", dry_run=False)
+
+    def test_compose_runtime_is_checked_before_any_questions(self):
+        for mode in ("docker", "podman"):
+            with self.subTest(mode=mode):
+                with mock.patch.object(
+                    install_server,
+                    "check_compose_runtime",
+                    side_effect=SystemExit("ERROR: runtime unavailable"),
+                ) as check_runtime:
+                    with mock.patch.object(
+                        install_server,
+                        "choose_existing_action",
+                    ) as choose_existing_action:
+                        with mock.patch.object(
+                            install_server,
+                            "collect_answers",
+                        ) as collect_answers:
+                            with tempfile.TemporaryDirectory() as temporary_dir:
+                                with self.assertRaisesRegex(
+                                    SystemExit,
+                                    "runtime unavailable",
+                                ):
+                                    install_server.install_compose(
+                                        pathlib.Path(temporary_dir),
+                                        dry_run=False,
+                                        mode=mode,
+                                    )
+
+                check_runtime.assert_called_once_with(mode, False)
+                choose_existing_action.assert_not_called()
+                collect_answers.assert_not_called()
+
+    def test_disabled_mqtt_features_skip_connection_questions(self):
+        answers = {
+            "host": "0.0.0.0",
+            "port": 8080,
+            "refresh_minutes": 180,
+            "location": "Landry, FR",
+            "weather_service": "openweathermapv3",
+            "weather_api_key": "weather-key",
+            "google_api_key": "google-key",
+            "google_staticmaps_mapid": "map-id",
+            "num_hourly_forecasts": 6,
+            "forecast_slice_hours": 3,
+            "forecast_lead_minutes": 15,
+            "metric": True,
+            "netatmo_enabled": False,
+            "mqtt_weather_enabled": False,
+            "mqtt_diagnostics_enabled": False,
+        }
+        previous_answers = install_server.INSTALLER_ANSWERS
+        previous_non_interactive = install_server.NON_INTERACTIVE
+        install_server.INSTALLER_ANSWERS = answers
+        install_server.NON_INTERACTIVE = True
+        try:
+            result = install_server.collect_answers({}, {}, mode="podman")
+        finally:
+            install_server.INSTALLER_ANSWERS = previous_answers
+            install_server.NON_INTERACTIVE = previous_non_interactive
+
+        self.assertEqual(
+            result["mqtt_weather_broker"],
+            "host.containers.internal",
+        )
+        self.assertEqual(result["mqtt_weather_port"], 1883)
+        self.assertEqual(
+            result["mqtt_diagnostics_broker"],
+            "host.containers.internal",
+        )
+        self.assertEqual(result["mqtt_diagnostics_port"], 1883)
+
     def test_weather_choices_match_registered_forecast_providers(self):
         choices = install_server.weather_provider_choices()
 
