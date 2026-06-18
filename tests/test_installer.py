@@ -86,6 +86,7 @@ class InstallerCopyTests(unittest.TestCase):
 
         config = install_server.render_config(answers, mode="docker")
 
+        self.assertIn('  host: "0.0.0.0"', config)
         self.assertIn(
             f"  default: {install_server.DEFAULT_OUTPUT_PROFILE}",
             config,
@@ -113,6 +114,7 @@ class InstallerCopyTests(unittest.TestCase):
 
     def test_rendered_config_uses_refresh_minutes(self):
         answers = {
+            "host": "192.0.2.10",
             "port": 8080,
             "refresh_minutes": 15,
             "weather_service": "openweathermapv3",
@@ -132,7 +134,32 @@ class InstallerCopyTests(unittest.TestCase):
 
         config = install_server.render_config(answers, mode="systemd")
 
+        self.assertIn('  host: "192.0.2.10"', config)
         self.assertIn("  refreshminutes: 15", config)
+
+    def test_rendered_config_quotes_ipv6_bind_address(self):
+        answers = {
+            "host": "::",
+            "port": 8080,
+            "refresh_minutes": 15,
+            "weather_service": "openweathermapv3",
+            "num_hourly_forecasts": 6,
+            "metric": True,
+            "netatmo_enabled": False,
+            "location": "Landry, FR",
+            "mqtt_weather_enabled": False,
+            "mqtt_weather_broker": "",
+            "mqtt_weather_port": 1883,
+            "mqtt_weather_base_topic": "",
+            "mqtt_diagnostics_enabled": False,
+            "mqtt_diagnostics_broker": "",
+            "mqtt_diagnostics_port": 1883,
+            "mqtt_diagnostics_topic": "",
+        }
+
+        config = install_server.render_config(answers, mode="systemd")
+
+        self.assertIn('  host: "::"', config)
 
     def test_podman_config_uses_container_data_path(self):
         answers = {

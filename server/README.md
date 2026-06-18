@@ -54,10 +54,11 @@ It uses the same defaults as the server code and example config: OpenWeatherMap
 v3, port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
 images, and MQTT disabled.
 
-It prompts for the location, weather API key, Google Static Maps API key, Google
-Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
-publishing, optional MQTT diagnostic listening, and whether to start the service
-or container. Secrets are written outside committed YAML:
+It prompts for the server bind IP and port, location, weather API key, Google
+Static Maps API key, Google Static Maps Map ID, optional Netatmo credentials,
+optional MQTT weather publishing, optional MQTT diagnostic listening, and
+whether to start the service or container. Secrets are written outside
+committed YAML:
 
 - Docker or Podman: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
@@ -690,7 +691,20 @@ To use the published image instead of building locally, change the shared
 image: ghcr.io/orangespyderman/inkplate10-weather-cal:main
 ```
 
-The server listens on port `8080` and serves the generated image from:
+The server defaults to all IPv4 interfaces on port `8080`:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+```
+
+Set `host` to a specific local IP to restrict the listener. Use `"::"` to bind
+Gunicorn to IPv6; whether that socket also accepts IPv4 depends on the host's
+dual-stack socket configuration. In Docker or Podman, this address is inside
+the container, while the Compose `ports` mapping controls host exposure.
+
+The generated image is served from:
 
 ```text
 http://localhost:8080/calendar.png

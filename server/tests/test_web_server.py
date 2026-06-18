@@ -11,12 +11,32 @@ import web_server
 
 
 class WebServerTests(unittest.TestCase):
-    def test_builds_gunicorn_command_from_server_port(self):
-        argv = web_server.gunicorn_argv({"server": {"port": 9090}})
+    def test_builds_gunicorn_command_from_server_host_and_port(self):
+        argv = web_server.gunicorn_argv(
+            {"server": {"host": "192.0.2.10", "port": 9090}}
+        )
 
         self.assertEqual(argv[0:3], [sys.executable, "-m", "gunicorn"])
-        self.assertIn("0.0.0.0:9090", argv)
+        self.assertIn("192.0.2.10:9090", argv)
         self.assertEqual(argv[-1], "web:app")
+
+    def test_defaults_to_all_ipv4_interfaces(self):
+        argv = web_server.gunicorn_argv({"server": {"port": 8080}})
+
+        self.assertIn("0.0.0.0:8080", argv)
+
+    def test_formats_ipv6_bind_address_for_gunicorn(self):
+        argv = web_server.gunicorn_argv(
+            {"server": {"host": "::", "port": 8080}}
+        )
+
+        self.assertIn("[::]:8080", argv)
+
+    def test_rejects_hostname_bind_value(self):
+        with self.assertRaisesRegex(ValueError, "IPv4 or IPv6 address"):
+            web_server.gunicorn_argv(
+                {"server": {"host": "weather.local", "port": 8080}}
+            )
 
     @mock.patch("web_server.os.execv")
     @mock.patch("web_server.export_output_profiles")

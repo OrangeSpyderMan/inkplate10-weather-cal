@@ -1,6 +1,7 @@
 ---
 server:
   enabled: true
+  host: "0.0.0.0"
   port: 8080
   # Keep true for Docker and for the browser/PWA viewer at /app.
   # One-shot mode exits and would be restarted repeatedly by Compose.

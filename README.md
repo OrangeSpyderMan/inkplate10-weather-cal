@@ -225,9 +225,10 @@ Run it from the repository root:
 ./bin/install_server
 ```
 
-The installer prompts for the weather provider, API keys, Google Static Maps
-Map ID, location, optional Netatmo details, optional MQTT weather publishing,
-optional MQTT diagnostic listening, and whether to start the service/container.
+The installer prompts for the server bind IP and port, weather provider, API
+keys, Google Static Maps Map ID, location, optional Netatmo details, optional
+MQTT weather publishing, optional MQTT diagnostic listening, and whether to
+start the service/container.
 It keeps secrets out of committed YAML files:
 
 - Docker and Podman installs write secrets to `.env` and config to
