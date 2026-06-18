@@ -2,11 +2,17 @@ services:
   inkplate:
     logging:
       driver: journald
+    volumes:
+      - ./server/config:/srv/inkplate/server/config:ro,Z
 
   producer:
     logging:
       driver: journald
+    volumes:
+      - ./server/config:/srv/inkplate/server/config:ro,Z
 
   diagnostics:
     logging:
       driver: journald
+    volumes:
+      - ./server/config:/srv/inkplate/server/config:ro,Z

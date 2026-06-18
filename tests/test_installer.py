@@ -135,6 +135,83 @@ class InstallerCopyTests(unittest.TestCase):
                 choose_existing_action.assert_not_called()
                 collect_answers.assert_not_called()
 
+    def test_compose_update_makes_existing_config_container_readable(self):
+        for mode, command in (
+            ("docker", ["docker", "compose"]),
+            ("podman", ["podman", "compose"]),
+        ):
+            with self.subTest(mode=mode):
+                with tempfile.TemporaryDirectory() as temporary_dir:
+                    root = pathlib.Path(temporary_dir)
+                    config_path = root / "server" / "config" / "config.yaml"
+                    config_path.parent.mkdir(parents=True)
+                    config_path.write_text(
+                        "server:\n  port: 8080\n",
+                        encoding="utf-8",
+                    )
+                    config_path.chmod(0o600)
+
+                    with mock.patch.object(
+                        install_server,
+                        "check_compose_runtime",
+                        return_value=command,
+                    ):
+                        with mock.patch.object(
+                            install_server,
+                            "choose_existing_action",
+                            return_value="update",
+                        ):
+                            with mock.patch.object(
+                                install_server,
+                                "prompt_yes_no",
+                                return_value=False,
+                            ):
+                                install_server.install_compose(
+                                    root,
+                                    dry_run=False,
+                                    mode=mode,
+                                )
+
+                    self.assertEqual(
+                        config_path.stat().st_mode & 0o777,
+                        0o644,
+                    )
+
+    def test_compose_config_and_env_use_separate_permissions(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = pathlib.Path(temporary_dir)
+            config_path = root / "server" / "config" / "config.yaml"
+            env_path = root / ".env"
+            config_path.parent.mkdir(parents=True)
+
+            install_server.write_text_atomic(
+                config_path,
+                "server:\n",
+                dry_run=False,
+                mode=0o644,
+            )
+            install_server.write_text_atomic(
+                env_path,
+                "SECRET=value\n",
+                dry_run=False,
+                mode=0o600,
+            )
+
+            self.assertEqual(config_path.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(env_path.stat().st_mode & 0o777, 0o600)
+
+    def test_podman_override_relabels_each_config_mount(self):
+        override = (
+            REPO_ROOT / "docker-compose.podman.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            override.count(
+                "./server/config:/srv/inkplate/server/config:ro,Z"
+            ),
+            3,
+        )
+
     @mock.patch.object(install_server, "run")
     @mock.patch.object(install_server, "check_compose_host_port")
     @mock.patch.object(install_server, "prompt_yes_no", return_value=True)
@@ -288,6 +365,20 @@ class InstallerCopyTests(unittest.TestCase):
         )
 
         self.assertIn("INKPLATE_SERVER_PORT=9090", env)
+
+    def test_compose_uses_selected_port_for_mapping_and_healthcheck(self):
+        compose = (REPO_ROOT / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            '"${INKPLATE_SERVER_PORT:-8080}:${INKPLATE_SERVER_PORT:-8080}"',
+            compose,
+        )
+        self.assertIn(
+            "127.0.0.1:${INKPLATE_SERVER_PORT:-8080}/api/v1/ready",
+            compose,
+        )
 
     def test_disabled_mqtt_features_skip_connection_questions(self):
         answers = {

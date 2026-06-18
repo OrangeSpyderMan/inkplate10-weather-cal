@@ -64,11 +64,17 @@ committed YAML:
 - systemd: `/etc/inkplate/weather.env`,
   `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
+For Compose installs, `.env` remains owner-only (`0600`) because it contains
+secrets. The generated YAML contains environment placeholders rather than
+secret values and is written as `0644` so the non-root application user inside
+either Docker or Podman can read the bind-mounted file.
+
 Docker and Podman modes run as the current user. Docker expects `docker compose`
 and daemon access. Podman expects either `podman compose` or `podman-compose`
 and supports rootless operation. Podman automatically layers
 `docker-compose.podman.yml` over the main Compose file so containers use the
-Podman-supported `journald` log driver instead of Docker's `local` driver.
+Podman-supported `journald` log driver instead of Docker's `local` driver and
+applies a private SELinux relabel (`:Z`) to the read-only config bind mount.
 For both runtimes, the installer writes `INKPLATE_SERVER_PORT` to `.env`, and
 Compose uses it for both the published host port and container target port.
 Before building, the installer checks that this host port is free unless this

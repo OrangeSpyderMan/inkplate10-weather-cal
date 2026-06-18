@@ -211,7 +211,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             repo_root / SERVER_CONFIG,
             render_config(answers, mode=mode),
             dry_run=dry_run,
-            mode=0o600,
+            mode=0o644,
         )
         write_text_atomic(
             repo_root / DOCKER_ENV_FILE,
@@ -223,6 +223,8 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             dry_run=dry_run,
             mode=0o600,
         )
+
+    ensure_compose_config_readable(repo_root, dry_run=dry_run)
 
     start_now = prompt_yes_no(
         f"Start or update the {label} containers now?",
@@ -250,6 +252,20 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
         print(f"Start later with: {' '.join(compose_command)} up --build -d")
+
+
+def ensure_compose_config_readable(
+    repo_root: Path,
+    *,
+    dry_run: bool,
+) -> None:
+    config_path = repo_root / SERVER_CONFIG
+    if not config_path.exists():
+        return
+    if dry_run:
+        print(f"Would set {config_path} mode to 0o644")
+        return
+    os.chmod(config_path, 0o644)
 
 
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
