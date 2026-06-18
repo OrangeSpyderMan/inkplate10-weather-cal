@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import logging.config
+from datetime import timedelta
 from mqtt_publisher import MqttWeatherPublisher
 from artifacts import ArtifactStore
 from configuration import load_config
@@ -12,6 +13,7 @@ from producer_config import ProducerConfig, producer_enabled
 from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
 from weather.models import CurrentConditions
+from server_status import ServerStatus, sanitized_error, utc_now
 from weather.providers import (
     ConfigurationError,
     build_forecast_provider,
@@ -88,6 +90,17 @@ def run():
     weather_publisher = build_mqtt_weather_publisher(
         settings.mqtt_weather_config
     )
+    status = ServerStatus(
+        artifact_store,
+        mode="always_on" if settings.always_on else "one_shot",
+        refresh_seconds=settings.refresh_seconds,
+        forecast_provider=settings.weather_service,
+        realtime_provider=settings.realtime_config.get("source", "weather"),
+        profiles=settings.output_profiles,
+        mqtt_publisher=weather_publisher,
+        metadata=None,
+    )
+    status.transition("starting")
 
     weather_svc = build_weather_service(
         settings.weather_service,
@@ -125,10 +138,19 @@ def run():
                 settings.output_profiles,
                 output_renderers,
                 artifact_store,
+                status=status,
+                success_state="ready",
             ):
                 log.error("Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
+            next_refresh_at = utc_now() + timedelta(
+                seconds=settings.refresh_seconds
+            )
+            status.transition(
+                "ready",
+                next_refresh_at=next_refresh_at,
+            )
             log.info(
                 "Sleeping for %s seconds before refresh",
                 settings.refresh_seconds,
@@ -146,6 +168,8 @@ def run():
             settings.output_profiles,
             output_renderers,
             artifact_store,
+            status=status,
+            success_state="completed",
         )
         return 0 if success else 1
 
@@ -263,7 +287,15 @@ def produce_artifacts(
     profiles,
     renderers,
     store=artifact_store,
+    status=None,
+    success_state="ready",
 ):
+    cycle_started_at = utc_now()
+    if status is not None:
+        status.transition(
+            "refreshing",
+            cycle_started_at=cycle_started_at,
+        )
     log.info("Retrieving forecast data")
     try:
         snapshot = build_weather_snapshot(
@@ -274,6 +306,12 @@ def produce_artifacts(
         )
     except Exception as exc:
         log.exception("An error occurred whilst getting weather data: %s", exc)
+        if status is not None:
+            status.transition(
+                "degraded",
+                failure_at=utc_now(),
+                error=sanitized_error("weather", exc),
+            )
         return False
 
     try:
@@ -289,9 +327,21 @@ def produce_artifacts(
         store.write_ready(snapshot, profiles)
     except Exception as exc:
         log.exception("An error occurred whilst creating artifacts: %s", exc)
+        if status is not None:
+            status.transition(
+                "degraded",
+                failure_at=utc_now(),
+                error=sanitized_error("render", exc),
+            )
         return False
 
     publish_weather_snapshot(weather_publisher, snapshot)
+    if status is not None:
+        status.transition(
+            success_state,
+            success_at=utc_now(),
+            weather_generated_at=snapshot.generated_at,
+        )
     return True
 
 
@@ -316,9 +366,9 @@ def build_mqtt_weather_publisher(mqtt_config):
 
 def publish_weather_snapshot(weather_publisher, snapshot):
     if weather_publisher is None:
-        return
+        return {"success": True, "error": None}
 
-    weather_publisher.publish_snapshot(snapshot)
+    return weather_publisher.publish_snapshot(snapshot)
 
 
 if __name__ == "__main__":

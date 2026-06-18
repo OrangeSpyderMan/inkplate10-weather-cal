@@ -53,8 +53,14 @@ class OpenWeatherMapv3Service(WeatherService):
     def _daily_summary(self, data):
         if self.units == "metric":
             units = "\N{DEGREE SIGN}C"
+            speed_units = "m/s"
+            rain_units = "mm"
+            rain_rate_units = "mm/h"
         else:
             units = "\N{DEGREE SIGN}F"
+            speed_units = "mph"
+            rain_units = "in"
+            rain_rate_units = "in/h"
 
         forecast = {
             "icon": self.get_icon(data["current"]["weather"][0]["icon"]),
@@ -65,6 +71,26 @@ class OpenWeatherMapv3Service(WeatherService):
                 "max": round(data["daily"][0]["temp"]["max"]),
             },
         }
+        if "wind_speed" in data["current"]:
+            forecast["wind"] = {
+                "unit": speed_units,
+                "value": data["current"]["wind_speed"],
+            }
+            if data["current"].get("wind_gust") is not None:
+                forecast["wind"]["gust"] = data["current"]["wind_gust"]
+            if data["current"].get("wind_deg") is not None:
+                forecast["wind"]["direction"] = data["current"]["wind_deg"]
+        rain_last_hour = (data["current"].get("rain") or {}).get("1h")
+        if rain_last_hour is not None:
+            if self.units != "metric":
+                rain_last_hour *= 0.0393701
+            forecast["rain"] = {
+                "unit": rain_units,
+                "value": round(rain_last_hour, 2),
+                "last_hour": round(rain_last_hour, 2),
+                "rate_unit": rain_rate_units,
+                "rate_basis": "last_hour_average",
+            }
 
         return forecast
 

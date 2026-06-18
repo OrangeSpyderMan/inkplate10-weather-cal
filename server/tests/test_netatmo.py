@@ -79,8 +79,11 @@ class NetatmoRealtimeServiceTests(unittest.TestCase):
                 "value": 18,
                 "gust": 27,
                 "direction": 245,
+                "direction_cardinal": "WSW",
             },
         )
+        self.assertEqual(conditions.rain.rate_unit, "mm/h")
+        self.assertEqual(conditions.rain.rate_basis, "instantaneous")
         self.assertEqual(conditions.rain.value, 0.4)
         self.assertEqual(conditions.rain.last_hour, 1.2)
         self.assertEqual(conditions.rain.last_24_hours, 4.8)

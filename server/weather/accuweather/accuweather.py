@@ -124,16 +124,29 @@ class AccuweatherService(WeatherService):
             units_key = "Imperial"
 
         data = data[0]
+        wind = {
+            "unit": speed_units,
+            "value": data["Wind"]["Speed"][units_key]["Value"],
+        }
+        gust = (
+            data.get("WindGust", {})
+            .get("Speed", {})
+            .get(units_key, {})
+            .get("Value")
+        )
+        direction = data.get("Wind", {}).get("Direction", {}).get("Degrees")
+        if gust is not None:
+            wind["gust"] = gust
+        if direction is not None:
+            wind["direction"] = direction
+
         conditions = {
             "icon": self.get_icon(data["WeatherIcon"]),
             "temperature": {
                 "unit": temp_units,
                 "value": round(data["Temperature"][units_key]["Value"]),
             },
-            "wind": {
-                "unit": speed_units,
-                "value": data["Wind"]["Speed"][units_key]["Value"],
-            },
+            "wind": wind,
             "humidity": data["RelativeHumidity"],
         }
 

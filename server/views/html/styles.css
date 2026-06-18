@@ -94,49 +94,121 @@ h4.numcircle, #icon-container.numcircle {
   right: 2vw;
 }
 
-#weather-alert {
-  height: 6.5vw;
-  left: -4.5vw;
+#top-banner #rain {
   position: absolute;
-  top: -3vw;
-  width: 7.5vw;
+  top: 20vh;
+  left: 2vw;
+}
+
+#top-banner #wind {
+  position: absolute;
+  top: 35vh;
+  left: 2vw;
+}
+
+.measurement-circle {
+  align-items: center;
+  background: transparent;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 15vw;
+  isolation: isolate;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  width: 15vw;
+}
+
+.measurement-circle::before {
+  background: #000;
+  clip-path: circle(50% at 50% 50%);
+  content: "";
+  inset: 0;
+  position: absolute;
+  z-index: -1;
+}
+
+.measurement-value {
+  font-size: 5.8vw;
+  line-height: 1;
+}
+
+.measurement-unit {
+  font-family: "Merienda-Regular";
+  font-size: 2.1vw;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+#rain .measurement-unit {
+  margin-top: 0.5vw;
+}
+
+#wind {
+  justify-content: center;
+}
+
+.wind-compass-badge,
+#weather-alert {
+  align-items: center;
+  background: #fff;
+  border: 0.35vw solid #000;
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: flex;
+  height: 6.5vw;
+  justify-content: center;
+  position: absolute;
+  width: 6.5vw;
   z-index: 2;
 }
 
-#weather-alert::before,
-#weather-alert::after {
-  border-left: 3.75vw solid transparent;
-  border-right: 3.75vw solid transparent;
-  content: "";
-  left: 0;
-  position: absolute;
+.wind-compass-badge {
+  right: -3vw;
+  top: -2.5vw;
 }
 
-#weather-alert::before {
-  border-bottom: 6.5vw solid #000;
-  top: 0;
+.wind-compass {
+  display: block;
+  height: 5.1vw;
+  transform: rotate(calc(var(--wind-direction) - 45deg));
+  width: 5.1vw;
 }
 
-#weather-alert::after {
-  border-bottom: 5vw solid #fff;
-  border-left-width: 2.9vw;
-  border-right-width: 2.9vw;
-  left: 0.85vw;
-  top: 0.85vw;
+.wind-direction {
+  font-family: "Merienda-Bold";
+  font-size: 2.4vw;
+  line-height: 1.15;
 }
 
-#weather-alert span {
-  color: #000;
-  font-family: sans-serif;
-  font-size: 4vw;
-  font-weight: 900;
-  left: 0;
-  line-height: 1;
-  position: absolute;
-  text-align: center;
-  top: 1.75vw;
-  width: 100%;
-  z-index: 3;
+.wind-speed {
+  align-items: baseline;
+  display: flex;
+  gap: 0.4vw;
+  justify-content: center;
+}
+
+#wind .measurement-value {
+  font-size: 4.2vw;
+}
+
+#wind .measurement-unit {
+  font-size: 1.65vw;
+}
+
+#weather-alert {
+  left: -3vw;
+  top: -2.5vw;
+}
+
+#icon-container.numcircle #weather-alert img {
+  bottom: auto;
+  filter: none;
+  height: 5vw;
+  left: auto;
+  position: static;
+  width: 5vw;
 }
 
 .numcircle.live-icon {
@@ -316,4 +388,14 @@ h4.numcircle, #icon-container.numcircle {
 #rain-temp-chart {
   display: block;
   margin: 0 auto;
+}
+
+#last-refreshed {
+  bottom: 0.8vw;
+  font-family: "Merienda-Regular";
+  font-size: 1.8vw;
+  line-height: 1;
+  position: absolute;
+  right: 2.5vw;
+  white-space: nowrap;
 }

@@ -52,6 +52,51 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
 
+    def test_status_is_unavailable_before_producer_writes_state(self):
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["status"], "unavailable")
+
+    def test_status_overlays_current_artifact_readiness(self):
+        ArtifactStore.write_json(
+            self.store.status_path,
+            {
+                "schema_version": "1.0",
+                "updated_at": "2026-06-18T10:00:00+00:00",
+                "producer": {"state": "ready"},
+                "readiness": {
+                    "snapshot": True,
+                    "outputs": {DEFAULT_OUTPUT_PROFILE: True},
+                    "producer_cycle_complete": True,
+                },
+            },
+        )
+
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["readiness"]["snapshot"])
+        self.assertFalse(
+            response.get_json()["readiness"]["producer_cycle_complete"]
+        )
+
+    def test_serves_status_dashboard_assets(self):
+        page = self.client.get("/status")
+        trailing = self.client.get("/status/")
+        css = self.client.get("/status.css")
+        javascript = self.client.get("/status.js")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(trailing.status_code, 200)
+        self.assertIn(b"Server status", page.data)
+        self.assertIn(b"/api/v1/status", javascript.data)
+        self.assertIn(b"grid-template-columns", css.data)
+        page.close()
+        trailing.close()
+        css.close()
+        javascript.close()
+
     def test_weather_and_readiness_are_unavailable_without_artifacts(self):
         weather = self.client.get("/api/v1/weather")
         ready = self.client.get("/api/v1/ready")

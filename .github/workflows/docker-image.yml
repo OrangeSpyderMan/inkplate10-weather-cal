@@ -62,6 +62,7 @@ jobs:
           docker run --rm inkplate10-weather-cal:ci firefox --version
           docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
             server/server.py \
+            server/server_status.py \
             server/web.py \
             server/web_server.py \
             server/mqtt_diagnostics_server.py \
@@ -122,6 +123,12 @@ jobs:
               },
           }
           (root / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+          (root / "server-status.json").write_text(json.dumps({
+              "schema_version": "1.0",
+              "updated_at": "2026-06-09T00:00:00+00:00",
+              "producer": {"state": "ready"},
+              "readiness": {},
+          }), encoding="utf-8")
           PY
           docker run --rm -d --name inkplate-web-ci \
             -p 18080:8080 \
@@ -140,5 +147,7 @@ jobs:
           curl --fail http://127.0.0.1:18080/api/v1/health
           curl --fail http://127.0.0.1:18080/api/v1/ready
           curl --fail http://127.0.0.1:18080/api/v1/weather
+          curl --fail http://127.0.0.1:18080/api/v1/status
+          curl --fail http://127.0.0.1:18080/status
           curl --fail http://127.0.0.1:18080/outputs/inkplate10-portrait/calendar.png
           curl --fail http://127.0.0.1:18080/calendar.png

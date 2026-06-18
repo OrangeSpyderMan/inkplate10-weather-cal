@@ -168,12 +168,18 @@ The first version intentionally keeps the layout simple:
 
 - current temperature
 - current icon name rendered as text
+- current wind speed and cardinal direction when available
+- current rain rate when available
 - forecast source/status time
-- first four hourly forecast entries
+- first three hourly forecast entries
 
 The weather icon path from MQTT is converted to a short label such as `Rain`,
 `Cloudy`, or `Clear`. This keeps the client useful before adding bitmap icon
 assets.
+
+Wind and rain are read from the `current.wind` and `current.rain` objects in
+the retained full snapshot. Wind in `m/s` is converted to `km/h` for the
+display. Missing measurements are shown as `W --` or `R --`.
 
 ## Notes
 

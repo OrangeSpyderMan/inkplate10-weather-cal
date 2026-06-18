@@ -14,6 +14,7 @@ from weather.models import (
     Rain,
     Temperature,
     Wind,
+    cardinal_direction,
 )
 
 
@@ -100,6 +101,30 @@ class WeatherModelTests(unittest.TestCase):
                 ),
                 hourly=[],
             ).validate()
+
+    def test_serializes_wind_cardinal_and_rain_rate_metadata(self):
+        conditions = CurrentConditions(
+            wind=Wind(unit="kmh", value=18, direction=245),
+            rain=Rain(
+                unit="mm",
+                value=0.4,
+                rate_unit="mm/h",
+                rate_basis="instantaneous",
+            ),
+        )
+
+        payload = conditions.to_dict()
+
+        self.assertEqual(payload["wind"]["direction_cardinal"], "WSW")
+        self.assertEqual(payload["rain"]["rate_unit"], "mm/h")
+        self.assertEqual(payload["rain"]["rate_basis"], "instantaneous")
+
+    def test_cardinal_direction_boundaries_wrap(self):
+        self.assertEqual(cardinal_direction(0), "N")
+        self.assertEqual(cardinal_direction(11.24), "N")
+        self.assertEqual(cardinal_direction(11.25), "NNE")
+        self.assertEqual(cardinal_direction(360), "N")
+        self.assertEqual(cardinal_direction(-90), "W")
 
 
 if __name__ == "__main__":

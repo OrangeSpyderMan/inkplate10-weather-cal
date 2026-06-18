@@ -20,6 +20,10 @@ class ArtifactStore:
     def ready_path(self):
         return self.root / "ready.json"
 
+    @property
+    def status_path(self):
+        return self.root / "server-status.json"
+
     def output_path(self, profile, filename):
         return self.root / "outputs" / profile / filename
 
@@ -49,6 +53,13 @@ class ArtifactStore:
                 "outputs": outputs,
             },
         )
+
+    def write_status(self, status):
+        self.write_json(self.status_path, status)
+
+    def read_status(self):
+        with self.status_path.open(encoding="utf-8") as status_file:
+            return json.load(status_file)
 
     def output_status(self, profiles):
         status = {name: False for name in profiles}

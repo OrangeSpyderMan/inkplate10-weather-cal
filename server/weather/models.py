@@ -2,6 +2,33 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 
+CARDINAL_DIRECTIONS = (
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
+)
+
+
+def cardinal_direction(degrees):
+    if degrees is None:
+        return None
+    normalized = float(degrees) % 360
+    return CARDINAL_DIRECTIONS[int((normalized + 11.25) // 22.5) % 16]
+
+
 @dataclass
 class Temperature:
     unit: str
@@ -73,6 +100,9 @@ class Wind:
                 value[key] = item
         if self.live:
             value["live"] = True
+        direction_cardinal = cardinal_direction(self.direction)
+        if direction_cardinal is not None:
+            value["direction_cardinal"] = direction_cardinal
         return value
 
     @classmethod
@@ -95,6 +125,8 @@ class Rain:
     last_24_hours: float | None = None
     source: str | None = None
     live: bool = False
+    rate_unit: str | None = None
+    rate_basis: str | None = None
 
     def to_dict(self):
         value = {"unit": self.unit, "value": self.value}
@@ -102,6 +134,8 @@ class Rain:
             ("last_hour", self.last_hour),
             ("last_24_hours", self.last_24_hours),
             ("source", self.source),
+            ("rate_unit", self.rate_unit),
+            ("rate_basis", self.rate_basis),
         ):
             if item is not None:
                 value[key] = item
@@ -118,6 +152,8 @@ class Rain:
             last_24_hours=value.get("last_24_hours"),
             source=value.get("source"),
             live=value.get("live", False),
+            rate_unit=value.get("rate_unit"),
+            rate_basis=value.get("rate_basis"),
         )
 
 

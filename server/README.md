@@ -294,9 +294,13 @@ weather refresh:
 
 ```text
 inkplate/weather-calendar
+inkplate/weather-calendar/generated_at
 inkplate/weather-calendar/current
 inkplate/weather-calendar/hourly
 inkplate/weather-calendar/status
+inkplate/weather-calendar/current/rain
+inkplate/weather-calendar/current/wind
+inkplate/weather-calendar/server/status
 ```
 
 Publishing failures are logged but do not stop image generation or HTTP
@@ -321,6 +325,18 @@ are exposed under `current.alerts`.
 The current payload schema is `2.0`. Wind measurements use `wind.value`;
 the OpenWeatherMap v4-specific `wind.real` field from schema `1.0` has been
 removed.
+
+Operational producer state is exposed separately:
+
+```text
+GET /api/v1/status
+GET /status
+```
+
+The JSON endpoint reports refresh state and timestamps, provider names,
+artifact readiness, MQTT publication state, runtime metadata, and the latest
+sanitized error. The HTML dashboard polls that endpoint every 10 seconds.
+Status data never includes provider credentials, tokens, or tracebacks.
 
 Generated display artifacts use named output profiles:
 

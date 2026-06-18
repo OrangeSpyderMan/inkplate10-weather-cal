@@ -97,7 +97,7 @@ class Ili9341Display:
     def show_snapshot(self, payload):
         lines = render_lines(payload)
         self.display.erase()
-        colors = [CYAN, WHITE, GREEN, WHITE, WHITE, WHITE, WHITE]
+        colors = [CYAN, WHITE, GREEN, WHITE, WHITE, WHITE, WHITE, WHITE]
         y = 8
         for index, line in enumerate(lines):
             self._print(8, y, line, colors[min(index, len(colors) - 1)])
@@ -129,14 +129,60 @@ def render_lines(payload):
     lines = [
         "Inkplate Weather",
         "Now: {} {}".format(temp, icon),
+        current_measurements_line(current),
         status[:26],
         generated_at[:26],
     ]
 
-    for item in hourly[:4]:
+    for item in hourly[:3]:
         lines.append(hourly_line(item))
 
     return lines
+
+
+def current_measurements_line(current):
+    return "{}  {}".format(
+        wind_text(current.get("wind")),
+        rain_text(current.get("rain")),
+    )[:28]
+
+
+def wind_text(wind):
+    if not wind or wind.get("value") is None:
+        return "W --"
+
+    value = float(wind["value"])
+    unit = wind.get("unit", "")
+    if unit == "m/s":
+        value *= 3.6
+        unit = "km/h"
+    elif unit == "kmh":
+        unit = "km/h"
+
+    direction = wind.get("direction_cardinal", "")
+    return "W {}{} {}".format(
+        measurement_text(value),
+        unit,
+        direction,
+    ).rstrip()
+
+
+def rain_text(rain):
+    if not rain or rain.get("value") is None:
+        return "R --"
+
+    unit = rain.get("rate_unit")
+    if not unit:
+        unit = rain.get("unit", "")
+        if unit:
+            unit += "/h"
+
+    return "R {}{}".format(measurement_text(rain["value"]), unit)
+
+
+def measurement_text(value):
+    rounded = round(float(value), 1)
+    return str(int(rounded)) if rounded == int(rounded) else str(rounded)
 
 
 def hourly_line(item):
@@ -215,4 +261,5 @@ def main():
         time.sleep(IDLE_SLEEP_SECONDS)
 
 
-main()
+if __name__ == "__main__":
+    main()

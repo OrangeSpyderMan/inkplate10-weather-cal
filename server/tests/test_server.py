@@ -182,6 +182,7 @@ class ProducerTests(unittest.TestCase):
             }
             renderers = {"inkplate10-portrait": mock.Mock()}
             output = store.output_path("inkplate10-portrait", "calendar.png")
+            status = mock.Mock()
 
             def render(*args):
                 output.parent.mkdir(parents=True)
@@ -199,6 +200,8 @@ class ProducerTests(unittest.TestCase):
                 profiles,
                 renderers,
                 store,
+                status=status,
+                success_state="completed",
             )
 
             self.assertTrue(success)
@@ -206,6 +209,15 @@ class ProducerTests(unittest.TestCase):
             self.assertTrue(store.ready_path.is_file())
             self.assertTrue(store.producer_cycle_complete(profiles))
             publish_snapshot.assert_called_once()
+            self.assertEqual(status.transition.call_count, 2)
+            self.assertEqual(
+                status.transition.call_args_list[0].args[0],
+                "refreshing",
+            )
+            self.assertEqual(
+                status.transition.call_args_list[1].args[0],
+                "completed",
+            )
 
     @mock.patch("server.render_outputs", side_effect=RuntimeError("render"))
     @mock.patch("server.publish_weather_snapshot")
@@ -229,6 +241,7 @@ class ProducerTests(unittest.TestCase):
                 )
             }
             renderers = {"inkplate10-portrait": mock.Mock()}
+            status = mock.Mock()
 
             success = server.produce_artifacts(
                 mock.Mock(),
@@ -240,9 +253,19 @@ class ProducerTests(unittest.TestCase):
                 profiles,
                 renderers,
                 store,
+                status=status,
             )
 
             self.assertFalse(success)
             self.assertFalse(store.snapshot_path.exists())
             self.assertFalse(store.ready_path.exists())
             publish_snapshot.assert_not_called()
+            self.assertEqual(status.transition.call_count, 2)
+            self.assertEqual(
+                status.transition.call_args_list[1].args[0],
+                "degraded",
+            )
+            self.assertEqual(
+                status.transition.call_args_list[1].kwargs["error"]["stage"],
+                "render",
+            )

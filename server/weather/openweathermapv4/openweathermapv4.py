@@ -41,8 +41,9 @@ class OpenWeatherMapv4Service(WeatherService):
         current = current_records[0]
         daily = daily_records[0]
         alert_ids = current.get("alerts") or []
+        metric = self.units == "metric"
 
-        return {
+        summary = {
             "icon": self.get_icon(current["weather"][0]["icon"]),
             "alerts": {
                 "active": bool(alert_ids),
@@ -55,6 +56,27 @@ class OpenWeatherMapv4Service(WeatherService):
                 "max": round(self._temperature_value(daily["temp"]["max"])),
             },
         }
+        if "wind_speed" in current:
+            summary["wind"] = {
+                "unit": "m/s" if metric else "mph",
+                "value": current["wind_speed"],
+            }
+            if current.get("wind_gust") is not None:
+                summary["wind"]["gust"] = current["wind_gust"]
+            if current.get("wind_deg") is not None:
+                summary["wind"]["direction"] = current["wind_deg"]
+        rain_last_hour = (current.get("rain") or {}).get("1h")
+        if rain_last_hour is not None:
+            if not metric:
+                rain_last_hour *= 0.0393701
+            summary["rain"] = {
+                "unit": "mm" if metric else "in",
+                "value": round(rain_last_hour, 2),
+                "last_hour": round(rain_last_hour, 2),
+                "rate_unit": "mm/h" if metric else "in/h",
+                "rate_basis": "last_hour_average",
+            }
+        return summary
 
     def fetch(self):
         return ForecastData.from_dicts(
