@@ -69,6 +69,11 @@ and daemon access. Podman expects either `podman compose` or `podman-compose`
 and supports rootless operation. Podman automatically layers
 `docker-compose.podman.yml` over the main Compose file so containers use the
 Podman-supported `journald` log driver instead of Docker's `local` driver.
+For both runtimes, the installer writes `INKPLATE_SERVER_PORT` to `.env`, and
+Compose uses it for both the published host port and container target port.
+Before building, the installer checks that this host port is free unless this
+Compose project's web container is already running there. If another process
+owns the port, choose a different Server port or stop the existing listener.
 Native systemd mode needs root privileges for
 package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
 Geckodriver, and systemd service management. Run it as root or as a user that

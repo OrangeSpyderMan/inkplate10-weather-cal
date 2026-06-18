@@ -16,6 +16,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -201,6 +202,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         print("No changes made.")
         return
 
+    answers = None
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(repo_root))
@@ -213,16 +215,31 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         )
         write_text_atomic(
             repo_root / DOCKER_ENV_FILE,
-            render_env(answers, include_optional=answers["netatmo_enabled"]),
+            render_env(
+                answers,
+                include_optional=answers["netatmo_enabled"],
+                compose=True,
+            ),
             dry_run=dry_run,
             mode=0o600,
         )
 
-    if prompt_yes_no(
+    start_now = prompt_yes_no(
         f"Start or update the {label} containers now?",
         default=True,
         key="start_now",
-    ):
+    )
+    if start_now:
+        if answers is not None:
+            port = int(answers["port"])
+        else:
+            config = read_simple_yaml(existing_config_path(repo_root))
+            port = int(config.get("server.port", DEFAULT_PORT))
+        check_compose_host_port(
+            compose_command,
+            port,
+            dry_run=dry_run,
+        )
         try:
             run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
         except subprocess.CalledProcessError as exc:
@@ -671,12 +688,20 @@ def render_config(answers: dict[str, object], mode: str) -> str:
     return "\n".join(lines)
 
 
-def render_env(answers: dict[str, object], include_optional: bool) -> str:
+def render_env(
+    answers: dict[str, object],
+    include_optional: bool,
+    compose: bool = False,
+) -> str:
     values = {
         "WEATHER_API_KEY": str(answers["weather_api_key"]),
         "GOOGLE_API_KEY": str(answers["google_api_key"]),
         "GOOGLE_STATICMAPS_MAPID": str(answers["google_staticmaps_mapid"]),
     }
+    if compose:
+        values["INKPLATE_SERVER_PORT"] = str(
+            answers.get("port", DEFAULT_PORT)
+        )
     if include_optional:
         values.update(
             {
@@ -710,6 +735,49 @@ def check_compose_runtime(mode: str, dry_run: bool) -> list[str]:
         check_docker_compose(dry_run)
         return ["docker", "compose"]
     return check_podman_compose(dry_run)
+
+
+def check_compose_host_port(
+    compose_command: list[str],
+    port: int,
+    *,
+    dry_run: bool,
+) -> None:
+    if dry_run:
+        print(f"Would check: host TCP port {port} is available")
+        return
+    if compose_service_is_running(compose_command, "inkplate"):
+        return
+    if tcp_port_is_available(port):
+        return
+    raise SystemExit(
+        f"ERROR: host TCP port {port} is already in use. "
+        "Stop the existing listener or rerun the installer and choose a "
+        "different Server port. Inspect it with: "
+        f"ss -ltnp 'sport = :{port}'"
+    )
+
+
+def compose_service_is_running(
+    compose_command: list[str],
+    service: str,
+) -> bool:
+    result = subprocess.run(
+        [*compose_command, "ps", "-q", service],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def tcp_port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind(("0.0.0.0", port))
+        except OSError:
+            return False
+    return True
 
 
 def check_docker_compose(dry_run: bool) -> None:

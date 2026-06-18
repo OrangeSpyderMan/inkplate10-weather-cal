@@ -136,6 +136,7 @@ class InstallerCopyTests(unittest.TestCase):
                 collect_answers.assert_not_called()
 
     @mock.patch.object(install_server, "run")
+    @mock.patch.object(install_server, "check_compose_host_port")
     @mock.patch.object(install_server, "prompt_yes_no", return_value=True)
     @mock.patch.object(
         install_server,
@@ -152,6 +153,7 @@ class InstallerCopyTests(unittest.TestCase):
         check_compose_runtime,
         choose_existing_action,
         prompt_yes_no,
+        check_compose_host_port,
         run,
     ):
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -174,12 +176,24 @@ class InstallerCopyTests(unittest.TestCase):
             ],
             dry_run=False,
         )
+        check_compose_host_port.assert_called_once_with(
+            [
+                "podman-compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.podman.yml",
+            ],
+            8080,
+            dry_run=False,
+        )
 
     @mock.patch.object(
         install_server,
         "run",
         side_effect=subprocess.CalledProcessError(125, ["podman", "compose"]),
     )
+    @mock.patch.object(install_server, "check_compose_host_port")
     @mock.patch.object(install_server, "prompt_yes_no", return_value=True)
     @mock.patch.object(
         install_server,
@@ -196,6 +210,7 @@ class InstallerCopyTests(unittest.TestCase):
         check_compose_runtime,
         choose_existing_action,
         prompt_yes_no,
+        check_compose_host_port,
         run,
     ):
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -208,6 +223,71 @@ class InstallerCopyTests(unittest.TestCase):
                     dry_run=False,
                     mode="podman",
                 )
+
+    @mock.patch.object(install_server, "compose_service_is_running")
+    @mock.patch.object(install_server, "tcp_port_is_available")
+    def test_compose_port_check_rejects_collision_for_docker_and_podman(
+        self,
+        tcp_port_is_available,
+        compose_service_is_running,
+    ):
+        compose_service_is_running.return_value = False
+        tcp_port_is_available.return_value = False
+
+        for command in (
+            ["docker", "compose"],
+            [
+                "podman",
+                "compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.podman.yml",
+            ],
+        ):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(
+                    SystemExit,
+                    "host TCP port 8080 is already in use",
+                ):
+                    install_server.check_compose_host_port(
+                        command,
+                        8080,
+                        dry_run=False,
+                    )
+
+    @mock.patch.object(
+        install_server,
+        "compose_service_is_running",
+        return_value=True,
+    )
+    @mock.patch.object(install_server, "tcp_port_is_available")
+    def test_compose_port_check_allows_own_running_service(
+        self,
+        tcp_port_is_available,
+        compose_service_is_running,
+    ):
+        install_server.check_compose_host_port(
+            ["docker", "compose"],
+            8080,
+            dry_run=False,
+        )
+
+        tcp_port_is_available.assert_not_called()
+
+    def test_compose_env_uses_selected_server_port(self):
+        env = install_server.render_env(
+            {
+                "weather_api_key": "weather",
+                "google_api_key": "google",
+                "google_staticmaps_mapid": "map",
+                "port": 9090,
+            },
+            include_optional=False,
+            compose=True,
+        )
+
+        self.assertIn("INKPLATE_SERVER_PORT=9090", env)
 
     def test_disabled_mqtt_features_skip_connection_questions(self):
         answers = {
