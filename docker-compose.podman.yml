@@ -1,0 +1,12 @@
+services:
+  inkplate:
+    logging:
+      driver: journald
+
+  producer:
+    logging:
+      driver: journald
+
+  diagnostics:
+    logging:
+      driver: journald

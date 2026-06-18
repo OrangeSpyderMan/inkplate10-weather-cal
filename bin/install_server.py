@@ -49,6 +49,7 @@ DIAGNOSTICS_SERVICE_FILE = Path(
 )
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
+PODMAN_COMPOSE_OVERRIDE = Path("docker-compose.podman.yml")
 DEFAULT_PORT = 8080
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_REFRESH_MINUTES = 180
@@ -163,6 +164,7 @@ def ensure_repo_root(repo_root: Path) -> None:
         repo_root / "server" / "web_server.py",
         repo_root / "server" / "requirements.txt",
         repo_root / "docker-compose.yml",
+        repo_root / PODMAN_COMPOSE_OVERRIDE,
         repo_root / "bin" / "inkplate.service",
         repo_root / "bin" / "inkplate-producer.service",
         repo_root / "bin" / "inkplate-diagnostics.service",
@@ -178,6 +180,14 @@ def ensure_repo_root(repo_root: Path) -> None:
 def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
     label = "Docker" if mode == "docker" else "Podman"
     compose_command = check_compose_runtime(mode, dry_run)
+    if mode == "podman":
+        compose_command = [
+            *compose_command,
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            str(PODMAN_COMPOSE_OVERRIDE),
+        ]
     existing = [
         path
         for path in (
@@ -213,7 +223,13 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         default=True,
         key="start_now",
     ):
-        run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+        try:
+            run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+        except subprocess.CalledProcessError as exc:
+            raise SystemExit(
+                f"ERROR: {label} Compose failed with exit status "
+                f"{exc.returncode}. Review the errors above."
+            ) from None
         print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
         print(f"Start later with: {' '.join(compose_command)} up --build -d")

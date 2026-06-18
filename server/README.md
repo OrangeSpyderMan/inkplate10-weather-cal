@@ -66,7 +66,10 @@ committed YAML:
 
 Docker and Podman modes run as the current user. Docker expects `docker compose`
 and daemon access. Podman expects either `podman compose` or `podman-compose`
-and supports rootless operation. Native systemd mode needs root privileges for
+and supports rootless operation. Podman automatically layers
+`docker-compose.podman.yml` over the main Compose file so containers use the
+Podman-supported `journald` log driver instead of Docker's `local` driver.
+Native systemd mode needs root privileges for
 package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
 Geckodriver, and systemd service management. Run it as root or as a user that
 can elevate with `sudo`, `doas`, or `run0`; the installer checks this before

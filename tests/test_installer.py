@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import pathlib
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -133,6 +134,80 @@ class InstallerCopyTests(unittest.TestCase):
                 check_runtime.assert_called_once_with(mode, False)
                 choose_existing_action.assert_not_called()
                 collect_answers.assert_not_called()
+
+    @mock.patch.object(install_server, "run")
+    @mock.patch.object(install_server, "prompt_yes_no", return_value=True)
+    @mock.patch.object(
+        install_server,
+        "choose_existing_action",
+        return_value="update",
+    )
+    @mock.patch.object(
+        install_server,
+        "check_compose_runtime",
+        return_value=["podman-compose"],
+    )
+    def test_podman_uses_logging_override(
+        self,
+        check_compose_runtime,
+        choose_existing_action,
+        prompt_yes_no,
+        run,
+    ):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            install_server.install_compose(
+                pathlib.Path(temporary_dir),
+                dry_run=False,
+                mode="podman",
+            )
+
+        run.assert_called_once_with(
+            [
+                "podman-compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.podman.yml",
+                "up",
+                "--build",
+                "-d",
+            ],
+            dry_run=False,
+        )
+
+    @mock.patch.object(
+        install_server,
+        "run",
+        side_effect=subprocess.CalledProcessError(125, ["podman", "compose"]),
+    )
+    @mock.patch.object(install_server, "prompt_yes_no", return_value=True)
+    @mock.patch.object(
+        install_server,
+        "choose_existing_action",
+        return_value="update",
+    )
+    @mock.patch.object(
+        install_server,
+        "check_compose_runtime",
+        return_value=["podman", "compose"],
+    )
+    def test_compose_failure_exits_without_python_traceback(
+        self,
+        check_compose_runtime,
+        choose_existing_action,
+        prompt_yes_no,
+        run,
+    ):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            with self.assertRaisesRegex(
+                SystemExit,
+                "Podman Compose failed with exit status 125",
+            ):
+                install_server.install_compose(
+                    pathlib.Path(temporary_dir),
+                    dry_run=False,
+                    mode="podman",
+                )
 
     def test_disabled_mqtt_features_skip_connection_questions(self):
         answers = {
