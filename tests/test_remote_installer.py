@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import tarfile
 import tempfile
@@ -45,6 +46,17 @@ def arguments(**overrides):
 
 
 class RemoteInstallerTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_cleanly(self):
+        stderr = io.StringIO()
+
+        with mock.patch("sys.stderr", stderr):
+            result = install_remote.run_cli(
+                mock.Mock(side_effect=KeyboardInterrupt)
+            )
+
+        self.assertEqual(result, 130)
+        self.assertEqual(stderr.getvalue(), "\nRemote installer cancelled.\n")
+
     def test_builds_ssh_command_without_disabling_host_key_checks(self):
         args = arguments(
             port=2222,

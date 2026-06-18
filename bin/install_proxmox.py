@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -94,6 +95,7 @@ def main() -> int:
 
     print("Experimental Proxmox VE 9 OCI/LXC installer")
     print("-------------------------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     print("Fresh installations only. Existing CTs are never replaced.")
     if args.dry_run:
         print("Dry run: commands and generated files will only be previewed.")
@@ -725,5 +727,13 @@ def run(cmd: list[str], dry_run: bool = False, check: bool = True):
     return subprocess.run(cmd, check=check, text=True)
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nProxmox installer cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

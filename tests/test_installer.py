@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import tempfile
 import unittest
@@ -13,6 +14,17 @@ SPEC.loader.exec_module(install_server)
 
 
 class InstallerCopyTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_cleanly(self):
+        stderr = io.StringIO()
+
+        with mock.patch("sys.stderr", stderr):
+            result = install_server.run_cli(
+                mock.Mock(side_effect=KeyboardInterrupt)
+            )
+
+        self.assertEqual(result, 130)
+        self.assertEqual(stderr.getvalue(), "\nInstaller cancelled.\n")
+
     def test_container_host_aliases_match_runtime(self):
         self.assertEqual(
             install_server.container_host_alias("docker"),

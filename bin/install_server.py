@@ -99,6 +99,7 @@ def main() -> int:
 
     print("Inkplate Weather Calendar server installer")
     print("------------------------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     if args.dry_run:
         print("Dry run: no files will be written and no commands will be run.")
     print()
@@ -1276,5 +1277,13 @@ def unquote_env_value(value: str) -> str:
     return value
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nInstaller cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

@@ -29,6 +29,7 @@ def main() -> int:
 
     print("Inkplate remote installer")
     print("--------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     print(f"Target: {args.target}")
     print(f"Mode: {args.mode}")
     print(f"Remote command: {shlex.join(installer_args)}")
@@ -425,5 +426,13 @@ def cleanup_remote(ssh: list[str], remote_dir: str) -> None:
         )
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nRemote installer cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

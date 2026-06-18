@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import types
 import unittest
@@ -13,6 +14,17 @@ SPEC.loader.exec_module(install_proxmox)
 
 
 class ProxmoxInstallerTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_cleanly(self):
+        stderr = io.StringIO()
+
+        with mock.patch("sys.stderr", stderr):
+            result = install_proxmox.run_cli(
+                mock.Mock(side_effect=KeyboardInterrupt)
+            )
+
+        self.assertEqual(result, 130)
+        self.assertEqual(stderr.getvalue(), "\nProxmox installer cancelled.\n")
+
     def test_parses_supported_proxmox_versions(self):
         self.assertEqual(
             install_proxmox.parse_proxmox_versions(
