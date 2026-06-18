@@ -190,7 +190,8 @@ class MqttWeatherPublisherTests(unittest.TestCase):
 
         self.assertEqual(client.publish.call_count, 7)
         publisher.log.info.assert_called_once_with(
-            "Publishing MQTT messages to broker %s:%s under %s",
+            "Publishing MQTT %s to broker %s:%s under %s",
+            "weather snapshot",
             "broker",
             1884,
             "inkplate/weather",
@@ -267,12 +268,20 @@ class MqttWeatherPublisherTests(unittest.TestCase):
             broker="broker",
             base_topic="inkplate/weather-calendar",
         )
+        publisher.log = mock.Mock()
 
         result = publisher.publish_server_status(
             {"schema_version": "1.0", "producer": {"state": "ready"}}
         )
 
         self.assertTrue(result["success"])
+        publisher.log.info.assert_called_once_with(
+            "Publishing MQTT %s to broker %s:%s under %s",
+            "server status",
+            "broker",
+            1883,
+            "inkplate/weather-calendar",
+        )
         call = client.publish.call_args
         self.assertEqual(
             call.args[0],

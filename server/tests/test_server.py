@@ -201,7 +201,8 @@ class ProducerTests(unittest.TestCase):
                 renderers,
                 store,
                 status=status,
-                success_state="completed",
+                success_state="ready",
+                next_refresh_seconds=900,
             )
 
             self.assertTrue(success)
@@ -216,7 +217,13 @@ class ProducerTests(unittest.TestCase):
             )
             self.assertEqual(
                 status.transition.call_args_list[1].args[0],
-                "completed",
+                "ready",
+            )
+            completed_transition = status.transition.call_args_list[1]
+            self.assertEqual(
+                completed_transition.kwargs["next_refresh_at"]
+                - completed_transition.kwargs["success_at"],
+                dt.timedelta(seconds=900),
             )
 
     @mock.patch("server.render_outputs", side_effect=RuntimeError("render"))

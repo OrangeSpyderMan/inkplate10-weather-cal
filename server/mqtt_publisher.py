@@ -48,14 +48,15 @@ class MqttWeatherPublisher:
             (f"{self.base_topic}/current/rain", current.get("rain")),
             (f"{self.base_topic}/current/wind", current.get("wind")),
         ]
-        return self.publish_messages(messages)
+        return self.publish_messages(messages, "weather snapshot")
 
     def publish_server_status(self, status):
         return self.publish_messages(
-            [(f"{self.base_topic}/server/status", status)]
+            [(f"{self.base_topic}/server/status", status)],
+            "server status",
         )
 
-    def publish_messages(self, messages):
+    def publish_messages(self, messages, description="messages"):
         client = create_mqtt_client(self.client_id)
         loop_started = False
         try:
@@ -63,7 +64,8 @@ class MqttWeatherPublisher:
             client.loop_start()
             loop_started = True
             self.log.info(
-                "Publishing MQTT messages to broker %s:%s under %s",
+                "Publishing MQTT %s to broker %s:%s under %s",
+                description,
                 self.broker,
                 self.port,
                 self.base_topic,

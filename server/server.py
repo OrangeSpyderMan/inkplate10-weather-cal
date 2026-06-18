@@ -140,17 +140,11 @@ def run():
                 artifact_store,
                 status=status,
                 success_state="ready",
+                next_refresh_seconds=settings.refresh_seconds,
             ):
                 log.error("Sleeping for 120 seconds before retrying....")
                 time.sleep(120)
                 continue
-            next_refresh_at = utc_now() + timedelta(
-                seconds=settings.refresh_seconds
-            )
-            status.transition(
-                "ready",
-                next_refresh_at=next_refresh_at,
-            )
             log.info(
                 "Sleeping for %s seconds before refresh",
                 settings.refresh_seconds,
@@ -289,6 +283,7 @@ def produce_artifacts(
     store=artifact_store,
     status=None,
     success_state="ready",
+    next_refresh_seconds=None,
 ):
     cycle_started_at = utc_now()
     if status is not None:
@@ -337,9 +332,16 @@ def produce_artifacts(
 
     publish_weather_snapshot(weather_publisher, snapshot)
     if status is not None:
+        success_at = utc_now()
+        next_refresh_at = None
+        if next_refresh_seconds is not None:
+            next_refresh_at = success_at + timedelta(
+                seconds=next_refresh_seconds
+            )
         status.transition(
             success_state,
-            success_at=utc_now(),
+            success_at=success_at,
+            next_refresh_at=next_refresh_at,
             weather_generated_at=snapshot.generated_at,
         )
     return True
