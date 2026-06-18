@@ -11,14 +11,14 @@ from views.calendar import CalendarPage
 
 
 class CalendarPageTests(unittest.TestCase):
-    def test_renders_notification_icon_for_active_weather_alert(self):
+    def test_renders_siren_icon_for_active_weather_alert(self):
         html = self._render({"active": True, "ids": ["alert-id"]})
 
         self.assertIn('id="weather-alert"', html)
-        self.assertIn('src="icon/notification.png"', html)
+        self.assertIn('src="icon/siren.png"', html)
         self.assertIn("Active weather alert", html)
 
-    def test_omits_notification_icon_without_active_weather_alert(self):
+    def test_omits_siren_icon_without_active_weather_alert(self):
         html = self._render({"active": False, "ids": []})
 
         self.assertNotIn('id="weather-alert"', html)
@@ -50,6 +50,10 @@ class CalendarPageTests(unittest.TestCase):
         self.assertIn('class="wind-compass-badge"', html)
         self.assertIn('class="wind-compass"', html)
         self.assertIn("--wind-direction: 245deg", html)
+        self.assertLess(
+            html.index('class="wind-speed"'),
+            html.index('class="wind-direction"'),
+        )
         self.assertEqual(html.count('class="live-radio"'), 2)
 
     def test_renders_provider_fallback_without_live_antenna(self):

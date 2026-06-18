@@ -157,29 +157,30 @@ h4.numcircle, #icon-container.numcircle {
   border-radius: 50%;
   box-sizing: border-box;
   display: flex;
-  height: 6.5vw;
+  height: 9.75vw;
   justify-content: center;
   position: absolute;
-  width: 6.5vw;
+  width: 9.75vw;
   z-index: 2;
 }
 
 .wind-compass-badge {
-  right: -3vw;
-  top: -2.5vw;
+  right: -4.5vw;
+  top: -3.75vw;
 }
 
 .wind-compass {
   display: block;
-  height: 5.1vw;
+  height: 7.65vw;
   transform: rotate(calc(var(--wind-direction) - 45deg));
-  width: 5.1vw;
+  width: 7.65vw;
 }
 
 .wind-direction {
   font-family: "Merienda-Bold";
-  font-size: 2.4vw;
+  font-size: 2.1vw;
   line-height: 1.15;
+  margin-top: 0.35vw;
 }
 
 .wind-speed {
@@ -190,25 +191,25 @@ h4.numcircle, #icon-container.numcircle {
 }
 
 #wind .measurement-value {
-  font-size: 4.2vw;
+  font-size: 5.2vw;
 }
 
 #wind .measurement-unit {
-  font-size: 1.65vw;
+  font-size: 1.75vw;
 }
 
 #weather-alert {
-  left: -3vw;
-  top: -2.5vw;
+  left: -4.5vw;
+  top: -3.75vw;
 }
 
 #icon-container.numcircle #weather-alert img {
   bottom: auto;
   filter: none;
-  height: 5vw;
+  height: 7.5vw;
   left: auto;
   position: static;
-  width: 5vw;
+  width: 7.5vw;
 }
 
 .numcircle.live-icon {

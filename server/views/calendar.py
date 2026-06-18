@@ -137,7 +137,7 @@ class CalendarPage(Page):
                                     title="Active weather alert",
                                 ):
                                     a.img(
-                                        src="icon/notification.png",
+                                        src="icon/siren.png",
                                         alt="",
                                     )
 
@@ -181,13 +181,6 @@ class CalendarPage(Page):
                                             alt="",
                                             klass="wind-compass",
                                         )
-                                a.span(
-                                    klass="wind-direction",
-                                    _t=current_wind.get(
-                                        "direction_cardinal",
-                                        "",
-                                    ),
-                                )
                                 with a.span(klass="wind-speed"):
                                     a.span(
                                         klass="measurement-value",
@@ -197,6 +190,13 @@ class CalendarPage(Page):
                                         klass="measurement-unit",
                                         _t=wind_unit,
                                     )
+                                a.span(
+                                    klass="wind-direction",
+                                    _t=current_wind.get(
+                                        "direction_cardinal",
+                                        "",
+                                    ),
+                                )
 
                 with a.div(id="map-container"):
                     a.img(src=map_url, id="map")
