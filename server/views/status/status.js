@@ -15,7 +15,20 @@ function timestamp(value) {
     return "-";
   }
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleString(undefined, { timeZoneName: "short" });
+}
+
+function localTimeZone() {
+  const options = Intl.DateTimeFormat().resolvedOptions();
+  const zone = options.timeZone || "Browser local time";
+  const offset = new Intl.DateTimeFormat(undefined, {
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(new Date())
+    .find((part) => part.type === "timeZoneName")?.value;
+  return offset && offset !== zone ? `${zone} (${offset})` : zone;
 }
 
 function render(payload) {
@@ -32,6 +45,7 @@ function render(payload) {
   stateElement.textContent = state.replaceAll("_", " ");
   text("version", runtime.version);
   text("mode", producer.mode);
+  text("time-zone", localTimeZone());
   text("forecast-provider", providers.forecast);
   text("realtime-provider", providers.realtime);
   text("cycle-started", timestamp(producer.cycle_started_at));

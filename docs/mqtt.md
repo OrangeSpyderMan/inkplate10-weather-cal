@@ -331,7 +331,9 @@ completes, fails, or schedules its next refresh. The schema includes runtime
 metadata, provider names, artifact readiness, refresh timestamps, MQTT state,
 and the latest sanitized producer error. It does not contain API keys, tokens,
 broker credentials, or tracebacks. The canonical HTTP representation is
-available at `/api/v1/status`.
+available at `/api/v1/status`. Timestamps are ISO 8601 values with explicit UTC
+offsets; the browser dashboard converts them to its local timezone and labels
+that timezone.
 
 ## Icons
 

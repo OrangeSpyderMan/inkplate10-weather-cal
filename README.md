@@ -191,7 +191,9 @@ Inkplate firmware.
 
 The browser-oriented operational dashboard is available at `/status`. It
 polls the status API and reports producer refresh state, providers, output
-readiness, MQTT publication state, and sanitized failures.
+readiness, MQTT publication state, and sanitized failures. API timestamps are
+ISO 8601 values with explicit UTC offsets. The dashboard displays them in the
+browser's local timezone and identifies that timezone above the status details.
 
 Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`
