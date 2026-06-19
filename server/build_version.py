@@ -8,13 +8,14 @@ VERSION_MANIFEST_FILENAME = ".version.json"
 
 
 def git(*args, cwd=None):
+    checkout = Path(cwd or Path.cwd()).resolve()
     try:
         result = subprocess.run(
-            ["git", *args],
+            ["git", "-c", f"safe.directory={checkout}", *args],
             check=False,
             capture_output=True,
             text=True,
-            cwd=cwd,
+            cwd=checkout,
         )
     except OSError:
         return ""
@@ -53,9 +54,14 @@ def detected_version(cwd=None):
 
 
 def version_manifest(cwd=None, version=None, build_date=None):
+    revision = git("rev-parse", "--short", "HEAD", cwd=cwd)
+    if not revision:
+        raise ValueError(
+            "cannot resolve the Git revision for version metadata"
+        )
     return {
         "version": version or detected_version(cwd=cwd),
-        "revision": git("rev-parse", "--short", "HEAD", cwd=cwd) or "unknown",
+        "revision": revision,
         "build_date": build_date or datetime.now(timezone.utc).isoformat(),
     }
 

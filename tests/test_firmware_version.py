@@ -4,6 +4,7 @@ import pathlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -103,3 +104,42 @@ class FirmwareVersionTests(unittest.TestCase):
 
             self.assertEqual(persisted, manifest)
             self.assertIn(manifest["version"], output.read_text())
+
+    @mock.patch.object(build_version.subprocess, "run")
+    def test_git_explicitly_trusts_only_the_requested_checkout(self, run):
+        run.return_value = mock.Mock(returncode=0, stdout="abc1234\n")
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            checkout = pathlib.Path(temporary_dir).resolve()
+
+            result = build_version.git(
+                "rev-parse",
+                "--short",
+                "HEAD",
+                cwd=checkout,
+            )
+
+        self.assertEqual(result, "abc1234")
+        self.assertEqual(
+            run.call_args.args[0][:3],
+            ["git", "-c", f"safe.directory={checkout}"],
+        )
+        self.assertEqual(run.call_args.kwargs["cwd"], checkout)
+
+    @mock.patch.object(build_version, "git", return_value="")
+    def test_failed_git_lookup_does_not_overwrite_manifest(self, git):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = pathlib.Path(temporary_dir)
+            manifest_path = root / ".version.json"
+            original = '{"version": "v3.2.0+gabc1234"}\n'
+            manifest_path.write_text(original, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "cannot resolve the Git revision",
+            ):
+                build_version.generate_version_manifest(root)
+
+            self.assertEqual(
+                manifest_path.read_text(encoding="utf-8"),
+                original,
+            )

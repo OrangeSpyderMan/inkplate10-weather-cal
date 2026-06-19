@@ -18,11 +18,14 @@ def main():
     parser.add_argument("--build-date")
     args = parser.parse_args()
 
-    manifest = generate_version_manifest(
-        REPO_ROOT,
-        version=args.version or None,
-        build_date=args.build_date,
-    )
+    try:
+        manifest = generate_version_manifest(
+            REPO_ROOT,
+            version=args.version or None,
+            build_date=args.build_date,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: {exc}") from None
     print(manifest["version"])
 
 

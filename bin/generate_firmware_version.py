@@ -20,10 +20,13 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("version", nargs="?", default="")
     args = parser.parse_args()
-    manifest = generate_version_manifest(
-        SERVER_DIR.parent,
-        version=args.version or None,
-    )
+    try:
+        manifest = generate_version_manifest(
+            SERVER_DIR.parent,
+            version=args.version or None,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: {exc}") from None
     version = manifest["version"]
 
     content = (

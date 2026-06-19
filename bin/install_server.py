@@ -1015,9 +1015,16 @@ def prepare_version_manifest(repo_root: Path, dry_run: bool) -> dict:
             "installer from a Git checkout or a deployment bundle containing "
             f"{VERSION_MANIFEST_FILENAME}."
         )
-    manifest = (
-        generate_version_manifest(repo_root) if has_git_checkout else existing
-    )
+    try:
+        manifest = (
+            generate_version_manifest(repo_root)
+            if has_git_checkout
+            else existing
+        )
+    except ValueError as exc:
+        raise SystemExit(
+            f"ERROR: unable to generate {VERSION_MANIFEST_FILENAME}: {exc}"
+        ) from None
     print(f"Recorded application version: {manifest['version']}")
     return manifest
 

@@ -353,7 +353,12 @@ def tracked_files() -> list[Path]:
 
 
 def create_bundle(answers: Path | None) -> Path:
-    generate_version_manifest(REPO_ROOT)
+    try:
+        generate_version_manifest(REPO_ROOT)
+    except ValueError as exc:
+        raise SystemExit(
+            f"ERROR: unable to generate {VERSION_MANIFEST_FILENAME}: {exc}"
+        ) from None
     temporary = tempfile.NamedTemporaryFile(
         prefix="inkplate-remote-",
         suffix=".tar.gz",
