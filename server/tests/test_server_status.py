@@ -11,6 +11,7 @@ SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
 from artifacts import ArtifactStore
+from build_version import detected_version
 from output_profiles import DEFAULT_OUTPUT_PROFILE, OutputProfile
 from server_status import ServerStatus, runtime_metadata, sanitized_error
 
@@ -129,6 +130,35 @@ class ServerStatusTests(unittest.TestCase):
                 "build_date": "2026-06-18",
             },
         )
+
+    @mock.patch("build_version.git")
+    def test_detected_version_uses_release_baseline_and_commit(self, git):
+        git.side_effect = [
+            "",
+            "v3.2.0",
+            "abc1234",
+            "",
+        ]
+
+        self.assertEqual(detected_version(), "v3.2.0+gabc1234")
+
+    @mock.patch("build_version.git")
+    def test_detected_version_marks_dirty_checkout(self, git):
+        git.side_effect = [
+            "",
+            "v3.2.0",
+            "abc1234",
+            " M server/server_status.py",
+        ]
+
+        self.assertEqual(detected_version(), "v3.2.0+gabc1234.dirty")
+
+    @mock.patch("build_version.git")
+    def test_detected_version_preserves_exact_release_tag(self, git):
+        git.return_value = "v3.2.0"
+
+        self.assertEqual(detected_version(), "v3.2.0")
+        git.assert_called_once()
 
 
 if __name__ == "__main__":

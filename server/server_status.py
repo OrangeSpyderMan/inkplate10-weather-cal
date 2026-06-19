@@ -2,6 +2,8 @@ import os
 import subprocess
 from datetime import datetime, timezone
 
+from build_version import detected_version
+
 
 STATUS_SCHEMA_VERSION = "1.0"
 
@@ -20,13 +22,7 @@ def runtime_metadata(base_dir=None):
     build_date = os.environ.get("INKPLATE_BUILD_DATE")
 
     if not version:
-        version = _git_value(
-            "describe",
-            "--tags",
-            "--always",
-            "--dirty",
-            cwd=base_dir,
-        )
+        version = detected_version(cwd=base_dir)
     if not revision:
         revision = _git_value("rev-parse", "--short", "HEAD", cwd=base_dir)
 

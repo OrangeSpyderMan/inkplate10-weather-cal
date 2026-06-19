@@ -8,6 +8,7 @@ on:
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
       - 'bin/generate_firmware_version.py'
+      - 'server/build_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   pull_request:
@@ -17,6 +18,7 @@ on:
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
       - 'bin/generate_firmware_version.py'
+      - 'server/build_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   release:

@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4
@@ -58,6 +60,15 @@ jobs:
         id: build-date
         run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
+      - name: Generate build version
+        id: build-version
+        run: |
+          version="$(
+            python3 -c \
+              'import sys; sys.path.insert(0, "server"); from build_version import detected_version; print(detected_version())'
+          )"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Build and publish image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
@@ -72,4 +83,4 @@ jobs:
           build-args: |
             BUILD_DATE=${{ steps.build-date.outputs.created }}
             VCS_REF=${{ github.sha }}
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.build-version.outputs.version }}
