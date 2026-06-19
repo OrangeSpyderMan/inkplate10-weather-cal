@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - 'bin/install_server.py'
+      - 'bin/generate_version_manifest.py'
       - 'bin/install_proxmox'
       - 'bin/install_proxmox.py'
       - 'bin/install_remote'
@@ -21,6 +22,7 @@ on:
   pull_request:
     paths:
       - 'bin/install_server.py'
+      - 'bin/generate_version_manifest.py'
       - 'bin/install_proxmox'
       - 'bin/install_proxmox.py'
       - 'bin/install_remote'
@@ -39,9 +41,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Test installer helpers
         run: python3 -m unittest discover -s tests -v
+
+      - name: Generate version manifest
+        run: python3 bin/generate_version_manifest.py
 
       - name: Validate Docker Compose config
         env:
@@ -58,6 +65,10 @@ jobs:
           test "$(docker image inspect inkplate10-weather-cal:ci \
             --format '{{json .Config.Cmd}}')" = \
             '["/srv/inkplate/server/container_entrypoint.py"]'
+          test "$(docker run --rm inkplate10-weather-cal:ci \
+            python3 -c \
+            'import json; print(json.load(open(".version.json"))["revision"])')" = \
+            "$(git rev-parse --short HEAD)"
           docker run --rm inkplate10-weather-cal:ci geckodriver --version
           docker run --rm inkplate10-weather-cal:ci firefox --version
           docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
