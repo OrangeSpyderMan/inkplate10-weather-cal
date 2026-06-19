@@ -35,6 +35,11 @@ from output_profiles import (  # noqa: E402
     DEFAULT_RENDERER,
     DEFAULT_WIDTH as DEFAULT_IMAGE_WIDTH,
 )
+from build_version import (  # noqa: E402
+    VERSION_MANIFEST_FILENAME,
+    generate_version_manifest,
+    read_version_manifest,
+)
 from weather.providers import FORECAST_PROVIDERS  # noqa: E402
 
 
@@ -226,6 +231,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
 
     ensure_compose_config_readable(repo_root, dry_run=dry_run)
 
+    prepare_version_manifest(repo_root, dry_run=dry_run)
     start_now = prompt_yes_no(
         f"Start or update the {label} containers now?",
         default=True,
@@ -977,6 +983,7 @@ def ensure_system_user(dry_run: bool) -> None:
 
 
 def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
+    prepare_version_manifest(repo_root, dry_run=dry_run)
     if repo_root.resolve() == install_dir.resolve():
         print(f"Repository is already at {install_dir}; skipping copy.")
         return
@@ -995,8 +1002,29 @@ def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(install_dir)], sudo=True)
 
 
+def prepare_version_manifest(repo_root: Path, dry_run: bool) -> dict:
+    existing = read_version_manifest(repo_root)
+    has_git_checkout = (repo_root / ".git").exists()
+    if dry_run:
+        version = existing.get("version", "<derived from checkout>")
+        print(f"Would record application version: {version}")
+        return existing
+    if not has_git_checkout and not existing:
+        raise SystemExit(
+            "ERROR: application version metadata is unavailable. Run the "
+            "installer from a Git checkout or a deployment bundle containing "
+            f"{VERSION_MANIFEST_FILENAME}."
+        )
+    manifest = (
+        generate_version_manifest(repo_root) if has_git_checkout else existing
+    )
+    print(f"Recorded application version: {manifest['version']}")
+    return manifest
+
+
 def verify_installed_runtime(repo_root: Path, install_dir: Path) -> None:
     runtime_files = (
+        Path(VERSION_MANIFEST_FILENAME),
         Path("server/server.py"),
         Path("server/producer_config.py"),
         Path("bin/install_server.py"),

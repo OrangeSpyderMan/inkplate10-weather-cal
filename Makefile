@@ -30,9 +30,12 @@ endif
 
 FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=$(FIRMWARE_COMMON_BUILD_FLAGS) $(FIRMWARE_MODE_BUILD_FLAGS)"
 
-.PHONY: world firmware-world firmware-ensure-cli firmware-ensure-setup firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
+.PHONY: world version-manifest firmware-world firmware-ensure-cli firmware-ensure-setup firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
 
 world: firmware-world
+
+version-manifest:
+	python3 bin/generate_version_manifest.py $(if $(FIRMWARE_VERSION),--version "$(FIRMWARE_VERSION)")
 
 firmware-world:
 	$(MAKE) firmware-ensure-cli
@@ -79,7 +82,7 @@ firmware-setup:
 		$(ARDUINO_CLI) lib install "$$lib"; \
 	done
 
-firmware-generate-version:
+firmware-generate-version: version-manifest
 	python3 bin/generate_firmware_version.py "$(FIRMWARE_VERSION_HEADER)" "$(FIRMWARE_VERSION)"
 
 ifneq ($(strip $(CONFIG)),)

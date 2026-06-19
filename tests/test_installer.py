@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -15,6 +16,18 @@ SPEC.loader.exec_module(install_server)
 
 
 class InstallerCopyTests(unittest.TestCase):
+    def write_version_manifest(self, root):
+        (root / ".version.json").write_text(
+            json.dumps(
+                {
+                    "version": "v3.2.0+gabc1234",
+                    "revision": "abc1234",
+                    "build_date": "2026-06-19T12:00:00+00:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+
     def test_gitignore_covers_installer_secret_backups(self):
         gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
 
@@ -154,6 +167,7 @@ class InstallerCopyTests(unittest.TestCase):
                     root = pathlib.Path(temporary_dir)
                     config_path = root / "server" / "config" / "config.yaml"
                     config_path.parent.mkdir(parents=True)
+                    self.write_version_manifest(root)
                     config_path.write_text(
                         "server:\n  port: 8080\n",
                         encoding="utf-8",
@@ -189,6 +203,7 @@ class InstallerCopyTests(unittest.TestCase):
     def test_compose_config_and_env_use_separate_permissions(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = pathlib.Path(temporary_dir)
+            self.write_version_manifest(root)
             config_path = root / "server" / "config" / "config.yaml"
             env_path = root / ".env"
             config_path.parent.mkdir(parents=True)
@@ -243,6 +258,7 @@ class InstallerCopyTests(unittest.TestCase):
         run,
     ):
         with tempfile.TemporaryDirectory() as temporary_dir:
+            self.write_version_manifest(pathlib.Path(temporary_dir))
             install_server.install_compose(
                 pathlib.Path(temporary_dir),
                 dry_run=False,
@@ -300,6 +316,7 @@ class InstallerCopyTests(unittest.TestCase):
         run,
     ):
         with tempfile.TemporaryDirectory() as temporary_dir:
+            self.write_version_manifest(pathlib.Path(temporary_dir))
             with self.assertRaisesRegex(
                 SystemExit,
                 "Podman Compose failed with exit status 125",
@@ -615,12 +632,60 @@ class InstallerCopyTests(unittest.TestCase):
                 ignore(str(html_dir), ["calendar.html", "styles.css"]),
             )
 
+    @mock.patch.object(install_server, "generate_version_manifest")
+    def test_generates_version_manifest_for_checkout(
+        self,
+        generate_version_manifest,
+    ):
+        generate_version_manifest.return_value = {
+            "version": "v3.2.0+gabc1234.dirty",
+            "revision": "abc1234",
+            "build_date": "2026-06-19T12:00:00+00:00",
+        }
+        with tempfile.TemporaryDirectory() as source_dir:
+            source = pathlib.Path(source_dir)
+            (source / ".git").mkdir()
+
+            manifest = install_server.prepare_version_manifest(
+                source,
+                dry_run=False,
+            )
+
+        self.assertEqual(manifest["version"], "v3.2.0+gabc1234.dirty")
+        generate_version_manifest.assert_called_once_with(source)
+
+    @mock.patch.object(install_server, "generate_version_manifest")
+    def test_preserves_version_manifest_supplied_by_remote_bundle(
+        self,
+        generate_version_manifest,
+    ):
+        manifest = {
+            "version": "v3.2.0+gabc1234",
+            "revision": "abc1234",
+            "build_date": "2026-06-19T12:00:00+00:00",
+        }
+        with tempfile.TemporaryDirectory() as source_dir:
+            source = pathlib.Path(source_dir)
+            (source / ".version.json").write_text(
+                json.dumps(manifest),
+                encoding="utf-8",
+            )
+
+            result = install_server.prepare_version_manifest(
+                source,
+                dry_run=False,
+            )
+
+        self.assertEqual(result, manifest)
+        generate_version_manifest.assert_not_called()
+
     def test_verifies_installed_runtime_files(self):
         with tempfile.TemporaryDirectory() as source_dir:
             with tempfile.TemporaryDirectory() as install_dir:
                 source = pathlib.Path(source_dir)
                 installed = pathlib.Path(install_dir)
                 for relative in (
+                    pathlib.Path(".version.json"),
                     pathlib.Path("server/server.py"),
                     pathlib.Path("server/producer_config.py"),
                     pathlib.Path("bin/install_server.py"),
@@ -641,6 +706,7 @@ class InstallerCopyTests(unittest.TestCase):
                 source = pathlib.Path(source_dir)
                 installed = pathlib.Path(install_dir)
                 for relative in (
+                    pathlib.Path(".version.json"),
                     pathlib.Path("server/server.py"),
                     pathlib.Path("server/producer_config.py"),
                     pathlib.Path("bin/install_server.py"),
@@ -662,6 +728,19 @@ class InstallerCopyTests(unittest.TestCase):
                     "server/server.py",
                 ):
                     install_server.verify_installed_runtime(source, installed)
+
+    def test_rejects_deployment_tree_without_git_or_version_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = pathlib.Path(temporary_dir)
+
+            with self.assertRaisesRegex(
+                SystemExit,
+                "application version metadata is unavailable",
+            ):
+                install_server.prepare_version_manifest(
+                    root,
+                    dry_run=False,
+                )
 
     @mock.patch.object(install_server, "run")
     def test_removes_only_legacy_application_logs(self, run):

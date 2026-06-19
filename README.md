@@ -194,6 +194,9 @@ polls the status API and reports producer refresh state, providers, output
 readiness, MQTT publication state, and sanitized failures. API timestamps are
 ISO 8601 values with explicit UTC offsets. The dashboard displays them in the
 browser's local timezone and identifies that timezone above the status details.
+Server and firmware builds share the generated root `.version.json` manifest.
+Installers and CI generate it from the checkout before copying or building, so
+installed runtimes do not require Git metadata.
 
 Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`

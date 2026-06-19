@@ -99,3 +99,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("--base next", publish_workflow)
         self.assertIn("--head \"$branch\"", publish_workflow)
         self.assertIn("Merge this PR using a merge commit", prepare_workflow)
+
+    def test_container_workflow_embeds_shared_version_manifest(self):
+        workflow = (
+            REPO_ROOT / ".github/workflows/container-publish.yml"
+        ).read_text()
+        dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("bin/generate_version_manifest.py", workflow)
+        self.assertIn("COPY --chown=${USERNAME}:${USERNAME} ./.version.json", dockerfile)
+        self.assertNotIn("ENV INKPLATE_VERSION=", dockerfile)

@@ -1,4 +1,10 @@
+import json
 import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+VERSION_MANIFEST_FILENAME = ".version.json"
 
 
 def git(*args, cwd=None):
@@ -44,3 +50,39 @@ def detected_version(cwd=None):
         else ""
     )
     return f"{release}+g{commit}{dirty}"
+
+
+def version_manifest(cwd=None, version=None, build_date=None):
+    return {
+        "version": version or detected_version(cwd=cwd),
+        "revision": git("rev-parse", "--short", "HEAD", cwd=cwd) or "unknown",
+        "build_date": build_date or datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def read_version_manifest(root):
+    path = Path(root) / VERSION_MANIFEST_FILENAME
+    try:
+        with path.open(encoding="utf-8") as manifest_file:
+            manifest = json.load(manifest_file)
+    except (OSError, ValueError):
+        return {}
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def write_version_manifest(root, manifest):
+    path = Path(root) / VERSION_MANIFEST_FILENAME
+    content = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    if not path.exists() or path.read_text(encoding="utf-8") != content:
+        path.write_text(content, encoding="utf-8")
+    return path
+
+
+def generate_version_manifest(root, version=None, build_date=None):
+    manifest = version_manifest(
+        cwd=root,
+        version=version,
+        build_date=build_date,
+    )
+    write_version_manifest(root, manifest)
+    return manifest

@@ -1,8 +1,7 @@
-import os
-import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
-from build_version import detected_version
+from build_version import read_version_manifest
 
 
 STATUS_SCHEMA_VERSION = "1.0"
@@ -17,34 +16,14 @@ def isoformat(value):
 
 
 def runtime_metadata(base_dir=None):
-    version = os.environ.get("INKPLATE_VERSION")
-    revision = os.environ.get("INKPLATE_REVISION")
-    build_date = os.environ.get("INKPLATE_BUILD_DATE")
-
-    if not version:
-        version = detected_version(cwd=base_dir)
-    if not revision:
-        revision = _git_value("rev-parse", "--short", "HEAD", cwd=base_dir)
+    root = Path(base_dir) if base_dir else Path(__file__).resolve().parents[1]
+    manifest = read_version_manifest(root)
 
     return {
-        "version": version or "unknown",
-        "revision": revision or "unknown",
-        "build_date": build_date or "unknown",
+        "version": manifest.get("version", "unknown"),
+        "revision": manifest.get("revision", "unknown"),
+        "build_date": manifest.get("build_date", "unknown"),
     }
-
-
-def _git_value(*args, cwd=None):
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-    return result.stdout.strip() if result.returncode == 0 else None
 
 
 class ServerStatus:

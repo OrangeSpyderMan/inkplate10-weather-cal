@@ -6,7 +6,7 @@ from pathlib import Path
 SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
 sys.path.insert(0, str(SERVER_DIR))
 
-from build_version import detected_version
+from build_version import generate_version_manifest
 
 
 def c_string(value):
@@ -20,7 +20,11 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("version", nargs="?", default="")
     args = parser.parse_args()
-    version = args.version or detected_version()
+    manifest = generate_version_manifest(
+        SERVER_DIR.parent,
+        version=args.version or None,
+    )
+    version = manifest["version"]
 
     content = (
         "#ifndef FIRMWARE_VERSION_H\n"

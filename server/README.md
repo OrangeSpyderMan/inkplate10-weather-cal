@@ -685,6 +685,7 @@ when that pin needs updating.
 Run from the root of your cloned repository:
 
 ```bash
+make version-manifest
 docker compose up --build
 # or
 podman compose up --build
@@ -693,6 +694,7 @@ podman compose up --build
 Or detach it:
 
 ```bash
+make version-manifest
 docker compose up --build -d
 # or
 podman compose up --build -d

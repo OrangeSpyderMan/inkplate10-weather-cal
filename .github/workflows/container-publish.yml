@@ -10,6 +10,7 @@ on:
     paths:
       - "server/**"
       - "Dockerfile"
+      - "bin/generate_version_manifest.py"
       - "docker-compose.yml"
       - ".dockerignore"
       - ".github/workflows/container-publish.yml"
@@ -56,18 +57,13 @@ jobs:
             type=raw,value=next,enable=${{ github.ref == 'refs/heads/next' }}
             type=ref,event=tag
 
-      - name: Generate build date
-        id: build-date
-        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-
-      - name: Generate build version
-        id: build-version
+      - name: Generate version manifest
+        id: version
         run: |
-          version="$(
-            python3 -c \
-              'import sys; sys.path.insert(0, "server"); from build_version import detected_version; print(detected_version())'
-          )"
+          build_date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          version="$(python3 bin/generate_version_manifest.py --build-date "$build_date")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
@@ -81,6 +77,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_DATE=${{ steps.build-date.outputs.created }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
             VCS_REF=${{ github.sha }}
-            VERSION=${{ steps.build-version.outputs.version }}
+            VERSION=${{ steps.version.outputs.version }}

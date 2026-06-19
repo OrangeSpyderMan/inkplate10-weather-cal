@@ -86,6 +86,7 @@ workspace.code-workspace
 /server/config.yaml
 /server/config/config.yaml
 /server/config/config.yaml.bak.*
+/.version.json
 **/*.log
 **/*.log.*
 **/*.html

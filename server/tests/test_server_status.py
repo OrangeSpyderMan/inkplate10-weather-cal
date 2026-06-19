@@ -111,23 +111,40 @@ class ServerStatusTests(unittest.TestCase):
             },
         )
 
-    def test_runtime_metadata_prefers_environment(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "INKPLATE_VERSION": "v3.3.0",
-                "INKPLATE_REVISION": "deadbeef",
-                "INKPLATE_BUILD_DATE": "2026-06-18",
-            },
-        ):
-            metadata = runtime_metadata()
+    def test_runtime_metadata_reads_shared_version_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            metadata_path = pathlib.Path(temporary_dir) / ".version.json"
+            metadata_path.write_text(
+                json.dumps(
+                    {
+                        "version": "v3.2.0+gabc1234",
+                        "revision": "abc1234",
+                        "build_date": "2026-06-19T12:00:00+00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            metadata = runtime_metadata(base_dir=temporary_dir)
 
         self.assertEqual(
             metadata,
             {
-                "version": "v3.3.0",
-                "revision": "deadbeef",
-                "build_date": "2026-06-18",
+                "version": "v3.2.0+gabc1234",
+                "revision": "abc1234",
+                "build_date": "2026-06-19T12:00:00+00:00",
+            },
+        )
+
+    def test_runtime_metadata_is_unknown_without_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            metadata = runtime_metadata(base_dir=temporary_dir)
+
+        self.assertEqual(
+            metadata,
+            {
+                "version": "unknown",
+                "revision": "unknown",
+                "build_date": "unknown",
             },
         )
 
