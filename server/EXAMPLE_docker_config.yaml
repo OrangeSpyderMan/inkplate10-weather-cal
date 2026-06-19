@@ -49,7 +49,7 @@ mqtt:
     retain: true
     qos: 0
   diagnostics:
-    # Optional listener for diagnostic messages published by the Inkplate.
+    # Optional listener for diagnostics from the Inkplate and display clients.
     enabled: false
     broker: host.docker.internal
     port: 1883

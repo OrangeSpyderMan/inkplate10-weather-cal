@@ -3,7 +3,8 @@
 MQTT supports two independent features:
 
 - the server publishes normalized weather data for local clients
-- the Inkplate firmware publishes diagnostic logs for the server to record
+- the Inkplate firmware and companion display clients publish diagnostic logs
+  for the server to record
 
 Good MQTT consumers include:
 
@@ -188,11 +189,23 @@ inkplate/weather-calendar/current/wind
 inkplate/weather-calendar/server/status
 ```
 
-Inkplate diagnostics use a separate, non-retained topic:
+Inkplate and companion-client diagnostics use the same separate, non-retained
+topic:
 
 ```text
 inkplate/weather-calendar/diagnostics
 ```
+
+Messages should identify their originating client in the text. The
+`weather-cal-micropython` clients use:
+
+```text
+<client-id> [<level>] <message>
+```
+
+Their retained operational status is published separately under
+`inkplate/weather-calendar/clients/<client-id>/status`; it is deliberately not
+written to the diagnostic log.
 
 ### `inkplate/weather-calendar`
 
