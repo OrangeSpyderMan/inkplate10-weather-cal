@@ -405,6 +405,14 @@ class InstallerCopyTests(unittest.TestCase):
             "127.0.0.1:${INKPLATE_SERVER_PORT:-8080}/api/v1/ready",
             compose,
         )
+        self.assertIn(
+            "target: ${INKPLATE_BUILD_TARGET:-full}",
+            compose,
+        )
+        self.assertIn(
+            "image: ${INKPLATE_IMAGE:-inkplate10-weather-cal:local}",
+            compose,
+        )
 
     def test_disabled_mqtt_features_skip_connection_questions(self):
         answers = {

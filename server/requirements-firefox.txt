@@ -1,0 +1,2 @@
+selenium==4.45.0
+airium==0.2.7
