@@ -265,18 +265,35 @@ class InstallerCopyTests(unittest.TestCase):
                 mode="podman",
             )
 
-        run.assert_called_once_with(
+        self.assertEqual(
+            run.call_args_list,
             [
-                "podman-compose",
-                "-f",
-                "docker-compose.yml",
-                "-f",
-                "docker-compose.podman.yml",
-                "up",
-                "--build",
-                "-d",
+                mock.call(
+                    [
+                        "podman-compose",
+                        "-f",
+                        "docker-compose.yml",
+                        "-f",
+                        "docker-compose.podman.yml",
+                        "build",
+                        "inkplate",
+                    ],
+                    dry_run=False,
+                ),
+                mock.call(
+                    [
+                        "podman-compose",
+                        "-f",
+                        "docker-compose.yml",
+                        "-f",
+                        "docker-compose.podman.yml",
+                        "up",
+                        "--no-build",
+                        "-d",
+                    ],
+                    dry_run=False,
+                ),
             ],
-            dry_run=False,
         )
         check_compose_host_port.assert_called_once_with(
             [
@@ -389,6 +406,11 @@ class InstallerCopyTests(unittest.TestCase):
             },
             include_optional=False,
             compose=True,
+            build_metadata={
+                "build_date": "2026-06-22T18:00:00+00:00",
+                "revision": "abc1234",
+                "version": "v4.0.0+gabc1234",
+            },
         )
 
         self.assertIn("INKPLATE_SERVER_PORT=9090", env)
@@ -397,6 +419,12 @@ class InstallerCopyTests(unittest.TestCase):
             "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
             env,
         )
+        self.assertIn(
+            "INKPLATE_BUILD_DATE=2026-06-22T18:00:00+00:00",
+            env,
+        )
+        self.assertIn("INKPLATE_VCS_REF=abc1234", env)
+        self.assertIn("INKPLATE_VERSION=v4.0.0+gabc1234", env)
 
     def test_compose_update_preserves_secrets_and_aligns_image_flavour(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -409,6 +437,11 @@ class InstallerCopyTests(unittest.TestCase):
             install_server.update_compose_flavour_env(
                 env_path,
                 "pillow",
+                build_metadata={
+                    "build_date": "2026-06-22T18:00:00+00:00",
+                    "revision": "abc1234",
+                    "version": "v4.0.0+gabc1234",
+                },
                 dry_run=False,
             )
 
@@ -419,6 +452,8 @@ class InstallerCopyTests(unittest.TestCase):
                 "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
                 updated,
             )
+            self.assertIn("INKPLATE_VCS_REF=abc1234", updated)
+            self.assertIn("INKPLATE_VERSION=v4.0.0+gabc1234", updated)
 
     def test_compose_uses_selected_port_for_mapping_and_healthcheck(self):
         compose = (REPO_ROOT / "docker-compose.yml").read_text(
@@ -439,6 +474,18 @@ class InstallerCopyTests(unittest.TestCase):
         )
         self.assertIn(
             "image: ${INKPLATE_IMAGE:-inkplate10-weather-cal:local}",
+            compose,
+        )
+        self.assertIn(
+            "BUILD_DATE: ${INKPLATE_BUILD_DATE:-unknown}",
+            compose,
+        )
+        self.assertIn(
+            "VCS_REF: ${INKPLATE_VCS_REF:-unknown}",
+            compose,
+        )
+        self.assertIn(
+            "VERSION: ${INKPLATE_VERSION:-local}",
             compose,
         )
 

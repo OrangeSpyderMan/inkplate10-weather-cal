@@ -18,6 +18,7 @@ LABEL org.opencontainers.image.title="Inkplate 10 Weather Calendar" \
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     INKPLATE_LOG_CONFIG=/srv/inkplate/server/logging.service.ini
 
 RUN set -eux; \

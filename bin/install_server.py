@@ -221,6 +221,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         print("No changes made.")
         return
 
+    manifest = prepare_version_manifest(repo_root, dry_run=dry_run)
     answers = None
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
@@ -238,6 +239,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
                 answers,
                 include_optional=answers["netatmo_enabled"],
                 compose=True,
+                build_metadata=manifest,
             ),
             dry_run=dry_run,
             mode=0o600,
@@ -247,12 +249,12 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         update_compose_flavour_env(
             repo_root / DOCKER_ENV_FILE,
             required_dependency_renderer(current_config),
+            build_metadata=manifest,
             dry_run=dry_run,
         )
 
     ensure_compose_config_readable(repo_root, dry_run=dry_run)
 
-    prepare_version_manifest(repo_root, dry_run=dry_run)
     start_now = prompt_yes_no(
         f"Start or update the {label} containers now?",
         default=True,
@@ -270,7 +272,14 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             dry_run=dry_run,
         )
         try:
-            run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+            run(
+                [*compose_command, "build", "inkplate"],
+                dry_run=dry_run,
+            )
+            run(
+                [*compose_command, "up", "--no-build", "-d"],
+                dry_run=dry_run,
+            )
         except subprocess.CalledProcessError as exc:
             raise SystemExit(
                 f"ERROR: {label} Compose failed with exit status "
@@ -278,7 +287,13 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             ) from None
         print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
-        print(f"Start later with: {' '.join(compose_command)} up --build -d")
+        print(
+            f"Build later with: {' '.join(compose_command)} build inkplate"
+        )
+        print(
+            f"Start later with: {' '.join(compose_command)} "
+            "up --no-build -d"
+        )
 
 
 def ensure_compose_config_readable(
@@ -793,6 +808,7 @@ def render_env(
     answers: dict[str, object],
     include_optional: bool,
     compose: bool = False,
+    build_metadata: dict | None = None,
 ) -> str:
     values = {
         "WEATHER_API_KEY": str(answers["weather_api_key"]),
@@ -800,6 +816,7 @@ def render_env(
         "GOOGLE_STATICMAPS_MAPID": str(answers["google_staticmaps_mapid"]),
     }
     if compose:
+        build_metadata = build_metadata or {}
         values["INKPLATE_SERVER_PORT"] = str(
             answers.get("port", DEFAULT_PORT)
         )
@@ -811,6 +828,15 @@ def render_env(
             "inkplate10-weather-cal:pillow-local"
             if renderer == "pillow"
             else "inkplate10-weather-cal:local"
+        )
+        values["INKPLATE_BUILD_DATE"] = str(
+            build_metadata.get("build_date", "unknown")
+        )
+        values["INKPLATE_VCS_REF"] = str(
+            build_metadata.get("revision", "unknown")
+        )
+        values["INKPLATE_VERSION"] = str(
+            build_metadata.get("version", "local")
         )
     if include_optional:
         values.update(
@@ -836,8 +862,10 @@ def update_compose_flavour_env(
     path: Path,
     renderer: str,
     *,
+    build_metadata: dict | None = None,
     dry_run: bool,
 ) -> None:
+    build_metadata = build_metadata or {}
     values = {
         "INKPLATE_BUILD_TARGET": (
             "pillow" if renderer == "pillow" else "full"
@@ -846,6 +874,15 @@ def update_compose_flavour_env(
             "inkplate10-weather-cal:pillow-local"
             if renderer == "pillow"
             else "inkplate10-weather-cal:local"
+        ),
+        "INKPLATE_BUILD_DATE": str(
+            build_metadata.get("build_date", "unknown")
+        ),
+        "INKPLATE_VCS_REF": str(
+            build_metadata.get("revision", "unknown")
+        ),
+        "INKPLATE_VERSION": str(
+            build_metadata.get("version", "local")
         ),
     }
     text = path.read_text(encoding="utf-8") if path.exists() else ""

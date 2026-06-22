@@ -797,19 +797,27 @@ Run from the root of your cloned repository:
 
 ```bash
 make version-manifest
-docker compose up --build
+docker compose build inkplate
+docker compose up --no-build
 # or
-podman compose up --build
+podman compose build inkplate
+podman compose up --no-build
 ```
 
 Or detach it:
 
 ```bash
 make version-manifest
-docker compose up --build -d
+docker compose build inkplate
+docker compose up --no-build -d
 # or
-podman compose up --build -d
+podman compose build inkplate
+podman compose up --no-build -d
 ```
+
+All three services share one image name. Building the `inkplate` service
+explicitly avoids Podman Compose rebuilding that same image independently for
+the web, producer, and diagnostics services.
 
 To use the published image instead of building locally, change the shared
 `image:` value and remove its `build:` block:

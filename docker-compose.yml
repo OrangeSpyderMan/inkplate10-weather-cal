@@ -6,6 +6,9 @@ x-inkplate-service: &inkplate-service
     target: ${INKPLATE_BUILD_TARGET:-full}
     args:
       GECKOVERSION: v0.37.0
+      BUILD_DATE: ${INKPLATE_BUILD_DATE:-unknown}
+      VCS_REF: ${INKPLATE_VCS_REF:-unknown}
+      VERSION: ${INKPLATE_VERSION:-local}
   restart: unless-stopped
   logging:
     driver: local

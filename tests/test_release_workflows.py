@@ -133,6 +133,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('--target "${{ matrix.target }}"', ci_workflow)
         self.assertIn("FROM base AS pillow", dockerfile)
         self.assertIn("FROM base AS full", dockerfile)
+        self.assertIn("PIP_ROOT_USER_ACTION=ignore", dockerfile)
         self.assertIn(
             'org.opencontainers.image.variant="pillow"',
             dockerfile,
