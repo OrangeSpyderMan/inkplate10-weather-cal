@@ -553,10 +553,12 @@ At startup the server fetches this static map, converts it to a dithered graysca
 
 ### Manual native server setup
 
-Ensure Python3 is installed on your system
+The native installation baseline is Debian 13 (Trixie) or another supported
+distribution providing Python 3.13 or newer. Ensure Python 3 is installed:
+
 ```
 python3 --version
-Python 3.11.2
+Python 3.13.5
 ```
 
 Download project and install dependencies. The default main branch is the latest

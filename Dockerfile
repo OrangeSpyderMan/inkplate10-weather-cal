@@ -1,4 +1,4 @@
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-trixie
 
 ARG BUILD_DATE
 ARG VCS_REF
