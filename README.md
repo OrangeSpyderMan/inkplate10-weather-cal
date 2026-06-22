@@ -250,16 +250,20 @@ Run it from the repository root:
 ```
 
 The installer prompts for the server bind IP and port, weather provider, API
-keys, Google Static Maps Map ID, location, optional Netatmo details, optional
-MQTT weather publishing, optional MQTT diagnostic listening, and whether to
-start the service/container.
+keys, Google Static Maps Map ID, location, Firefox or experimental Pillow
+rendering, optional Netatmo details, optional MQTT weather publishing, optional
+MQTT diagnostic listening, and whether to start the service/container.
 It keeps secrets out of committed YAML files:
 
 - Docker and Podman installs write secrets to `.env` and config to
-  `server/config/config.yaml`.
+  `server/config/config.yaml`. The installer also selects the matching full or
+  Pillow-only Compose build target and local image name.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
-  `/srv/inkplate/inkplate_venv`.
+  `/srv/inkplate/inkplate_venv`. Pillow-only systemd installs skip Firefox,
+  Geckodriver, Selenium and Airium. Switching an existing install removes the
+  browser Python packages from that virtualenv but leaves system-wide Firefox
+  and Geckodriver installation cleanup to the administrator.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system
@@ -288,7 +292,9 @@ sudo ./bin/install_proxmox --dry-run
 ```
 
 Interactive Proxmox runs list available LXC storage and can create separate
-mounts for generated data and read-only config. Use `--storage`,
+mounts for generated data and read-only config. They also select the renderer
+and automatically use the normal published image tag for Firefox or its
+`-pillow` counterpart for Pillow. Use `--renderer`, `--storage`,
 `--data-storage`, and `--config-storage` for unattended storage selection.
 
 To deploy from this checkout to another machine over SSH, use the remote
@@ -297,6 +303,7 @@ wrapper. It currently supports Proxmox and systemd targets:
 ```bash
 ./bin/install_remote root@pve1 --mode proxmox
 ./bin/install_remote admin@server1 --mode systemd
+./bin/install_remote admin@server1 --mode systemd --renderer pillow
 ```
 
 The wrapper uploads only Git-tracked files plus an explicitly supplied answers

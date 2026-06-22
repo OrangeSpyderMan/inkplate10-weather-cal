@@ -60,8 +60,9 @@ images, and MQTT disabled.
 
 It prompts for the server bind IP and port, location, weather API key, Google
 Static Maps API key, Google Static Maps Map ID, optional Netatmo credentials,
-optional MQTT weather publishing, optional MQTT diagnostic listening, and
-whether to start the service or container. Secrets are written outside
+the Firefox compatibility renderer or experimental lower-footprint Pillow
+renderer, optional MQTT weather publishing, optional MQTT diagnostic listening,
+and whether to start the service or container. Secrets are written outside
 committed YAML:
 
 - Docker or Podman: `.env` plus `server/config/config.yaml`
@@ -81,15 +82,23 @@ Podman-supported `journald` log driver instead of Docker's `local` driver and
 applies a private SELinux relabel (`:Z`) to the read-only config bind mount.
 For both runtimes, the installer writes `INKPLATE_SERVER_PORT` to `.env`, and
 Compose uses it for both the published host port and container target port.
+It also writes the matching `INKPLATE_BUILD_TARGET` and `INKPLATE_IMAGE`: the
+Firefox choice builds the full image, while Pillow builds the Pillow-only local
+image. Re-running an update aligns these values with the renderer already
+recorded in the server config.
 Before building, the installer checks that this host port is free unless this
 Compose project's web container is already running there. If another process
 owns the port, choose a different Server port or stop the existing listener.
 Native systemd mode needs root privileges for
 package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
-Geckodriver, and systemd service management. Run it as root or as a user that
-can elevate with `sudo`, `doas`, or `run0`; the installer checks this before
-making system changes. Container modes validate their selected runtime before
-starting.
+and systemd service management. The Firefox choice installs Firefox,
+Geckodriver, Selenium and Airium. The Pillow choice skips those components and
+installs only the common and Pillow renderer dependencies. When changing an
+existing install to Pillow, it removes Selenium and Airium from the application
+virtualenv but does not automatically remove a system-wide Firefox package or
+Geckodriver binary. Run it as root or as a user that can elevate with `sudo`,
+`doas`, or `run0`; the installer checks this before making system changes.
+Container modes validate their selected runtime before starting.
 
 Use dry-run mode to preview actions:
 
@@ -105,6 +114,7 @@ over SSH without keeping a permanent repository checkout there:
 ```bash
 ./bin/install_remote root@pve1 --mode proxmox
 ./bin/install_remote admin@server1 --mode systemd
+./bin/install_remote admin@server1 --mode systemd --renderer pillow
 ```
 
 It uses normal SSH host-key verification, streams a temporary archive containing
@@ -142,7 +152,9 @@ Re-run the installer to update an existing install. It will detect existing
 Docker, Podman, or systemd files and offer to update the application while
 preserving config/secrets, update and reconfigure together, reconfigure
 config/secrets only, or abort. Use the combined option when a release changes
-both application code and configuration keys.
+both application code and configuration keys. For native systemd, changing
+renderer also changes installed dependencies, so use `update_reconfigure`
+rather than config-only reconfiguration.
 
 Logs:
 

@@ -41,6 +41,40 @@ class ProxmoxInstallerTests(unittest.TestCase):
             ["v1.10.0", "v1.2.0", "main", "next", "test"],
         )
 
+    def test_filters_and_sorts_pillow_image_tags(self):
+        tags = [
+            "next",
+            "next-pillow",
+            "v4.0.0",
+            "v4.0.0-pillow",
+            "main-pillow",
+        ]
+
+        filtered = [
+            tag
+            for tag in tags
+            if install_proxmox.tag_matches_renderer(tag, "pillow")
+        ]
+
+        self.assertEqual(
+            install_proxmox.sort_tags(filtered),
+            ["v4.0.0-pillow", "main-pillow", "next-pillow"],
+        )
+
+    def test_maps_base_tag_to_pillow_flavour(self):
+        self.assertEqual(
+            install_proxmox.renderer_tag("next", "pillow"),
+            "next-pillow",
+        )
+        self.assertEqual(
+            install_proxmox.renderer_tag("next", "firefox"),
+            "next",
+        )
+
+    def test_rejects_pillow_tag_for_firefox_renderer(self):
+        with self.assertRaisesRegex(SystemExit, "cannot be used"):
+            install_proxmox.renderer_tag("next-pillow", "firefox")
+
     def test_archive_name_includes_tag_and_digest(self):
         self.assertEqual(
             install_proxmox.archive_filename(

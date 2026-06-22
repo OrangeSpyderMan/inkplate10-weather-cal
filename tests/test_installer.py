@@ -385,12 +385,40 @@ class InstallerCopyTests(unittest.TestCase):
                 "google_api_key": "google",
                 "google_staticmaps_mapid": "map",
                 "port": 9090,
+                "renderer": "pillow",
             },
             include_optional=False,
             compose=True,
         )
 
         self.assertIn("INKPLATE_SERVER_PORT=9090", env)
+        self.assertIn("INKPLATE_BUILD_TARGET=pillow", env)
+        self.assertIn(
+            "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
+            env,
+        )
+
+    def test_compose_update_preserves_secrets_and_aligns_image_flavour(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            env_path = pathlib.Path(temporary_dir) / ".env"
+            env_path.write_text(
+                "WEATHER_API_KEY=secret\nINKPLATE_BUILD_TARGET=full\n",
+                encoding="utf-8",
+            )
+
+            install_server.update_compose_flavour_env(
+                env_path,
+                "pillow",
+                dry_run=False,
+            )
+
+            updated = env_path.read_text(encoding="utf-8")
+            self.assertIn("WEATHER_API_KEY=secret", updated)
+            self.assertIn("INKPLATE_BUILD_TARGET=pillow", updated)
+            self.assertIn(
+                "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
+                updated,
+            )
 
     def test_compose_uses_selected_port_for_mapping_and_healthcheck(self):
         compose = (REPO_ROOT / "docker-compose.yml").read_text(
@@ -508,6 +536,111 @@ class InstallerCopyTests(unittest.TestCase):
             config,
         )
 
+    def test_rendered_config_uses_selected_pillow_renderer(self):
+        answers = {
+            "port": 8080,
+            "refresh_minutes": 180,
+            "weather_service": "openweathermapv3",
+            "num_hourly_forecasts": 6,
+            "metric": True,
+            "netatmo_enabled": False,
+            "location": "Landry, FR",
+            "renderer": "pillow",
+            "mqtt_weather_enabled": False,
+            "mqtt_weather_broker": "",
+            "mqtt_weather_port": 1883,
+            "mqtt_weather_base_topic": "",
+            "mqtt_diagnostics_enabled": False,
+            "mqtt_diagnostics_broker": "",
+            "mqtt_diagnostics_port": 1883,
+            "mqtt_diagnostics_topic": "",
+        }
+
+        config = install_server.render_config(answers, mode="docker")
+
+        self.assertIn("      renderer: pillow", config)
+
+    def test_mixed_output_profiles_require_full_dependencies(self):
+        config = {
+            "outputs.default": "portrait",
+            "outputs.profiles.portrait.renderer": "pillow",
+            "outputs.profiles.landscape.renderer": "firefox",
+        }
+
+        self.assertEqual(
+            install_server.configured_renderer(config),
+            "pillow",
+        )
+        self.assertEqual(
+            install_server.required_dependency_renderer(config),
+            "firefox",
+        )
+
+    def test_all_pillow_profiles_allow_pillow_only_dependencies(self):
+        config = {
+            "outputs.default": "portrait",
+            "outputs.profiles.portrait.renderer": "pillow",
+            "outputs.profiles.landscape.renderer": "pillow",
+        }
+
+        self.assertEqual(
+            install_server.required_dependency_renderer(config),
+            "pillow",
+        )
+
+    @mock.patch.object(install_server, "run")
+    @mock.patch.object(
+        install_server,
+        "choose_firefox_package",
+        return_value="firefox-esr",
+    )
+    def test_native_prerequisites_follow_renderer(
+        self,
+        choose_firefox_package,
+        run,
+    ):
+        install_server.install_native_prerequisites(False, "pillow")
+        pillow_packages = run.call_args_list[1].args[0]
+        self.assertNotIn("firefox-esr", pillow_packages)
+        self.assertNotIn("curl", pillow_packages)
+        choose_firefox_package.assert_not_called()
+
+        run.reset_mock()
+        install_server.install_native_prerequisites(False, "firefox")
+        firefox_packages = run.call_args_list[1].args[0]
+        self.assertIn("firefox-esr", firefox_packages)
+        self.assertIn("curl", firefox_packages)
+
+    @mock.patch.object(install_server, "run")
+    def test_native_dependencies_follow_renderer(self, run):
+        install_server.refresh_dependencies(False, "pillow")
+        self.assertTrue(
+            any(
+                value.endswith("requirements-pillow-only.txt")
+                for value in run.call_args_list[0].args[0]
+            ),
+        )
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            [
+                "/srv/inkplate/inkplate_venv/bin/python",
+                "-m",
+                "pip",
+                "uninstall",
+                "-y",
+                "airium",
+                "selenium",
+            ],
+        )
+
+        run.reset_mock()
+        install_server.refresh_dependencies(False, "firefox")
+        self.assertTrue(
+            any(
+                value.endswith("requirements.txt")
+                for value in run.call_args_list[0].args[0]
+            ),
+        )
     def test_rendered_config_uses_refresh_minutes(self):
         answers = {
             "host": "192.0.2.10",

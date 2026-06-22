@@ -56,6 +56,13 @@ def main() -> int:
         help="confirm container creation without an additional prompt",
     )
     parser.add_argument("--tag", help="OCI image tag; prompts from registry tags")
+    parser.add_argument(
+        "--renderer",
+        choices=("firefox", "pillow"),
+        help=(
+            "renderer and matching OCI image flavour; prompts when omitted"
+        ),
+    )
     parser.add_argument("--ctid", type=int, help="new Proxmox container ID")
     parser.add_argument(
         "--storage",
@@ -109,8 +116,10 @@ def main() -> int:
     validate_target(storage_plan, args.bridge, args.dry_run)
     ensure_skopeo(args.dry_run)
 
-    tags = available_tags(args.dry_run, args.tag)
-    tag = choose_tag(tags, args.tag)
+    renderer = args.renderer or install_server.collect_renderer({})
+    requested_tag = renderer_tag(args.tag, renderer) if args.tag else None
+    tags = available_tags(args.dry_run, requested_tag, renderer)
+    tag = choose_tag(tags, requested_tag)
     ctid = args.ctid or next_ctid(args.dry_run)
     ensure_unused_ctid(ctid, args.dry_run)
     digest = image_digest(tag, args.dry_run)
@@ -118,6 +127,7 @@ def main() -> int:
     print()
     print("Deployment")
     print("----------")
+    print(f"Renderer: {renderer}")
     print(f"Image: {IMAGE}:{tag}")
     print(f"Digest: {digest}")
     print(f"CTID: {ctid}")
@@ -144,7 +154,12 @@ def main() -> int:
         print("No changes made.")
         return 0
 
-    config_answers = install_server.collect_answers({}, {}, mode="systemd")
+    config_answers = install_server.collect_answers(
+        {},
+        {},
+        mode="systemd",
+        renderer=renderer,
+    )
     config_text = install_server.render_config(config_answers, mode="systemd")
     env_text = install_server.render_env(
         config_answers,
@@ -385,13 +400,18 @@ def validate_target(storage_plan: StoragePlan, bridge: str, dry_run: bool) -> No
         raise SystemExit(f"ERROR: network bridge {bridge!r} does not exist.")
 
 
-def available_tags(dry_run: bool, requested: str | None = None) -> list[str]:
+def available_tags(
+    dry_run: bool,
+    requested: str | None = None,
+    renderer: str = "firefox",
+) -> list[str]:
     if dry_run and not shutil.which("skopeo"):
         print(f"Would query available tags for {IMAGE}.")
-        return list(dict.fromkeys([requested, "main", "next"])) if requested else [
-            "main",
-            "next",
+        defaults = [
+            renderer_tag("main", renderer),
+            renderer_tag("next", renderer),
         ]
+        return list(dict.fromkeys([requested, *defaults])) if requested else defaults
     result = subprocess.run(
         ["skopeo", "list-tags", f"docker://{IMAGE}"],
         capture_output=True,
@@ -402,22 +422,47 @@ def available_tags(dry_run: bool, requested: str | None = None) -> list[str]:
     tags = json.loads(result.stdout).get("Tags", [])
     if not tags:
         raise SystemExit("ERROR: the OCI registry returned no image tags.")
-    return sort_tags(tags)
+    return sort_tags(
+        tag for tag in tags if tag_matches_renderer(tag, renderer)
+    )
 
 
-def sort_tags(tags: list[str]) -> list[str]:
+def sort_tags(tags) -> list[str]:
     def version_key(tag: str):
-        match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
+        match = re.fullmatch(
+            r"v(\d+)\.(\d+)\.(\d+)",
+            tag.removesuffix("-pillow"),
+        )
         return tuple(int(part) for part in match.groups()) if match else None
 
+    tags = list(tags)
     versions = sorted(
         (tag for tag in tags if version_key(tag) is not None),
         key=lambda tag: version_key(tag),
         reverse=True,
     )
-    branches = [tag for tag in ("main", "next") if tag in tags]
+    branches = [
+        tag
+        for branch in ("main", "next")
+        for tag in tags
+        if tag.removesuffix("-pillow") == branch
+    ]
     others = sorted(set(tags) - set(versions) - set(branches))
     return versions + branches + others
+
+
+def renderer_tag(tag: str, renderer: str) -> str:
+    if renderer == "pillow" and not tag.endswith("-pillow"):
+        return f"{tag}-pillow"
+    if renderer == "firefox" and tag.endswith("-pillow"):
+        raise SystemExit(
+            "ERROR: a -pillow OCI tag cannot be used with the Firefox renderer."
+        )
+    return tag
+
+
+def tag_matches_renderer(tag: str, renderer: str) -> bool:
+    return tag.endswith("-pillow") == (renderer == "pillow")
 
 
 def choose_tag(tags: list[str], requested: str | None) -> str:
@@ -440,13 +485,15 @@ def choose_tag(tags: list[str], requested: str | None) -> str:
 
 
 def tag_description(tag: str) -> str:
-    if tag == "main":
-        return "stable branch image"
-    if tag == "next":
-        return "integration branch image"
-    if tag.startswith("v"):
-        return "versioned release image"
-    return "published image"
+    base_tag = tag.removesuffix("-pillow")
+    flavour = "Pillow-only " if tag.endswith("-pillow") else ""
+    if base_tag == "main":
+        return f"{flavour}stable branch image"
+    if base_tag == "next":
+        return f"{flavour}integration branch image"
+    if base_tag.startswith("v"):
+        return f"{flavour}versioned release image"
+    return f"{flavour}published image"
 
 
 def next_ctid(dry_run: bool) -> int:

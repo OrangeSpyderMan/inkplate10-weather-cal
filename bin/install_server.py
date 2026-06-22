@@ -64,6 +64,10 @@ DEFAULT_FORECAST_SLICE_HOURS = 3
 DEFAULT_FORECAST_LEAD_MINUTES = 15
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
+RENDERER_CHOICES = (
+    ("firefox", "Firefox compatibility renderer (full installation)"),
+    ("pillow", "Experimental Pillow renderer (lower footprint)"),
+)
 WEATHER_PROVIDER_LABELS = {
     "openweathermapv4": "OpenWeatherMap One Call 4.0",
     "openweathermapv3": "OpenWeatherMap One Call 3.0",
@@ -89,6 +93,11 @@ def main() -> int:
         help="install mode; prompts when omitted",
     )
     parser.add_argument(
+        "--renderer",
+        choices=("firefox", "pillow"),
+        help="output renderer and matching dependency/container flavour",
+    )
+    parser.add_argument(
         "--answers",
         type=Path,
         help="JSON answers file used as prompt defaults or for --non-interactive",
@@ -103,6 +112,8 @@ def main() -> int:
     repo_root = Path.cwd()
     ensure_repo_root(repo_root)
     configure_answers(args.answers, args.non_interactive)
+    if args.renderer is not None:
+        INSTALLER_ANSWERS["renderer"] = args.renderer
 
     print("Inkplate Weather Calendar server installer")
     print("------------------------------------------")
@@ -134,7 +145,10 @@ def main() -> int:
         print(
             "Proxmox VE support is experimental and uses a dedicated installer."
         )
-        print("Run: ./bin/install_proxmox")
+        renderer_option = (
+            f" --renderer {args.renderer}" if args.renderer else ""
+        )
+        print(f"Run: ./bin/install_proxmox{renderer_option}")
         print("Preview first with: ./bin/install_proxmox --dry-run")
         return 0
     else:
@@ -228,6 +242,13 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             dry_run=dry_run,
             mode=0o600,
         )
+    elif action == "update":
+        current_config = read_simple_yaml(existing_config_path(repo_root))
+        update_compose_flavour_env(
+            repo_root / DOCKER_ENV_FILE,
+            required_dependency_renderer(current_config),
+            dry_run=dry_run,
+        )
 
     ensure_compose_config_readable(repo_root, dry_run=dry_run)
 
@@ -292,19 +313,37 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         return
 
     validate_native_platform(dry_run)
+    current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
+    existing_renderer = required_dependency_renderer(current_config)
+    if action in ("fresh", "reconfigure", "update_reconfigure"):
+        renderer = collect_renderer(current_config)
+    else:
+        renderer = existing_renderer
+        print(f"Preserving configured renderer: {renderer}")
+    if action == "reconfigure" and renderer != existing_renderer:
+        raise SystemExit(
+            "ERROR: changing the renderer also changes native dependencies. "
+            "Choose 'update_reconfigure' instead."
+        )
 
     if action in ("fresh", "update", "update_reconfigure"):
-        install_native_prerequisites(dry_run)
+        install_native_prerequisites(dry_run, renderer)
         ensure_system_user(dry_run)
         copy_repo(repo_root, INSTALL_DIR, dry_run)
         ensure_venv(dry_run)
-        refresh_dependencies(dry_run)
-        install_geckodriver(repo_root, dry_run)
+        refresh_dependencies(dry_run, renderer)
+        if renderer == "firefox":
+            install_geckodriver(repo_root, dry_run)
 
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
-        answers = collect_answers(current_env, current_config, mode="systemd")
+        answers = collect_answers(
+            current_env,
+            current_config,
+            mode="systemd",
+            renderer=renderer,
+        )
         write_text_atomic(
             INSTALL_DIR / SERVER_CONFIG,
             render_config(answers, mode="systemd"),
@@ -419,12 +458,18 @@ def choose_existing_action(label: str, existing: list[Path]) -> str:
     )
 
 
-def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> dict[str, object]:
+def collect_answers(
+    env: dict[str, str],
+    config: dict[str, str],
+    mode: str,
+    renderer: str | None = None,
+) -> dict[str, object]:
     print()
     print("Configuration")
     print("-------------")
 
     answers: dict[str, object] = {}
+    answers["renderer"] = renderer or collect_renderer(config)
     answers["host"] = prompt_ip_address(
         "Server bind IP",
         default=config.get("server.host", DEFAULT_HOST),
@@ -609,6 +654,40 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
     return answers
 
 
+def configured_renderer(config: dict[str, str]) -> str:
+    default_profile = config.get(
+        "outputs.default",
+        DEFAULT_OUTPUT_PROFILE,
+    )
+    renderer = config.get(
+        f"outputs.profiles.{default_profile}.renderer",
+        DEFAULT_RENDERER,
+    )
+    return renderer if renderer in dict(RENDERER_CHOICES) else DEFAULT_RENDERER
+
+
+def required_dependency_renderer(config: dict[str, str]) -> str:
+    renderers = {
+        value
+        for key, value in config.items()
+        if key.startswith("outputs.profiles.")
+        and key.endswith(".renderer")
+        and value in dict(RENDERER_CHOICES)
+    }
+    if renderers == {"pillow"}:
+        return "pillow"
+    return "firefox"
+
+
+def collect_renderer(config: dict[str, str]) -> str:
+    return prompt_choice(
+        "Output renderer",
+        list(RENDERER_CHOICES),
+        default=configured_renderer(config),
+        key="renderer",
+    )
+
+
 def weather_provider_choices() -> list[tuple[str, str]]:
     ordered_names = [
         name for name in WEATHER_PROVIDER_LABELS if name in FORECAST_PROVIDERS
@@ -685,7 +764,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  profiles:",
         f"    {DEFAULT_OUTPUT_PROFILE}:",
         "      enabled: true",
-        f"      renderer: {DEFAULT_RENDERER}",
+        f"      renderer: {answers.get('renderer', DEFAULT_RENDERER)}",
         f"      width: {DEFAULT_IMAGE_WIDTH}",
         f"      height: {DEFAULT_IMAGE_HEIGHT}",
         f"      filename: {DEFAULT_OUTPUT_FILENAME}",
@@ -724,6 +803,15 @@ def render_env(
         values["INKPLATE_SERVER_PORT"] = str(
             answers.get("port", DEFAULT_PORT)
         )
+        renderer = str(answers.get("renderer", DEFAULT_RENDERER))
+        values["INKPLATE_BUILD_TARGET"] = (
+            "pillow" if renderer == "pillow" else "full"
+        )
+        values["INKPLATE_IMAGE"] = (
+            "inkplate10-weather-cal:pillow-local"
+            if renderer == "pillow"
+            else "inkplate10-weather-cal:local"
+        )
     if include_optional:
         values.update(
             {
@@ -742,6 +830,50 @@ def render_env(
     lines.extend(f"{key}={format_env_value(value)}" for key, value in values.items())
     lines.append("")
     return "\n".join(lines)
+
+
+def update_compose_flavour_env(
+    path: Path,
+    renderer: str,
+    *,
+    dry_run: bool,
+) -> None:
+    values = {
+        "INKPLATE_BUILD_TARGET": (
+            "pillow" if renderer == "pillow" else "full"
+        ),
+        "INKPLATE_IMAGE": (
+            "inkplate10-weather-cal:pillow-local"
+            if renderer == "pillow"
+            else "inkplate10-weather-cal:local"
+        ),
+    }
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+    found: set[str] = set()
+    updated = []
+    for line in lines:
+        if "=" not in line or line.lstrip().startswith("#"):
+            updated.append(line)
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key in values:
+            updated.append(f"{key}={values[key]}")
+            found.add(key)
+        else:
+            updated.append(line)
+    if updated and updated[-1]:
+        updated.append("")
+    for key, value in values.items():
+        if key not in found:
+            updated.append(f"{key}={value}")
+    updated.append("")
+    write_text_atomic(
+        path,
+        "\n".join(updated),
+        dry_run=dry_run,
+        mode=0o600,
+    )
 
 
 def container_host_alias(mode: str) -> str:
@@ -945,16 +1077,15 @@ def configure_privilege_escalation(dry_run: bool) -> None:
     print(f"Privilege check: {name} elevation is available.")
 
 
-def install_native_prerequisites(dry_run: bool) -> None:
-    firefox_package = choose_firefox_package(dry_run)
+def install_native_prerequisites(dry_run: bool, renderer: str) -> None:
     packages = [
         "ca-certificates",
-        "curl",
-        firefox_package,
         "python3",
         "python3-pip",
         "python3-venv",
     ]
+    if renderer == "firefox":
+        packages.extend(["curl", choose_firefox_package(dry_run)])
     run(["apt-get", "update"], sudo=True, dry_run=dry_run)
     run(["apt-get", "install", "-y", "--no-install-recommends", *packages], sudo=True, dry_run=dry_run)
 
@@ -1065,12 +1196,37 @@ def ensure_venv(dry_run: bool) -> None:
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
 
 
-def refresh_dependencies(dry_run: bool) -> None:
+def refresh_dependencies(dry_run: bool, renderer: str) -> None:
+    requirements = (
+        "requirements-pillow-only.txt"
+        if renderer == "pillow"
+        else "requirements.txt"
+    )
     run(
-        ["bin/refresh_deps", "--venv", str(VENV_DIR), "--requirements", str(INSTALL_DIR / "server" / "requirements.txt")],
+        [
+            "bin/refresh_deps",
+            "--venv",
+            str(VENV_DIR),
+            "--requirements",
+            str(INSTALL_DIR / "server" / requirements),
+        ],
         sudo=True,
         dry_run=dry_run,
     )
+    if renderer == "pillow":
+        run(
+            [
+                str(VENV_DIR / "bin" / "python"),
+                "-m",
+                "pip",
+                "uninstall",
+                "-y",
+                "airium",
+                "selenium",
+            ],
+            sudo=True,
+            dry_run=dry_run,
+        )
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
 
 
