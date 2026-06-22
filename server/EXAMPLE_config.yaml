@@ -35,10 +35,14 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
+      # Set to pillow to render directly without launching Firefox.
       renderer: firefox
       width: 825
       height: 1200
       filename: calendar.png
+      # Pillow-specific option:
+      # options:
+      #   supersample: 2
 mqtt:
   weather:
     # Optional weather data publisher for other local clients.

@@ -1,4 +1,5 @@
 from views.calendar import CalendarPage
+from pillow_renderer import PillowCalendarRenderer
 
 
 class FirefoxCalendarRenderer:
@@ -29,6 +30,7 @@ class FirefoxCalendarRenderer:
 
 RENDERERS = {
     FirefoxCalendarRenderer.name: FirefoxCalendarRenderer,
+    PillowCalendarRenderer.name: PillowCalendarRenderer,
 }
 
 

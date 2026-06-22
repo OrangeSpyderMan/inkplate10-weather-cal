@@ -393,9 +393,59 @@ Inkplate 10 profile when `outputs.profiles` is absent.
 Profiles may also contain an `options` mapping for renderer-specific layout or
 style settings. Unknown options are left to the selected renderer.
 
-Only the `firefox` renderer is implemented currently. The registry allows a
-future `pillow` or device-specific renderer without changing artifact storage,
-readiness, or HTTP routing.
+Two renderers are available:
+
+- `firefox` preserves the existing HTML/CSS/Chart.js screenshot path.
+- `pillow` draws the calendar directly with Pillow, local fonts, icons, the
+  generated map, and no browser process. Its optional `supersample` setting
+  defaults to `2` for antialiased output.
+
+Switch the default output to Pillow by changing only the renderer:
+
+```yaml
+outputs:
+  default: inkplate10-portrait
+  profiles:
+    inkplate10-portrait:
+      enabled: true
+      renderer: pillow
+      width: 825
+      height: 1200
+      filename: calendar.png
+      options:
+        supersample: 2
+```
+
+For side-by-side testing, enable both renderers under different profile names:
+
+```yaml
+outputs:
+  default: inkplate10-firefox
+  profiles:
+    inkplate10-firefox:
+      renderer: firefox
+      width: 825
+      height: 1200
+      filename: calendar.png
+    inkplate10-pillow:
+      renderer: pillow
+      width: 825
+      height: 1200
+      filename: calendar.png
+      options:
+        supersample: 2
+```
+
+The comparison images are then served at:
+
+```text
+/outputs/inkplate10-firefox/calendar.png
+/outputs/inkplate10-pillow/calendar.png
+```
+
+Firefox, Geckodriver, Selenium, Airium, and the HTML renderer remain installed
+while both implementations are supported. They can be removed from the image
+only after the Pillow renderer becomes the sole configured renderer.
 
 The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
 aliases for the same image. `/calendar.png` retains its attachment response for

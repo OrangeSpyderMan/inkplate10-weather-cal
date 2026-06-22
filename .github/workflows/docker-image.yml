@@ -81,6 +81,7 @@ jobs:
             server/configuration.py \
             server/artifacts.py \
             server/output_profiles.py \
+            server/pillow_renderer.py \
             server/renderers.py \
             server/mqtt_diagnostics.py \
             server/mqtt_publisher.py \

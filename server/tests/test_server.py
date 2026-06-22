@@ -71,7 +71,7 @@ class ProducerTests(unittest.TestCase):
         profiles = {
             "future": OutputProfile(
                 "future",
-                "pillow",
+                "unknown",
                 800,
                 600,
             )

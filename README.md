@@ -53,8 +53,9 @@ Both a server and client are required. The main workload is on the server, which
 ### Server (Raspberry Pi)
 
 1. Gets any relevant new data (ie. weather, maps).
-2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
-3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
+2. Renders the configured output either directly with Pillow or through the
+   existing Airium/Firefox screenshot path.
+3. Publishes the resulting PNG at the configured e-ink display dimensions.
 4. A separate Gunicorn/Flask web process serves the generated PNG and weather
    API from the shared artifact directory.
 5. (Optional) Separate server processes publish weather snapshots and listen
