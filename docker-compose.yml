@@ -1,8 +1,9 @@
 x-inkplate-service: &inkplate-service
   init: true
-  image: inkplate10-weather-cal:local
+  image: ${INKPLATE_IMAGE:-inkplate10-weather-cal:local}
   build:
     context: .
+    target: ${INKPLATE_BUILD_TARGET:-full}
     args:
       GECKOVERSION: v0.37.0
   restart: unless-stopped

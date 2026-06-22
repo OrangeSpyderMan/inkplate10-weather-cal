@@ -35,7 +35,7 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
-      # Set to pillow to render directly without launching Firefox.
+      # Experimental: set to pillow to render directly without Firefox.
       renderer: firefox
       width: 825
       height: 1200

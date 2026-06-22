@@ -53,8 +53,9 @@ Both a server and client are required. The main workload is on the server, which
 ### Server (Raspberry Pi)
 
 1. Gets any relevant new data (ie. weather, maps).
-2. Renders the configured output either directly with Pillow or through the
-   existing Airium/Firefox screenshot path.
+2. Renders the configured output either through the established
+   Airium/Firefox screenshot path or directly with the experimental,
+   low-footprint Pillow renderer.
 3. Publishes the resulting PNG at the configured e-ink display dimensions.
 4. A separate Gunicorn/Flask web process serves the generated PNG and weather
    API from the shared artifact directory.
@@ -96,7 +97,13 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The producer does the heavier PNG rendering work while the Gunicorn web process remains available independently. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
+  To run the server, you need a system capable of running Python 3. The full
+  compatibility image also includes Firefox and Geckodriver; the optional
+  Pillow-only image avoids that browser footprint. The producer does the
+  heavier PNG rendering work while the Gunicorn web process remains available
+  independently. Container images target `amd64` and `arm64`, so they are a
+  better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi
+  Zero W may need a native/manual setup rather than the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -202,6 +209,17 @@ installed runtimes do not require Git metadata.
 Named outputs are profile-driven. Additional display sizes and renderer
 implementations can be enabled as separate profiles while `/calendar.png`
 continues to serve the configured default.
+
+The `pillow` renderer is currently experimental and opt-in. It renders directly
+without HTML, JavaScript, Firefox, or screenshot capture and completes a typical
+`825x1200` render in roughly 0.4 seconds during local testing. This reduces
+runtime memory and enables a substantially smaller Pillow-only container.
+Firefox remains the default compatibility renderer because small visual
+differences may still exist.
+
+In a local amd64 build, the unpacked Pillow image was approximately 88 MB
+compared with 238 MB for the full image, a reduction of about 150 MB or 63%.
+Registry download sizes vary by architecture and compression.
 
 The server supports AccuWeather and OpenWeatherMap One Call 3.0 and 4.0.
 OpenWeatherMap v2 has been removed. Forecast and optional realtime providers

@@ -1,6 +1,7 @@
 # Inkplate 10 Weather Calendar Server
 
-A service for the weather calendar client written in Python3, backed by [Airium](https://pypi.org/project/airium/) and [Firefox](https://www.mozilla.org/firefox/).
+A Python service for the weather calendar client with an established
+Airium/Firefox renderer and an experimental direct Pillow renderer.
 
 
 
@@ -14,7 +15,10 @@ Example 1                  | Example 2                 | Example 3
 
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
-- Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
+- Uses either [Airium](https://pypi.org/project/airium/) with
+  [Selenium](https://pypi.org/project/selenium/), Geckodriver and Firefox, or
+  the experimental Pillow renderer with
+  [rough-py](https://github.com/cktlco/rough-py), to produce PNG images.
 - Uses [Gunicorn](https://gunicorn.org/) and
   [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images, the
   weather API, and a browser/PWA viewer independently from artifact generation.
@@ -396,11 +400,24 @@ style settings. Unknown options are left to the selected renderer.
 Two renderers are available:
 
 - `firefox` preserves the existing HTML/CSS/Chart.js screenshot path.
-- `pillow` draws the calendar directly with Pillow, using
+- `pillow` is an experimental renderer that draws the calendar directly with
+  Pillow, using
   [rough-py](https://github.com/cktlco/rough-py) for Rough.js-compatible
   sketch geometry, plus local fonts, icons, and the generated map. It requires
   no browser or SVG rasterizer. Its optional `supersample` setting defaults to
   `2` for antialiased output.
+
+The Pillow path typically completes an `825x1200` render in approximately
+0.4 seconds during local testing. It avoids HTML generation, JavaScript,
+Firefox startup and screenshot capture, substantially reducing runtime memory
+and enabling the smaller Pillow-only container image. Its output closely
+matches Firefox, but small visual differences may remain; Firefox therefore
+remains the default compatibility renderer.
+
+In a local amd64 build, Docker reported an unpacked size of approximately
+88 MB for the Pillow image and 238 MB for the full image: about 150 MB, or 63%,
+smaller. Published download sizes vary with architecture and registry
+compression.
 
 Switch the default output to Pillow by changing only the renderer:
 
@@ -445,9 +462,9 @@ The comparison images are then served at:
 /outputs/inkplate10-pillow/calendar.png
 ```
 
-Firefox, Geckodriver, Selenium, Airium, and the HTML renderer remain installed
-while both implementations are supported. They can be removed from the image
-only after the Pillow renderer becomes the sole configured renderer.
+The full container includes both renderers. The Pillow-only container excludes
+Firefox, Geckodriver, Selenium and Airium and therefore requires every enabled
+output profile to use `renderer: pillow`.
 
 The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
 aliases for the same image. `/calendar.png` retains its attachment response for
@@ -658,9 +675,37 @@ repair individual systemd pieces manually.
 ## Running with Docker or Podman
 
 The repository root contains the Dockerfile and a Compose file that works with
-Docker Compose or Podman Compose. The image installs Firefox, Geckodriver,
-Gunicorn, and the required Python modules, then runs as an unprivileged
-`inkplate` user.
+Docker Compose or Podman Compose. Both image flavours run as an unprivileged
+`inkplate` user:
+
+- `full` is the default compatibility image. It contains Firefox,
+  Geckodriver, Selenium, Airium, Pillow and `rough-py`, and supports either
+  renderer.
+- `pillow` is the low-footprint image. It contains Pillow and `rough-py` but
+  omits Firefox, Geckodriver, Selenium and Airium.
+
+Published tags use the normal release or branch tag for the full image and
+append `-pillow` for the low-footprint image:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:v4.0.0
+ghcr.io/orangespyderman/inkplate10-weather-cal:v4.0.0-pillow
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+ghcr.io/orangespyderman/inkplate10-weather-cal:main-pillow
+ghcr.io/orangespyderman/inkplate10-weather-cal:next
+ghcr.io/orangespyderman/inkplate10-weather-cal:next-pillow
+```
+
+For a local Pillow-only build, add these values to `.env` and ensure all output
+profiles select `renderer: pillow`:
+
+```dotenv
+INKPLATE_BUILD_TARGET=pillow
+INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local
+```
+
+To run a published Pillow image with Compose, set `INKPLATE_IMAGE` to the
+desired `-pillow` tag, pull it, and start Compose with `--no-build`.
 
 ### Configure
 

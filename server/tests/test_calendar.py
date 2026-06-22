@@ -7,9 +7,18 @@ import unittest
 SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
-from views.calendar import CalendarPage
+try:
+    from views.calendar import CalendarPage
+except ModuleNotFoundError as error:
+    if (error.name or "").split(".", 1)[0] not in {"airium", "selenium"}:
+        raise
+    CalendarPage = None
 
 
+@unittest.skipIf(
+    CalendarPage is None,
+    "Firefox renderer dependencies are not installed",
+)
 class CalendarPageTests(unittest.TestCase):
     def test_renders_siren_icon_for_active_weather_alert(self):
         html = self._render({"active": True, "ids": ["alert-id"]})

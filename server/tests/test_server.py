@@ -80,6 +80,29 @@ class ProducerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported output renderer"):
             server.build_output_renderers(profiles)
 
+    def test_rejects_renderer_missing_optional_dependencies(self):
+        profiles = {
+            "portrait": OutputProfile(
+                "portrait",
+                "firefox",
+                825,
+                1200,
+            )
+        }
+
+        with mock.patch(
+            "builtins.__import__",
+            side_effect=ModuleNotFoundError(
+                "No module named 'selenium'",
+                name="selenium",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "renderer 'firefox' is unavailable",
+            ):
+                server.build_output_renderers(profiles)
+
     def test_renders_each_profile_with_dimensions_and_options(self):
         portrait_renderer = mock.Mock()
         landscape_renderer = mock.Mock()
