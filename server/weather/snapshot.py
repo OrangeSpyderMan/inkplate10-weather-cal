@@ -46,9 +46,7 @@ class WeatherSnapshot:
 
 def _serializable(value):
     if isinstance(value, dt.datetime):
-        if value.tzinfo is None:
-            return value.isoformat()
-        return value.astimezone(dt.timezone.utc).isoformat()
+        return value.isoformat()
 
     if isinstance(value, dict):
         return {key: _serializable(item) for key, item in value.items()}
