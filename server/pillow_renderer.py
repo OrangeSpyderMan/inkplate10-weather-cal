@@ -1,10 +1,11 @@
 import datetime as dt
 import math
 import os
-import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from rough import Options
+from rough.generator import RoughGenerator
 
 
 ASSET_ROOT = Path(__file__).resolve().parent / "views" / "html"
@@ -65,7 +66,7 @@ class CalendarCanvas:
             color=background,
         )
         self.draw = ImageDraw.Draw(self.image)
-        self.rough = RoughDraw(self.draw, seed=1947)
+        self.rough = RoughPillowDraw(self.draw, seed=1947)
         self.regular_path = ASSET_ROOT / "Merienda-Regular.ttf"
         self.bold_path = ASSET_ROOT / "Merienda-Bold.ttf"
 
@@ -497,10 +498,12 @@ def _wind(wind):
     return _measurement(value), unit
 
 
-class RoughDraw:
+class RoughPillowDraw:
+    """Render rough-py drawing operations onto a Pillow canvas."""
     def __init__(self, draw, seed=0):
         self.draw = draw
-        self.random = random.Random(seed)
+        self.generator = RoughGenerator()
+        self.seed = seed
 
     def line(
         self,
@@ -513,26 +516,24 @@ class RoughDraw:
         strokes=2,
         max_randomness_offset=2,
     ):
-        """Draw the two cubic strokes used by Rough.js 3.1.0."""
-        x1, y1 = start
-        x2, y2 = end
-        length_squared = (x1 - x2) ** 2 + (y1 - y2) ** 2
-        offset = max_randomness_offset
-        if offset * offset * 100 > length_squared:
-            offset = math.sqrt(length_squared) / 10
-
-        for pass_index in range(strokes):
-            half_offset = pass_index > 0
-            self._cubic_line(
-                start,
-                end,
-                fill,
-                width,
-                roughness,
-                bowing,
-                offset,
-                half_offset,
+        options = Options(
+            stroke=self._color(fill),
+            strokeWidth=width,
+            roughness=roughness,
+            bowing=bowing,
+            maxRandomnessOffset=max_randomness_offset,
+            disableMultiStroke=strokes == 1,
+            seed=self._next_seed(),
+        )
+        self._draw(
+            self.generator.line(
+                start[0],
+                start[1],
+                end[0],
+                end[1],
+                options,
             )
+        )
 
     def polyline(
         self,
@@ -542,15 +543,19 @@ class RoughDraw:
         bowing=1,
         max_randomness_offset=2,
     ):
-        for start, end in zip(points, points[1:]):
-            self.line(
-                start,
-                end,
-                width=width,
-                roughness=roughness,
-                bowing=bowing,
-                max_randomness_offset=max_randomness_offset,
+        self._draw(
+            self.generator.linearPath(
+                points,
+                Options(
+                    stroke="black",
+                    strokeWidth=width,
+                    roughness=roughness,
+                    bowing=bowing,
+                    maxRandomnessOffset=max_randomness_offset,
+                    seed=self._next_seed(),
+                ),
             )
+        )
 
     def ellipse(
         self,
@@ -561,26 +566,27 @@ class RoughDraw:
         roughness=1,
     ):
         left, top, right, bottom = box
-        center_x = (left + right) / 2
-        center_y = (top + bottom) / 2
-        radius_x = (right - left) / 2
-        radius_y = (bottom - top) / 2
-        if fill is not None:
-            self.draw.ellipse(box, fill=fill)
-        if outline is None:
-            return
-        for _ in range(2):
-            points = []
-            for step in range(49):
-                angle = math.tau * step / 48
-                jitter = self._jitter(roughness)
-                points.append(
-                    (
-                        center_x + (radius_x + jitter) * math.cos(angle),
-                        center_y + (radius_y + jitter) * math.sin(angle),
-                    )
-                )
-            self.draw.line(points, fill=outline, width=width, joint="curve")
+        self._draw(
+            self.generator.ellipse(
+                (left + right) / 2,
+                (top + bottom) / 2,
+                right - left,
+                bottom - top,
+                Options(
+                    stroke=(
+                        self._color(outline)
+                        if outline is not None
+                        else "none"
+                    ),
+                    strokeWidth=width,
+                    fill=self._color(fill) if fill is not None else None,
+                    fillStyle="solid",
+                    roughness=1,
+                    maxRandomnessOffset=roughness,
+                    seed=self._next_seed(),
+                ),
+            )
+        )
 
     def hatched_rectangle(
         self,
@@ -592,7 +598,7 @@ class RoughDraw:
         bowing=1,
         max_randomness_offset=2,
     ):
-        """Draw a Rough.js zigzag-filled rectangle and its separate border."""
+        """Draw a rough-py zigzag fill and Chart.js-style separate borders."""
         left, top, right, bottom = box
         inset = border_width / 2
         left += inset
@@ -601,27 +607,26 @@ class RoughDraw:
         bottom -= inset
         if right <= left or bottom <= top:
             return
-        box = (left, top, right, bottom)
-        previous_end = None
-        for start, end in self._rectangle_hachures(box, gap):
-            self.line(
-                start,
-                end,
-                width=hatch_width,
-                roughness=roughness,
-                bowing=bowing,
-                max_randomness_offset=max_randomness_offset,
-            )
-            if previous_end is not None:
-                self.line(
-                    previous_end,
-                    start,
-                    width=hatch_width,
+        self._draw(
+            self.generator.rectangle(
+                left,
+                top,
+                right - left,
+                bottom - top,
+                Options(
+                    stroke="none",
+                    fill="black",
+                    fillStyle="zigzag",
+                    fillWeight=hatch_width,
+                    hachureAngle=45,
+                    hachureGap=gap,
                     roughness=roughness,
                     bowing=bowing,
-                    max_randomness_offset=max_randomness_offset,
-                )
-            previous_end = end
+                    maxRandomnessOffset=max_randomness_offset,
+                    seed=self._next_seed(),
+                ),
+            )
+        )
 
         edges = (
             ((left, top), (right, top)),
@@ -639,96 +644,92 @@ class RoughDraw:
                 max_randomness_offset=max_randomness_offset,
             )
 
-    def _cubic_line(
-        self,
-        start,
-        end,
-        fill,
-        width,
-        roughness,
-        bowing,
-        offset,
-        half_offset,
-    ):
-        x1, y1 = start
-        x2, y2 = end
-        control_progress = 0.2 + 0.2 * self.random.random()
-        bow_x = bowing * offset * (y2 - y1) / 200
-        bow_y = bowing * offset * (x1 - x2) / 200
-        bow_x = self._rand_offset(bow_x, roughness)
-        bow_y = self._rand_offset(bow_y, roughness)
-        pass_offset = offset / 2 if half_offset else offset
+    def _draw(self, drawable):
+        for operation_set in drawable.sets:
+            paths = self._paths(operation_set.ops)
+            if operation_set.type == "fillPath":
+                for path in paths:
+                    if len(path) >= 3:
+                        self.draw.polygon(
+                            path,
+                            fill=self._gray(drawable.options.fill),
+                        )
+                continue
 
-        def jitter():
-            return self._rand_offset(pass_offset, roughness)
-
-        start_point = (x1 + jitter(), y1 + jitter())
-        control_1 = (
-            bow_x + x1 + (x2 - x1) * control_progress + jitter(),
-            bow_y + y1 + (y2 - y1) * control_progress + jitter(),
-        )
-        control_2 = (
-            bow_x + x1 + 2 * (x2 - x1) * control_progress + jitter(),
-            bow_y + y1 + 2 * (y2 - y1) * control_progress + jitter(),
-        )
-        end_point = (x2 + jitter(), y2 + jitter())
-        points = [
-            self._cubic_point(
-                start_point,
-                control_1,
-                control_2,
-                end_point,
-                step / 16,
-            )
-            for step in range(17)
-        ]
-        self.draw.line(points, fill=fill, width=width, joint="curve")
-
-    @staticmethod
-    def _cubic_point(start, control_1, control_2, end, progress):
-        inverse = 1 - progress
-        return (
-            inverse**3 * start[0]
-            + 3 * inverse**2 * progress * control_1[0]
-            + 3 * inverse * progress**2 * control_2[0]
-            + progress**3 * end[0],
-            inverse**3 * start[1]
-            + 3 * inverse**2 * progress * control_1[1]
-            + 3 * inverse * progress**2 * control_2[1]
-            + progress**3 * end[1],
-        )
-
-    @staticmethod
-    def _rectangle_hachures(box, gap):
-        left, top, right, bottom = box
-        diagonal_step = max(0.1, gap) * math.sqrt(2)
-        diagonal = left - bottom
-        final_diagonal = right - top
-        while diagonal <= final_diagonal:
-            intersections = []
-            for x, y in (
-                (left, left - diagonal),
-                (right, right - diagonal),
-                (diagonal + top, top),
-                (diagonal + bottom, bottom),
-            ):
-                if (
-                    left - 0.01 <= x <= right + 0.01
-                    and top - 0.01 <= y <= bottom + 0.01
-                    and not any(
-                        abs(x - other_x) < 0.01
-                        and abs(y - other_y) < 0.01
-                        for other_x, other_y in intersections
+            if operation_set.type == "fillSketch":
+                color = self._gray(drawable.options.fill)
+                width = max(1, round(drawable.options.fillWeight))
+            else:
+                color = self._gray(drawable.options.stroke)
+                width = max(1, round(drawable.options.strokeWidth))
+            for path in paths:
+                if len(path) >= 2:
+                    self.draw.line(
+                        path,
+                        fill=color,
+                        width=width,
+                        joint="curve",
                     )
-                ):
-                    intersections.append((x, y))
-            if len(intersections) == 2:
-                intersections.sort(key=lambda point: (point[1], point[0]))
-                yield intersections[0], intersections[1]
-            diagonal += diagonal_step
 
-    def _rand_offset(self, amount, roughness):
-        return roughness * self.random.uniform(-amount, amount)
+    def _paths(self, operations):
+        paths = []
+        current = []
+        cursor = None
+        for operation in operations:
+            data = operation.data
+            if operation.op == "move":
+                if current:
+                    paths.append(current)
+                cursor = (data[0], data[1])
+                current = [cursor]
+            elif operation.op == "lineTo":
+                cursor = (data[0], data[1])
+                current.append(cursor)
+            elif operation.op == "bcurveTo" and cursor is not None:
+                control_1 = (data[0], data[1])
+                control_2 = (data[2], data[3])
+                end = (data[4], data[5])
+                current.extend(
+                    self._sample_cubic(
+                        cursor,
+                        control_1,
+                        control_2,
+                        end,
+                    )
+                )
+                cursor = end
+        if current:
+            paths.append(current)
+        return paths
 
-    def _jitter(self, amount):
-        return self.random.uniform(-amount, amount)
+    @staticmethod
+    def _sample_cubic(start, control_1, control_2, end):
+        points = []
+        for step in range(1, 17):
+            progress = step / 16
+            inverse = 1 - progress
+            points.append(
+                (
+                    inverse**3 * start[0]
+                    + 3 * inverse**2 * progress * control_1[0]
+                    + 3 * inverse * progress**2 * control_2[0]
+                    + progress**3 * end[0],
+                    inverse**3 * start[1]
+                    + 3 * inverse**2 * progress * control_1[1]
+                    + 3 * inverse * progress**2 * control_2[1]
+                    + progress**3 * end[1],
+                )
+            )
+        return points
+
+    def _next_seed(self):
+        self.seed += 1
+        return self.seed
+
+    @staticmethod
+    def _color(value):
+        return "white" if value in (255, "white") else "black"
+
+    @staticmethod
+    def _gray(value):
+        return 255 if value in (255, "white", "#fff", "#ffffff") else 0

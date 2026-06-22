@@ -396,9 +396,11 @@ style settings. Unknown options are left to the selected renderer.
 Two renderers are available:
 
 - `firefox` preserves the existing HTML/CSS/Chart.js screenshot path.
-- `pillow` draws the calendar directly with Pillow, local fonts, icons, the
-  generated map, and no browser process. Its optional `supersample` setting
-  defaults to `2` for antialiased output.
+- `pillow` draws the calendar directly with Pillow, using
+  [rough-py](https://github.com/cktlco/rough-py) for Rough.js-compatible
+  sketch geometry, plus local fonts, icons, and the generated map. It requires
+  no browser or SVG rasterizer. Its optional `supersample` setting defaults to
+  `2` for antialiased output.
 
 Switch the default output to Pillow by changing only the renderer:
 
