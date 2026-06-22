@@ -114,7 +114,7 @@ class CalendarCanvas:
             anchor="mm",
         )
         if temperature.get("live"):
-            self._live_indicator((731, 236))
+            self._live_indicator((731, 242))
 
         self._circle((731, 499), 62, fill=0)
         self._icon(current.get("icon"), (731, 499), 103, invert=True)
@@ -205,13 +205,18 @@ class CalendarCanvas:
         unit = forecasts[0]["temperature"].get("unit", "")
         temp_min, temp_max = ((5, 104) if "F" in unit else (-15, 40))
         step = (chart_right - chart_left) / count
+        self.draw.line(
+            self._box((24, chart_bottom, 801, chart_bottom)),
+            fill=160,
+            width=max(1, self._size(1)),
+        )
 
         points = []
         for index, (temperature, rain_probability) in enumerate(
             zip(temperatures, rain)
         ):
             center = chart_left + step * (index + 0.5)
-            bar_width = step * 0.52
+            bar_width = step * 0.72
             bar_top = chart_bottom - (
                 rain_probability / 100 * (chart_bottom - chart_top)
             )
@@ -244,16 +249,18 @@ class CalendarCanvas:
         self.rough.polyline(
             scaled_points,
             width=self._size(3),
-            roughness=self._size(1.6),
-            bowing=self._size(2.2),
+            roughness=1,
+            bowing=0.1,
+            max_randomness_offset=self._size(2),
         )
         radius = self._size(5)
         for x, y in scaled_points:
             self.rough.ellipse(
                 (x - radius, y - radius, x + radius, y + radius),
                 width=self._size(2),
-                fill=0,
-                roughness=self._size(0.8),
+                fill=None,
+                outline=0,
+                roughness=self._size(1.2),
             )
 
     def _footer(self, generated_at):
@@ -351,11 +358,29 @@ class CalendarCanvas:
 
     def _hatched_bar(self, left, top, right, bottom):
         box = self._box((left, top, right, bottom))
+        if bottom - top < 0.5:
+            scaled_left, _, scaled_right, scaled_bottom = box
+            for start, end in (
+                ((scaled_left, scaled_bottom), (scaled_right, scaled_bottom)),
+                ((scaled_right, scaled_bottom), (scaled_left, scaled_bottom)),
+            ):
+                self.rough.line(
+                    start,
+                    end,
+                    width=self._size(1),
+                    roughness=4,
+                    bowing=0.2,
+                    max_randomness_offset=self._size(2),
+                )
+            return
         self.rough.hatched_rectangle(
             box,
-            width=self._size(2),
-            gap=self._size(11),
-            roughness=self._size(2.4),
+            border_width=self._size(3),
+            hatch_width=self._size(1),
+            gap=self._size(18),
+            roughness=4,
+            bowing=0.2,
+            max_randomness_offset=self._size(2),
         )
 
     def _outlined_text(self, value, point, size):
@@ -407,7 +432,8 @@ class CalendarCanvas:
             (x1, y1),
             (x2, y2),
             width=self._size(width),
-            roughness=self._size(0.8),
+            roughness=0.8,
+            max_randomness_offset=self._size(2),
         )
 
     def _arc(self, values, start, end, width=1):
@@ -485,36 +511,37 @@ class RoughDraw:
         roughness=1,
         bowing=1,
         strokes=2,
+        max_randomness_offset=2,
     ):
+        """Draw the two cubic strokes used by Rough.js 3.1.0."""
         x1, y1 = start
         x2, y2 = end
-        dx = x2 - x1
-        dy = y2 - y1
-        length = max(1, math.hypot(dx, dy))
-        normal_x = -dy / length
-        normal_y = dx / length
-        for _ in range(strokes):
-            start_jitter = self._jitter(roughness)
-            end_jitter = self._jitter(roughness)
-            bow = self._jitter(bowing)
-            midpoint = (
-                (x1 + x2) / 2 + normal_x * bow,
-                (y1 + y2) / 2 + normal_y * bow,
-            )
-            points = [
-                (
-                    x1 + normal_x * start_jitter,
-                    y1 + normal_y * start_jitter,
-                ),
-                midpoint,
-                (
-                    x2 + normal_x * end_jitter,
-                    y2 + normal_y * end_jitter,
-                ),
-            ]
-            self.draw.line(points, fill=fill, width=width, joint="curve")
+        length_squared = (x1 - x2) ** 2 + (y1 - y2) ** 2
+        offset = max_randomness_offset
+        if offset * offset * 100 > length_squared:
+            offset = math.sqrt(length_squared) / 10
 
-    def polyline(self, points, width=1, roughness=1, bowing=1):
+        for pass_index in range(strokes):
+            half_offset = pass_index > 0
+            self._cubic_line(
+                start,
+                end,
+                fill,
+                width,
+                roughness,
+                bowing,
+                offset,
+                half_offset,
+            )
+
+    def polyline(
+        self,
+        points,
+        width=1,
+        roughness=1,
+        bowing=1,
+        max_randomness_offset=2,
+    ):
         for start, end in zip(points, points[1:]):
             self.line(
                 start,
@@ -522,6 +549,7 @@ class RoughDraw:
                 width=width,
                 roughness=roughness,
                 bowing=bowing,
+                max_randomness_offset=max_randomness_offset,
             )
 
     def ellipse(
@@ -554,65 +582,153 @@ class RoughDraw:
                 )
             self.draw.line(points, fill=outline, width=width, joint="curve")
 
-    def hatched_rectangle(self, box, width=1, gap=12, roughness=1):
+    def hatched_rectangle(
+        self,
+        box,
+        border_width=1,
+        hatch_width=1,
+        gap=12,
+        roughness=1,
+        bowing=1,
+        max_randomness_offset=2,
+    ):
+        """Draw a Rough.js zigzag-filled rectangle and its separate border."""
         left, top, right, bottom = box
-        self.line(
-            (left, top),
-            (right, top),
-            width=width,
-            roughness=roughness,
-        )
-        self.line(
-            (right, top),
-            (right, bottom),
-            width=width,
-            roughness=roughness,
-        )
-        self.line(
-            (right, bottom),
-            (left, bottom),
-            width=width,
-            roughness=roughness,
-        )
-        self.line(
-            (left, bottom),
-            (left, top),
-            width=width,
-            roughness=roughness,
-        )
-        mask = Image.new("L", self.draw._image.size, 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.rectangle(box, fill=255)
-        hatching = Image.new("L", self.draw._image.size, 255)
-        hatch_draw = ImageDraw.Draw(hatching)
-        hatch = RoughDraw(
-            hatch_draw,
-            seed=self.random.randrange(1 << 30),
-        )
-        height = bottom - top
-        offset = left - height - gap
-        while offset < right + gap:
-            start = (offset, bottom + roughness * 2)
-            end = (offset + height + gap, top - roughness * 2)
-            hatch.line(
+        inset = border_width / 2
+        left += inset
+        top += inset
+        right -= inset
+        bottom -= inset
+        if right <= left or bottom <= top:
+            return
+        box = (left, top, right, bottom)
+        previous_end = None
+        for start, end in self._rectangle_hachures(box, gap):
+            self.line(
                 start,
                 end,
-                width=width,
-                roughness=roughness * 1.4,
-                bowing=roughness * 1.8,
-                strokes=2,
+                width=hatch_width,
+                roughness=roughness,
+                bowing=bowing,
+                max_randomness_offset=max_randomness_offset,
             )
-            if self.random.random() < 0.35:
-                hatch.line(
-                    (start[0] + gap * 0.35, start[1]),
-                    (end[0] + gap * 0.35, end[1]),
-                    width=max(1, width - 1),
-                    roughness=roughness * 1.8,
-                    bowing=roughness * 2.2,
-                    strokes=1,
+            if previous_end is not None:
+                self.line(
+                    previous_end,
+                    start,
+                    width=hatch_width,
+                    roughness=roughness,
+                    bowing=bowing,
+                    max_randomness_offset=max_randomness_offset,
                 )
-            offset += gap + self._jitter(gap * 0.28)
-        self.draw._image.paste(hatching, (0, 0), mask)
+            previous_end = end
+
+        edges = (
+            ((left, top), (right, top)),
+            ((right, top), (right, bottom)),
+            ((right, bottom), (left, bottom)),
+            ((left, bottom), (left, top)),
+        )
+        for start, end in edges:
+            self.line(
+                start,
+                end,
+                width=border_width,
+                roughness=roughness,
+                bowing=bowing,
+                max_randomness_offset=max_randomness_offset,
+            )
+
+    def _cubic_line(
+        self,
+        start,
+        end,
+        fill,
+        width,
+        roughness,
+        bowing,
+        offset,
+        half_offset,
+    ):
+        x1, y1 = start
+        x2, y2 = end
+        control_progress = 0.2 + 0.2 * self.random.random()
+        bow_x = bowing * offset * (y2 - y1) / 200
+        bow_y = bowing * offset * (x1 - x2) / 200
+        bow_x = self._rand_offset(bow_x, roughness)
+        bow_y = self._rand_offset(bow_y, roughness)
+        pass_offset = offset / 2 if half_offset else offset
+
+        def jitter():
+            return self._rand_offset(pass_offset, roughness)
+
+        start_point = (x1 + jitter(), y1 + jitter())
+        control_1 = (
+            bow_x + x1 + (x2 - x1) * control_progress + jitter(),
+            bow_y + y1 + (y2 - y1) * control_progress + jitter(),
+        )
+        control_2 = (
+            bow_x + x1 + 2 * (x2 - x1) * control_progress + jitter(),
+            bow_y + y1 + 2 * (y2 - y1) * control_progress + jitter(),
+        )
+        end_point = (x2 + jitter(), y2 + jitter())
+        points = [
+            self._cubic_point(
+                start_point,
+                control_1,
+                control_2,
+                end_point,
+                step / 16,
+            )
+            for step in range(17)
+        ]
+        self.draw.line(points, fill=fill, width=width, joint="curve")
+
+    @staticmethod
+    def _cubic_point(start, control_1, control_2, end, progress):
+        inverse = 1 - progress
+        return (
+            inverse**3 * start[0]
+            + 3 * inverse**2 * progress * control_1[0]
+            + 3 * inverse * progress**2 * control_2[0]
+            + progress**3 * end[0],
+            inverse**3 * start[1]
+            + 3 * inverse**2 * progress * control_1[1]
+            + 3 * inverse * progress**2 * control_2[1]
+            + progress**3 * end[1],
+        )
+
+    @staticmethod
+    def _rectangle_hachures(box, gap):
+        left, top, right, bottom = box
+        diagonal_step = max(0.1, gap) * math.sqrt(2)
+        diagonal = left - bottom
+        final_diagonal = right - top
+        while diagonal <= final_diagonal:
+            intersections = []
+            for x, y in (
+                (left, left - diagonal),
+                (right, right - diagonal),
+                (diagonal + top, top),
+                (diagonal + bottom, bottom),
+            ):
+                if (
+                    left - 0.01 <= x <= right + 0.01
+                    and top - 0.01 <= y <= bottom + 0.01
+                    and not any(
+                        abs(x - other_x) < 0.01
+                        and abs(y - other_y) < 0.01
+                        for other_x, other_y in intersections
+                    )
+                ):
+                    intersections.append((x, y))
+            if len(intersections) == 2:
+                intersections.sort(key=lambda point: (point[1], point[0]))
+                yield intersections[0], intersections[1]
+            diagonal += diagonal_step
+
+    def _rand_offset(self, amount, roughness):
+        return roughness * self.random.uniform(-amount, amount)
 
     def _jitter(self, amount):
         return self.random.uniform(-amount, amount)

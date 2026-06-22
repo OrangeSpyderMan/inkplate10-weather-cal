@@ -102,6 +102,8 @@ class PillowCalendarRendererTests(unittest.TestCase):
                 self.assertEqual(rendered.size, (825, 1200))
                 self.assertLess(rendered.getextrema()[0], 10)
                 self.assertGreater(rendered.getextrema()[1], 245)
+                zero_bar_stroke = rendered.crop((70, 1104, 130, 1115))
+                self.assertLess(zero_bar_stroke.getextrema()[0], 50)
 
     def test_scales_to_configured_output_dimensions(self):
         snapshot = SimpleNamespace(
