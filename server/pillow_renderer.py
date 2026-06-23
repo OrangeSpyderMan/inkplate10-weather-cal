@@ -359,7 +359,7 @@ class CalendarCanvas:
 
     def _hatched_bar(self, left, top, right, bottom):
         box = self._box((left, top, right, bottom))
-        if bottom - top < 0.5:
+        if bottom - top < 3:
             scaled_left, _, scaled_right, scaled_bottom = box
             for start, end in (
                 ((scaled_left, scaled_bottom), (scaled_right, scaled_bottom)),
