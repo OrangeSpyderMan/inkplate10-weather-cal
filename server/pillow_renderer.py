@@ -218,9 +218,11 @@ class CalendarCanvas:
         ):
             center = chart_left + step * (index + 0.5)
             bar_width = step * 0.72
-            bar_top = chart_bottom - (
-                rain_probability / 100 * (chart_bottom - chart_top)
-            )
+            if rain_probability > 0:
+                bar_height = max(4.0, rain_probability / 100 * (chart_bottom - chart_top))
+            else:
+                bar_height = 0.0
+            bar_top = chart_bottom - bar_height
             self._hatched_bar(
                 center - bar_width / 2,
                 bar_top,
@@ -359,7 +361,7 @@ class CalendarCanvas:
 
     def _hatched_bar(self, left, top, right, bottom):
         box = self._box((left, top, right, bottom))
-        if bottom - top < 3:
+        if bottom - top < 0.5:
             scaled_left, _, scaled_right, scaled_bottom = box
             for start, end in (
                 ((scaled_left, scaled_bottom), (scaled_right, scaled_bottom)),

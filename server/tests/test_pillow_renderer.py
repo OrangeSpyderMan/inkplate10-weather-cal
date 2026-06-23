@@ -169,6 +169,44 @@ class PillowCalendarRendererTests(unittest.TestCase):
                 self.assertEqual(pixels[20, 318], 200)
                 self.assertEqual(pixels[805, 318], 200)
 
+    def test_rain_probability_bar_heights(self):
+        from unittest.mock import MagicMock
+        from pillow_renderer import CalendarCanvas
+
+        canvas = CalendarCanvas(825, 1200, supersample=1)
+        canvas.rough.line = MagicMock()
+        canvas.rough.hatched_rectangle = MagicMock()
+        canvas.rough.polyline = MagicMock()
+        canvas.rough.ellipse = MagicMock()
+
+        canvas._text = MagicMock()
+        canvas._icon = MagicMock()
+        canvas._outlined_text = MagicMock()
+
+        hourly = [
+            {"dt": dt.datetime(2026, 6, 22, 8), "icon": "icon/cloudy.png", "temperature": {"value": 10, "unit": "C"}, "rain_probability": 0},
+            {"dt": dt.datetime(2026, 6, 22, 11), "icon": "icon/cloudy.png", "temperature": {"value": 10, "unit": "C"}, "rain_probability": 1},
+            {"dt": dt.datetime(2026, 6, 22, 14), "icon": "icon/cloudy.png", "temperature": {"value": 10, "unit": "C"}, "rain_probability": 2},
+        ]
+
+        canvas._forecast(hourly)
+
+        hatched_rect_calls = canvas.rough.hatched_rectangle.call_args_list
+        self.assertEqual(len(hatched_rect_calls), 2)
+
+        # 1% rain probability bar should be clamped to 4 pixels minimum height
+        box_1 = hatched_rect_calls[0][0][0]
+        left_1, top_1, right_1, bottom_1 = box_1
+        self.assertEqual(bottom_1 - top_1, 4)
+
+        # 2% rain probability bar height (5.7 rounded to 6)
+        box_2 = hatched_rect_calls[1][0][0]
+        left_2, top_2, right_2, bottom_2 = box_2
+        self.assertEqual(bottom_2 - top_2, 6)
+
+        # 0% rain probability should be drawn as a baseline using line()
+        self.assertTrue(canvas.rough.line.called)
+
 
 if __name__ == "__main__":
     unittest.main()
