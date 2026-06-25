@@ -402,7 +402,6 @@ class InstallerCopyTests(unittest.TestCase):
                 "google_api_key": "google",
                 "google_staticmaps_mapid": "map",
                 "port": 9090,
-                "renderer": "pillow",
             },
             include_optional=False,
             compose=True,
@@ -414,9 +413,8 @@ class InstallerCopyTests(unittest.TestCase):
         )
 
         self.assertIn("INKPLATE_SERVER_PORT=9090", env)
-        self.assertIn("INKPLATE_BUILD_TARGET=pillow", env)
         self.assertIn(
-            "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
+            "INKPLATE_IMAGE=inkplate10-weather-cal:local",
             env,
         )
         self.assertIn(
@@ -426,7 +424,7 @@ class InstallerCopyTests(unittest.TestCase):
         self.assertIn("INKPLATE_VCS_REF=abc1234", env)
         self.assertIn("INKPLATE_VERSION=v4.0.0+gabc1234", env)
 
-    def test_compose_update_preserves_secrets_and_aligns_image_flavour(self):
+    def test_compose_update_preserves_secrets_and_removes_old_flavour(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             env_path = pathlib.Path(temporary_dir) / ".env"
             env_path.write_text(
@@ -434,9 +432,8 @@ class InstallerCopyTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            install_server.update_compose_flavour_env(
+            install_server.update_compose_build_env(
                 env_path,
-                "pillow",
                 build_metadata={
                     "build_date": "2026-06-22T18:00:00+00:00",
                     "revision": "abc1234",
@@ -447,9 +444,9 @@ class InstallerCopyTests(unittest.TestCase):
 
             updated = env_path.read_text(encoding="utf-8")
             self.assertIn("WEATHER_API_KEY=secret", updated)
-            self.assertIn("INKPLATE_BUILD_TARGET=pillow", updated)
+            self.assertNotIn("INKPLATE_BUILD_TARGET", updated)
             self.assertIn(
-                "INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local",
+                "INKPLATE_IMAGE=inkplate10-weather-cal:local",
                 updated,
             )
             self.assertIn("INKPLATE_VCS_REF=abc1234", updated)
@@ -468,10 +465,7 @@ class InstallerCopyTests(unittest.TestCase):
             "127.0.0.1:${INKPLATE_SERVER_PORT:-8080}/api/v1/ready",
             compose,
         )
-        self.assertIn(
-            "target: ${INKPLATE_BUILD_TARGET:-full}",
-            compose,
-        )
+        self.assertNotIn("target:", compose)
         self.assertIn(
             "image: ${INKPLATE_IMAGE:-inkplate10-weather-cal:local}",
             compose,
@@ -583,7 +577,7 @@ class InstallerCopyTests(unittest.TestCase):
             config,
         )
 
-    def test_rendered_config_uses_selected_pillow_renderer(self):
+    def test_rendered_config_always_uses_pillow_renderer(self):
         answers = {
             "port": 8080,
             "refresh_minutes": 180,
@@ -592,7 +586,6 @@ class InstallerCopyTests(unittest.TestCase):
             "metric": True,
             "netatmo_enabled": False,
             "location": "Landry, FR",
-            "renderer": "pillow",
             "mqtt_weather_enabled": False,
             "mqtt_weather_broker": "",
             "mqtt_weather_port": 1883,
@@ -607,63 +600,38 @@ class InstallerCopyTests(unittest.TestCase):
 
         self.assertIn("      renderer: pillow", config)
 
-    def test_mixed_output_profiles_require_full_dependencies(self):
+    def test_update_requires_reconfigure_for_removed_firefox_renderer(self):
         config = {
             "outputs.default": "portrait",
             "outputs.profiles.portrait.renderer": "pillow",
             "outputs.profiles.landscape.renderer": "firefox",
         }
 
-        self.assertEqual(
-            install_server.configured_renderer(config),
-            "pillow",
-        )
-        self.assertEqual(
-            install_server.required_dependency_renderer(config),
-            "firefox",
-        )
+        with self.assertRaisesRegex(SystemExit, "removed in v4"):
+            install_server.require_renderer_migration(config, "update")
 
-    def test_all_pillow_profiles_allow_pillow_only_dependencies(self):
+    def test_reconfigure_migrates_removed_firefox_renderer(self):
         config = {
             "outputs.default": "portrait",
-            "outputs.profiles.portrait.renderer": "pillow",
-            "outputs.profiles.landscape.renderer": "pillow",
+            "outputs.profiles.portrait.renderer": "firefox",
         }
 
-        self.assertEqual(
-            install_server.required_dependency_renderer(config),
-            "pillow",
-        )
+        install_server.require_renderer_migration(config, "update_reconfigure")
 
     @mock.patch.object(install_server, "run")
-    @mock.patch.object(
-        install_server,
-        "choose_firefox_package",
-        return_value="firefox-esr",
-    )
-    def test_native_prerequisites_follow_renderer(
-        self,
-        choose_firefox_package,
-        run,
-    ):
-        install_server.install_native_prerequisites(False, "pillow")
-        pillow_packages = run.call_args_list[1].args[0]
-        self.assertNotIn("firefox-esr", pillow_packages)
-        self.assertNotIn("curl", pillow_packages)
-        choose_firefox_package.assert_not_called()
-
-        run.reset_mock()
-        install_server.install_native_prerequisites(False, "firefox")
-        firefox_packages = run.call_args_list[1].args[0]
-        self.assertIn("firefox-esr", firefox_packages)
-        self.assertIn("curl", firefox_packages)
+    def test_native_prerequisites_exclude_browser_packages(self, run):
+        install_server.install_native_prerequisites(False)
+        packages = run.call_args_list[1].args[0]
+        self.assertNotIn("firefox-esr", packages)
+        self.assertNotIn("firefox", packages)
+        self.assertNotIn("curl", packages)
 
     @mock.patch.object(install_server, "run")
-    def test_native_dependencies_follow_renderer(self, run):
-        install_server.refresh_dependencies(False, "pillow")
+    def test_native_dependencies_remove_browser_packages(self, run):
+        install_server.refresh_dependencies(False)
         self.assertTrue(
             any(
-                value.endswith("requirements-pillow-only.txt")
+                value.endswith("requirements.txt")
                 for value in run.call_args_list[0].args[0]
             ),
         )
@@ -678,15 +646,6 @@ class InstallerCopyTests(unittest.TestCase):
                 "airium",
                 "selenium",
             ],
-        )
-
-        run.reset_mock()
-        install_server.refresh_dependencies(False, "firefox")
-        self.assertTrue(
-            any(
-                value.endswith("requirements.txt")
-                for value in run.call_args_list[0].args[0]
-            ),
         )
     def test_rendered_config_uses_refresh_minutes(self):
         answers = {

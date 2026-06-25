@@ -27,13 +27,6 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next' || startsWith(github.ref, 'refs/tags/v')
-    strategy:
-      matrix:
-        include:
-          - target: full
-            suffix: ""
-          - target: pillow
-            suffix: "-pillow"
 
     steps:
       - name: Checkout repository
@@ -60,9 +53,9 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=main${{ matrix.suffix }},enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=next${{ matrix.suffix }},enable=${{ github.ref == 'refs/heads/next' }}
-            type=ref,event=tag,suffix=${{ matrix.suffix }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=next,enable=${{ github.ref == 'refs/heads/next' }}
+            type=ref,event=tag
 
       - name: Generate version manifest
         id: version
@@ -77,7 +70,6 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false

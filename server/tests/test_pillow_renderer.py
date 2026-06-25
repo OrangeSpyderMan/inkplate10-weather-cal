@@ -128,7 +128,7 @@ class PillowCalendarRendererTests(unittest.TestCase):
             with Image.open(output) as rendered:
                 self.assertEqual(rendered.size, (600, 448))
 
-    def test_preserves_firefox_reference_map_and_circle_geometry(self):
+    def test_preserves_map_and_circle_geometry(self):
         snapshot = SimpleNamespace(
             daily_summary={
                 "temperature": {"unit": "C", "value": 10},

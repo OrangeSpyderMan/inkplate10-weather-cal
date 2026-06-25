@@ -29,7 +29,6 @@ def arguments(**overrides):
         "identity": None,
         "ssh_option": [],
         "tag": None,
-        "renderer": None,
         "ctid": None,
         "storage": None,
         "separate_mounts": None,
@@ -86,8 +85,7 @@ class RemoteInstallerTests(unittest.TestCase):
             non_interactive=True,
             remote_dry_run=True,
             yes=True,
-            renderer="pillow",
-            tag="v3.1.1",
+            tag="v4.0.0",
             ctid=123,
             storage="local-zfs",
             separate_mounts=True,
@@ -102,10 +100,8 @@ class RemoteInstallerTests(unittest.TestCase):
             install_remote.remote_installer_args(args),
             [
                 "./bin/install_proxmox",
-                "--renderer",
-                "pillow",
                 "--tag",
-                "v3.1.1",
+                "v4.0.0",
                 "--ctid",
                 "123",
                 "--storage",
@@ -129,8 +125,8 @@ class RemoteInstallerTests(unittest.TestCase):
             ],
         )
 
-    def test_forwards_renderer_to_systemd_installer(self):
-        args = arguments(mode="systemd", renderer="pillow")
+    def test_builds_systemd_installer_command(self):
+        args = arguments(mode="systemd")
 
         self.assertEqual(
             install_remote.remote_installer_args(args),
@@ -138,8 +134,6 @@ class RemoteInstallerTests(unittest.TestCase):
                 "./bin/install_server",
                 "--mode",
                 "systemd",
-                "--renderer",
-                "pillow",
             ],
         )
 

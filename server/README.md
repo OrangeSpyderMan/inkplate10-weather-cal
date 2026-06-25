@@ -1,7 +1,6 @@
 # Inkplate 10 Weather Calendar Server
 
-A Python service for the weather calendar client with an established
-Airium/Firefox renderer and an experimental direct Pillow renderer.
+A Python service for the weather calendar client with direct Pillow rendering.
 
 
 
@@ -15,9 +14,7 @@ Example 1                  | Example 2                 | Example 3
 
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
-- Uses either [Airium](https://pypi.org/project/airium/) with
-  [Selenium](https://pypi.org/project/selenium/), Geckodriver and Firefox, or
-  the experimental Pillow renderer with
+- Uses [Pillow](https://pypi.org/project/pillow/) with
   [rough-py](https://github.com/cktlco/rough-py), to produce PNG images.
 - Uses [Gunicorn](https://gunicorn.org/) and
   [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images, the
@@ -28,7 +25,7 @@ The runtime has three roles:
 - `server.py` retrieves weather, renders outputs, publishes MQTT data, and
   atomically updates the shared artifact directory.
 - `web_server.py` launches Gunicorn, which serves only persisted artifacts and
-  does not load weather providers or Selenium.
+  does not load weather providers or the rendering stack.
 - `mqtt_diagnostics_server.py` independently subscribes to Inkplate diagnostic
   messages when that feature is enabled.
 
@@ -60,9 +57,8 @@ images, and MQTT disabled.
 
 It prompts for the server bind IP and port, location, weather API key, Google
 Static Maps API key, Google Static Maps Map ID, optional Netatmo credentials,
-the Firefox compatibility renderer or experimental lower-footprint Pillow
-renderer, optional MQTT weather publishing, optional MQTT diagnostic listening,
-and whether to start the service or container. Secrets are written outside
+optional MQTT weather publishing, optional MQTT diagnostic listening, and
+whether to start the service or container. Secrets are written outside
 committed YAML:
 
 - Docker or Podman: `.env` plus `server/config/config.yaml`
@@ -80,25 +76,20 @@ and supports rootless operation. Podman automatically layers
 `docker-compose.podman.yml` over the main Compose file so containers use the
 Podman-supported `journald` log driver instead of Docker's `local` driver and
 applies a private SELinux relabel (`:Z`) to the read-only config bind mount.
-For both runtimes, the installer writes `INKPLATE_SERVER_PORT` to `.env`, and
-Compose uses it for both the published host port and container target port.
-It also writes the matching `INKPLATE_BUILD_TARGET` and `INKPLATE_IMAGE`: the
-Firefox choice builds the full image, while Pillow builds the Pillow-only local
-image. Re-running an update aligns these values with the renderer already
-recorded in the server config.
+For both runtimes, the installer writes `INKPLATE_SERVER_PORT` and
+`INKPLATE_IMAGE` to `.env`. Compose uses the port for both the published host
+port and container target port.
 Before building, the installer checks that this host port is free unless this
 Compose project's web container is already running there. If another process
 owns the port, choose a different Server port or stop the existing listener.
-Native systemd mode needs root privileges for
-package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
-and systemd service management. The Firefox choice installs Firefox,
-Geckodriver, Selenium and Airium. The Pillow choice skips those components and
-installs only the common and Pillow renderer dependencies. When changing an
-existing install to Pillow, it removes Selenium and Airium from the application
-virtualenv but does not automatically remove a system-wide Firefox package or
-Geckodriver binary. Run it as root or as a user that can elevate with `sudo`,
-`doas`, or `run0`; the installer checks this before making system changes.
-Container modes validate their selected runtime before starting.
+Native systemd mode needs root privileges for package installation,
+`/srv/inkplate`, `/etc/inkplate/weather.env`, and systemd service management.
+It installs the Pillow renderer dependencies. A v4 application update removes
+the obsolete Selenium and Airium packages from the application virtualenv, but
+does not remove a system-wide Firefox package or Geckodriver binary left by a
+v3 install. Run it as root or as a user that can elevate with `sudo`, `doas`,
+or `run0`; the installer checks this before making system changes. Container
+modes validate their selected runtime before starting.
 
 Use dry-run mode to preview actions:
 
@@ -114,7 +105,6 @@ over SSH without keeping a permanent repository checkout there:
 ```bash
 ./bin/install_remote root@pve1 --mode proxmox
 ./bin/install_remote admin@server1 --mode systemd
-./bin/install_remote admin@server1 --mode systemd --renderer pillow
 ```
 
 It uses normal SSH host-key verification, streams a temporary archive containing
@@ -152,9 +142,10 @@ Re-run the installer to update an existing install. It will detect existing
 Docker, Podman, or systemd files and offer to update the application while
 preserving config/secrets, update and reconfigure together, reconfigure
 config/secrets only, or abort. Use the combined option when a release changes
-both application code and configuration keys. For native systemd, changing
-renderer also changes installed dependencies, so use `update_reconfigure`
-rather than config-only reconfiguration.
+both application code and configuration keys. An existing v3 configuration
+that explicitly selects `renderer: firefox` must use `update_reconfigure` so
+the installer can migrate it to Pillow. Users that still require the historical
+Firefox renderer should remain on a v3.x release.
 
 Logs:
 
@@ -394,10 +385,12 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
-      renderer: firefox
+      renderer: pillow
       width: 825
       height: 1200
       filename: calendar.png
+      options:
+        supersample: 2
 ```
 
 Each enabled profile has its own URL, dimensions, renderer, and filename.
@@ -406,77 +399,16 @@ types. The `default` profile backs `/calendar.png` and `/app/calendar.png`.
 Legacy `image.width` and `image.height` settings still configure the default
 Inkplate 10 profile when `outputs.profiles` is absent.
 
-Profiles may also contain an `options` mapping for renderer-specific layout or
-style settings. Unknown options are left to the selected renderer.
+Profiles may also contain an `options` mapping for layout or style settings.
+The Pillow renderer draws the calendar directly using
+[rough-py](https://github.com/cktlco/rough-py) for sketch geometry, plus local
+fonts, icons, and the generated map. It requires no browser or SVG rasterizer.
+Its optional `supersample` setting defaults to `2` for antialiased output.
 
-Two renderers are available:
-
-- `firefox` preserves the existing HTML/CSS/Chart.js screenshot path.
-- `pillow` is an experimental renderer that draws the calendar directly with
-  Pillow, using
-  [rough-py](https://github.com/cktlco/rough-py) for Rough.js-compatible
-  sketch geometry, plus local fonts, icons, and the generated map. It requires
-  no browser or SVG rasterizer. Its optional `supersample` setting defaults to
-  `2` for antialiased output.
-
-The Pillow path typically completes an `825x1200` render in approximately
-0.4 seconds during local testing. It avoids HTML generation, JavaScript,
-Firefox startup and screenshot capture, substantially reducing runtime memory
-and enabling the smaller Pillow-only container image. Its output closely
-matches Firefox, but small visual differences may remain; Firefox therefore
-remains the default compatibility renderer.
-
-In a local amd64 build, Docker reported an unpacked size of approximately
-88 MB for the Pillow image and 238 MB for the full image: about 150 MB, or 63%,
-smaller. Published download sizes vary with architecture and registry
-compression.
-
-Switch the default output to Pillow by changing only the renderer:
-
-```yaml
-outputs:
-  default: inkplate10-portrait
-  profiles:
-    inkplate10-portrait:
-      enabled: true
-      renderer: pillow
-      width: 825
-      height: 1200
-      filename: calendar.png
-      options:
-        supersample: 2
-```
-
-For side-by-side testing, enable both renderers under different profile names:
-
-```yaml
-outputs:
-  default: inkplate10-firefox
-  profiles:
-    inkplate10-firefox:
-      renderer: firefox
-      width: 825
-      height: 1200
-      filename: calendar.png
-    inkplate10-pillow:
-      renderer: pillow
-      width: 825
-      height: 1200
-      filename: calendar.png
-      options:
-        supersample: 2
-```
-
-The comparison images are then served at:
-
-```text
-/outputs/inkplate10-firefox/calendar.png
-/outputs/inkplate10-pillow/calendar.png
-```
-
-The full container includes both renderers. The Pillow-only container excludes
-Firefox, Geckodriver, Selenium and Airium and therefore requires every enabled
-output profile to use `renderer: pillow`.
+Pillow is the only renderer in v4. Configurations that explicitly select
+`renderer: firefox` are rejected with migration guidance. The Firefox
+HTML/CSS/Chart.js renderer remains available in the v3.x release series for
+users that still need it.
 
 The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
 aliases for the same image. `/calendar.png` retains its attachment response for
@@ -545,11 +477,11 @@ expand to an empty string when unset.
 
 ### Output dimensions
 
-Each profile's `width` and `height` values set its capture target. The current
-Firefox HTML/CSS layout is tuned for Inkplate 10 portrait output at `825x1200`;
-dimensions alone are not a general layout scaling system. A different device
-size may require its own renderer or renderer `options` to avoid cropped,
-stretched, or poorly spaced output.
+Each profile's `width` and `height` values set its output target. The current
+layout is tuned for Inkplate 10 portrait output at `825x1200`; dimensions alone
+are not a general layout scaling system. A different device size may require
+renderer `options` or layout changes to avoid cropped, stretched, or poorly
+spaced output.
 
 ### Browser and PWA viewer
 
@@ -687,37 +619,22 @@ repair individual systemd pieces manually.
 ## Running with Docker or Podman
 
 The repository root contains the Dockerfile and a Compose file that works with
-Docker Compose or Podman Compose. Both image flavours run as an unprivileged
-`inkplate` user:
+Docker Compose or Podman Compose. The image runs as an unprivileged `inkplate`
+user and contains the Pillow and `rough-py` rendering stack.
 
-- `full` is the default compatibility image. It contains Firefox,
-  Geckodriver, Selenium, Airium, Pillow and `rough-py`, and supports either
-  renderer.
-- `pillow` is the low-footprint image. It contains Pillow and `rough-py` but
-  omits Firefox, Geckodriver, Selenium and Airium.
-
-Published tags use the normal release or branch tag for the full image and
-append `-pillow` for the low-footprint image:
+Published images use the normal release or branch tags:
 
 ```text
 ghcr.io/orangespyderman/inkplate10-weather-cal:v4.0.0
-ghcr.io/orangespyderman/inkplate10-weather-cal:v4.0.0-pillow
 ghcr.io/orangespyderman/inkplate10-weather-cal:main
-ghcr.io/orangespyderman/inkplate10-weather-cal:main-pillow
 ghcr.io/orangespyderman/inkplate10-weather-cal:next
-ghcr.io/orangespyderman/inkplate10-weather-cal:next-pillow
 ```
 
-For a local Pillow-only build, add these values to `.env` and ensure all output
-profiles select `renderer: pillow`:
+For a local build, set the image name in `.env` if the default is unsuitable:
 
 ```dotenv
-INKPLATE_BUILD_TARGET=pillow
-INKPLATE_IMAGE=inkplate10-weather-cal:pillow-local
+INKPLATE_IMAGE=inkplate10-weather-cal:local
 ```
-
-To run a published Pillow image with Compose, set `INKPLATE_IMAGE` to the
-desired `-pillow` tag, pull it, and start Compose with `--no-build`.
 
 ### Configure
 
@@ -785,11 +702,8 @@ promoted to `main`.
 Do not commit `server/config/config.yaml` or `.env`; keep API keys and refresh
 tokens in local files or runtime environment variables.
 
-Docker dependency updates are split across two mechanisms. Dependabot updates
-the Python packages, GitHub Actions, and Docker base image on the `next` branch.
-Geckodriver is pinned with the `GECKOVERSION` build argument, so a scheduled
-GitHub Actions workflow checks Mozilla's latest release and opens a pull request
-when that pin needs updating.
+Dependabot updates the Python packages, GitHub Actions, and Docker base image
+on the `next` branch.
 
 ### Starting the container
 
@@ -979,5 +893,4 @@ Known caveats:
 - Proxmox OCI support is newer than standard Docker/Podman workflows.
 - `bin/install_proxmox` currently supports fresh installations only.
 - Proxmox mount and environment-variable management is not the same as Compose.
-- Firefox/Geckodriver should be tested on the target Proxmox host.
 - The renderer is tuned for Inkplate 10 portrait output at `825x1200`.

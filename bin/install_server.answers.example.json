@@ -1,6 +1,5 @@
 {
   "mode": "docker",
-  "renderer": "firefox",
   "existing_action": "update_reconfigure",
   "start_now": false,
   "host": "0.0.0.0",

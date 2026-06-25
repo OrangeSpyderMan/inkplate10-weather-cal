@@ -115,7 +115,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("COPY --chown=${USERNAME}:${USERNAME} ./.version.json", dockerfile)
         self.assertNotIn("ENV INKPLATE_VERSION=", dockerfile)
 
-    def test_container_workflows_build_full_and_pillow_flavours(self):
+    def test_container_workflows_build_only_pillow_image(self):
         publish_workflow = (
             REPO_ROOT / ".github/workflows/container-publish.yml"
         ).read_text()
@@ -124,36 +124,25 @@ class ReleaseWorkflowTests(unittest.TestCase):
         ).read_text()
         dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 
-        self.assertIn("target: full", publish_workflow)
-        self.assertIn("target: pillow", publish_workflow)
-        self.assertIn('suffix: "-pillow"', publish_workflow)
-        self.assertIn("target: ${{ matrix.target }}", publish_workflow)
-        self.assertIn("- full", ci_workflow)
-        self.assertIn("- pillow", ci_workflow)
-        self.assertIn('--target "${{ matrix.target }}"', ci_workflow)
-        self.assertIn("FROM base AS pillow", dockerfile)
-        self.assertIn("FROM base AS full", dockerfile)
+        self.assertNotIn('suffix: "-pillow"', publish_workflow)
+        self.assertNotIn("matrix.target", publish_workflow)
+        self.assertNotIn("matrix.target", ci_workflow)
+        self.assertNotIn(" AS full", dockerfile)
+        self.assertNotIn(" AS pillow", dockerfile)
         self.assertIn("PIP_ROOT_USER_ACTION=ignore", dockerfile)
         self.assertIn(
             'org.opencontainers.image.variant="pillow"',
             dockerfile,
         )
-        self.assertIn(
-            'org.opencontainers.image.variant="full"',
-            dockerfile,
-        )
-
-        full_requirements = (
-            REPO_ROOT / "server/requirements-firefox.txt"
-        ).read_text()
         pillow_requirements = (
             REPO_ROOT / "server/requirements-pillow.txt"
         ).read_text()
         common_requirements = (
             REPO_ROOT / "server/requirements-common.txt"
         ).read_text()
-        self.assertIn("selenium==", full_requirements)
-        self.assertIn("airium==", full_requirements)
         self.assertIn("rough==", pillow_requirements)
         self.assertIn("Pillow==", common_requirements)
         self.assertNotIn("selenium==", common_requirements)
+        self.assertFalse(
+            (REPO_ROOT / "server/requirements-firefox.txt").exists()
+        )

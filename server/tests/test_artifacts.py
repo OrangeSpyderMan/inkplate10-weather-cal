@@ -35,7 +35,7 @@ class ArtifactStoreTests(unittest.TestCase):
             profiles = {
                 DEFAULT_OUTPUT_PROFILE: OutputProfile(
                     DEFAULT_OUTPUT_PROFILE,
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )
@@ -87,7 +87,7 @@ class ArtifactStoreTests(unittest.TestCase):
             snapshot.to_payload.return_value = {"value": "old"}
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )
@@ -116,7 +116,7 @@ class ArtifactStoreTests(unittest.TestCase):
             store = ArtifactStore(temporary_dir)
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )
@@ -172,7 +172,7 @@ class ArtifactStoreTests(unittest.TestCase):
             store = ArtifactStore(temporary_dir)
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )

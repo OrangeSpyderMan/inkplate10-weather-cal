@@ -137,7 +137,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="additional ssh -o option; may be repeated",
     )
     parser.add_argument("--tag")
-    parser.add_argument("--renderer", choices=("firefox", "pillow"))
     parser.add_argument("--ctid", type=int)
     parser.add_argument("--storage")
     parser.add_argument("--separate-mounts", action=argparse.BooleanOptionalAction, default=None)
@@ -223,12 +222,9 @@ def ssh_base_command(args) -> list[str]:
 def remote_installer_args(args) -> list[str]:
     if args.mode == "systemd":
         command = ["./bin/install_server", "--mode", "systemd"]
-        if args.renderer is not None:
-            command.extend(["--renderer", args.renderer])
     else:
         command = ["./bin/install_proxmox"]
         mappings = (
-            ("renderer", "--renderer"),
             ("tag", "--tag"),
             ("ctid", "--ctid"),
             ("storage", "--storage"),

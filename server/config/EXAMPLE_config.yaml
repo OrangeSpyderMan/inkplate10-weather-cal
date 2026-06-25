@@ -35,12 +35,10 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
-      # Experimental: set to pillow to render directly without Firefox.
-      renderer: firefox
+      renderer: pillow
       width: 825
       height: 1200
       filename: calendar.png
-      # Pillow-specific option:
       # options:
       #   supersample: 2
 mqtt:

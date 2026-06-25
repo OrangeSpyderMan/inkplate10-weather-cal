@@ -5,7 +5,7 @@ import os
 
 DEFAULT_OUTPUT_PROFILE = "inkplate10-portrait"
 DEFAULT_OUTPUT_FILENAME = "calendar.png"
-DEFAULT_RENDERER = "firefox"
+DEFAULT_RENDERER = "pillow"
 DEFAULT_WIDTH = 825
 DEFAULT_HEIGHT = 1200
 OUTPUT_PROFILES_ENV = "INKPLATE_OUTPUT_PROFILES"
@@ -79,6 +79,16 @@ def validate_output_profiles(profiles, default_profile):
         if not profile.renderer:
             raise ValueError(
                 f"output profile {profile.name!r} renderer is required"
+            )
+        if profile.renderer == "firefox":
+            raise ValueError(
+                "output renderer 'firefox' was removed in v4; "
+                "change the profile renderer to 'pillow' or remain on v3.x"
+            )
+        if profile.renderer != DEFAULT_RENDERER:
+            raise ValueError(
+                f"unsupported output renderer {profile.renderer!r}; "
+                f"supported renderer: {DEFAULT_RENDERER}"
             )
         if not isinstance(profile.options, dict):
             raise ValueError(

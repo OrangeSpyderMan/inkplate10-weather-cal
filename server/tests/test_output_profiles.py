@@ -18,16 +18,16 @@ class OutputProfileTests(unittest.TestCase):
         self.assertEqual(default_profile, DEFAULT_OUTPUT_PROFILE)
         self.assertEqual(profiles[default_profile].width, 600)
         self.assertEqual(profiles[default_profile].height, 448)
-        self.assertEqual(profiles[default_profile].renderer, "firefox")
+        self.assertEqual(profiles[default_profile].renderer, "pillow")
 
-    def test_loads_multiple_enabled_renderer_profiles(self):
+    def test_loads_multiple_enabled_profiles(self):
         profiles, default_profile = load_output_profiles(
             {
                 "outputs": {
                     "default": "inkplate10-portrait",
                     "profiles": {
                         "inkplate10-portrait": {
-                            "renderer": "firefox",
+                            "renderer": "pillow",
                             "width": 825,
                             "height": 1200,
                         },
@@ -55,6 +55,20 @@ class OutputProfileTests(unittest.TestCase):
             profiles["inkplate6-landscape"].options,
             {"layout": "compact"},
         )
+
+    def test_rejects_removed_firefox_renderer_with_upgrade_guidance(self):
+        with self.assertRaisesRegex(ValueError, "removed in v4"):
+            load_output_profiles(
+                {
+                    "outputs": {
+                        "profiles": {
+                            DEFAULT_OUTPUT_PROFILE: {
+                                "renderer": "firefox",
+                            }
+                        }
+                    }
+                }
+            )
 
     def test_rejects_disabled_default_profile(self):
         with self.assertRaisesRegex(ValueError, "is not enabled"):

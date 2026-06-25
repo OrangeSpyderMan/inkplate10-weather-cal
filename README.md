@@ -53,9 +53,7 @@ Both a server and client are required. The main workload is on the server, which
 ### Server (Raspberry Pi)
 
 1. Gets any relevant new data (ie. weather, maps).
-2. Renders the configured output either through the established
-   Airium/Firefox screenshot path or directly with the experimental,
-   low-footprint Pillow renderer.
+2. Renders the configured output directly with Pillow and `rough-py`.
 3. Publishes the resulting PNG at the configured e-ink display dimensions.
 4. A separate Gunicorn/Flask web process serves the generated PNG and weather
    API from the shared artifact directory.
@@ -97,13 +95,12 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you need a system capable of running Python 3. The full
-  compatibility image also includes Firefox and Geckodriver; the optional
-  Pillow-only image avoids that browser footprint. The producer does the
-  heavier PNG rendering work while the Gunicorn web process remains available
-  independently. Container images target `amd64` and `arm64`, so they are a
-  better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi
-  Zero W may need a native/manual setup rather than the supplied container.
+  To run the server, you need a system capable of running Python 3. The
+  Pillow-based producer does the heavier PNG rendering work while the Gunicorn
+  web process remains available independently. Container images target `amd64`
+  and `arm64`, so they are a better fit for a 64-bit Raspberry Pi or similar
+  SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than
+  the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -206,20 +203,14 @@ Server and firmware builds share the generated root `.version.json` manifest.
 Installers and CI generate it from the checkout before copying or building, so
 installed runtimes do not require Git metadata.
 
-Named outputs are profile-driven. Additional display sizes and renderer
-implementations can be enabled as separate profiles while `/calendar.png`
-continues to serve the configured default.
+Named outputs are profile-driven. Additional display sizes can be enabled as
+separate profiles while `/calendar.png` continues to serve the configured
+default.
 
-The `pillow` renderer is currently experimental and opt-in. It renders directly
-without HTML, JavaScript, Firefox, or screenshot capture and completes a typical
-`825x1200` render in roughly 0.4 seconds during local testing. This reduces
-runtime memory and enables a substantially smaller Pillow-only container.
-Firefox remains the default compatibility renderer because small visual
-differences may still exist.
-
-In a local amd64 build, the unpacked Pillow image was approximately 88 MB
-compared with 238 MB for the full image, a reduction of about 150 MB or 63%.
-Registry download sizes vary by architecture and compression.
+The `pillow` renderer draws directly without HTML, JavaScript, a browser, or
+screenshot capture and completes a typical `825x1200` render in roughly 0.4
+seconds during local testing. Firefox rendering was removed in v4. Users that
+require the historical HTML/CSS renderer should remain on a v3.x release.
 
 The server supports AccuWeather and OpenWeatherMap One Call 3.0 and 4.0.
 OpenWeatherMap v2 has been removed. Forecast and optional realtime providers
@@ -250,20 +241,17 @@ Run it from the repository root:
 ```
 
 The installer prompts for the server bind IP and port, weather provider, API
-keys, Google Static Maps Map ID, location, Firefox or experimental Pillow
-rendering, optional Netatmo details, optional MQTT weather publishing, optional
-MQTT diagnostic listening, and whether to start the service/container.
+keys, Google Static Maps Map ID, location, optional Netatmo details, optional
+MQTT weather publishing, optional MQTT diagnostic listening, and whether to
+start the service/container.
 It keeps secrets out of committed YAML files:
 
 - Docker and Podman installs write secrets to `.env` and config to
-  `server/config/config.yaml`. The installer also selects the matching full or
-  Pillow-only Compose build target and local image name.
+  `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
-  `/srv/inkplate/inkplate_venv`. Pillow-only systemd installs skip Firefox,
-  Geckodriver, Selenium and Airium. Switching an existing install removes the
-  browser Python packages from that virtualenv but leaves system-wide Firefox
-  and Geckodriver installation cleanup to the administrator.
+  `/srv/inkplate/inkplate_venv`. A v4 update removes the obsolete Selenium and
+  Airium packages from that virtualenv.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system
@@ -292,10 +280,9 @@ sudo ./bin/install_proxmox --dry-run
 ```
 
 Interactive Proxmox runs list available LXC storage and can create separate
-mounts for generated data and read-only config. They also select the renderer
-and automatically use the normal published image tag for Firefox or its
-`-pillow` counterpart for Pillow. Use `--renderer`, `--storage`,
+mounts for generated data and read-only config. Use `--storage`,
 `--data-storage`, and `--config-storage` for unattended storage selection.
+The v4 installer ignores pre-v4 and historical `-pillow` image tags.
 
 To deploy from this checkout to another machine over SSH, use the remote
 wrapper. It currently supports Proxmox and systemd targets:
@@ -303,7 +290,6 @@ wrapper. It currently supports Proxmox and systemd targets:
 ```bash
 ./bin/install_remote root@pve1 --mode proxmox
 ./bin/install_remote admin@server1 --mode systemd
-./bin/install_remote admin@server1 --mode systemd --renderer pillow
 ```
 
 The wrapper uploads only Git-tracked files plus an explicitly supplied answers

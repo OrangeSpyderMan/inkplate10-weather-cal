@@ -81,7 +81,7 @@ class ProducerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported output renderer"):
             server.build_output_renderers(profiles)
 
-    def test_rejects_renderer_missing_optional_dependencies(self):
+    def test_rejects_removed_firefox_renderer(self):
         profiles = {
             "portrait": OutputProfile(
                 "portrait",
@@ -91,18 +91,8 @@ class ProducerTests(unittest.TestCase):
             )
         }
 
-        with mock.patch(
-            "builtins.__import__",
-            side_effect=ModuleNotFoundError(
-                "No module named 'selenium'",
-                name="selenium",
-            ),
-        ):
-            with self.assertRaisesRegex(
-                ValueError,
-                "renderer 'firefox' is unavailable",
-            ):
-                server.build_output_renderers(profiles)
+        with self.assertRaisesRegex(ValueError, "removed in v4"):
+            server.build_output_renderers(profiles)
 
     def test_renders_each_profile_with_dimensions_and_options(self):
         portrait_renderer = mock.Mock()
@@ -111,7 +101,7 @@ class ProducerTests(unittest.TestCase):
         profiles = {
             "portrait": OutputProfile(
                 "portrait",
-                "firefox",
+                "pillow",
                 825,
                 1200,
                 options={"layout": "classic"},
@@ -200,7 +190,7 @@ class ProducerTests(unittest.TestCase):
             profiles = {
                 "inkplate10-portrait": OutputProfile(
                     "inkplate10-portrait",
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )
@@ -267,7 +257,7 @@ class ProducerTests(unittest.TestCase):
             profiles = {
                 "inkplate10-portrait": OutputProfile(
                     "inkplate10-portrait",
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )

@@ -13,7 +13,6 @@ import getpass
 import ipaddress
 import json
 import os
-import platform
 import re
 import shutil
 import socket
@@ -64,10 +63,6 @@ DEFAULT_FORECAST_SLICE_HOURS = 3
 DEFAULT_FORECAST_LEAD_MINUTES = 15
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
-RENDERER_CHOICES = (
-    ("firefox", "Firefox compatibility renderer (full installation)"),
-    ("pillow", "Experimental Pillow renderer (lower footprint)"),
-)
 WEATHER_PROVIDER_LABELS = {
     "openweathermapv4": "OpenWeatherMap One Call 4.0",
     "openweathermapv3": "OpenWeatherMap One Call 3.0",
@@ -93,11 +88,6 @@ def main() -> int:
         help="install mode; prompts when omitted",
     )
     parser.add_argument(
-        "--renderer",
-        choices=("firefox", "pillow"),
-        help="output renderer and matching dependency/container flavour",
-    )
-    parser.add_argument(
         "--answers",
         type=Path,
         help="JSON answers file used as prompt defaults or for --non-interactive",
@@ -112,9 +102,6 @@ def main() -> int:
     repo_root = Path.cwd()
     ensure_repo_root(repo_root)
     configure_answers(args.answers, args.non_interactive)
-    if args.renderer is not None:
-        INSTALLER_ANSWERS["renderer"] = args.renderer
-
     print("Inkplate Weather Calendar server installer")
     print("------------------------------------------")
     print("Press Ctrl-C at any time to cancel cleanly.")
@@ -145,10 +132,7 @@ def main() -> int:
         print(
             "Proxmox VE support is experimental and uses a dedicated installer."
         )
-        renderer_option = (
-            f" --renderer {args.renderer}" if args.renderer else ""
-        )
-        print(f"Run: ./bin/install_proxmox{renderer_option}")
+        print("Run: ./bin/install_proxmox")
         print("Preview first with: ./bin/install_proxmox --dry-run")
         return 0
     else:
@@ -223,9 +207,10 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
 
     manifest = prepare_version_manifest(repo_root, dry_run=dry_run)
     answers = None
+    current_config = read_simple_yaml(existing_config_path(repo_root))
+    require_renderer_migration(current_config, action)
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
-        current_config = read_simple_yaml(existing_config_path(repo_root))
         answers = collect_answers(current_env, current_config, mode=mode)
         write_text_atomic(
             repo_root / SERVER_CONFIG,
@@ -245,10 +230,8 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             mode=0o600,
         )
     elif action == "update":
-        current_config = read_simple_yaml(existing_config_path(repo_root))
-        update_compose_flavour_env(
+        update_compose_build_env(
             repo_root / DOCKER_ENV_FILE,
-            required_dependency_renderer(current_config),
             build_metadata=manifest,
             dry_run=dry_run,
         )
@@ -329,26 +312,14 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
 
     validate_native_platform(dry_run)
     current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
-    existing_renderer = required_dependency_renderer(current_config)
-    if action in ("fresh", "reconfigure", "update_reconfigure"):
-        renderer = collect_renderer(current_config)
-    else:
-        renderer = existing_renderer
-        print(f"Preserving configured renderer: {renderer}")
-    if action == "reconfigure" and renderer != existing_renderer:
-        raise SystemExit(
-            "ERROR: changing the renderer also changes native dependencies. "
-            "Choose 'update_reconfigure' instead."
-        )
+    require_renderer_migration(current_config, action)
 
     if action in ("fresh", "update", "update_reconfigure"):
-        install_native_prerequisites(dry_run, renderer)
+        install_native_prerequisites(dry_run)
         ensure_system_user(dry_run)
         copy_repo(repo_root, INSTALL_DIR, dry_run)
         ensure_venv(dry_run)
-        refresh_dependencies(dry_run, renderer)
-        if renderer == "firefox":
-            install_geckodriver(repo_root, dry_run)
+        refresh_dependencies(dry_run)
 
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
@@ -357,7 +328,6 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             current_env,
             current_config,
             mode="systemd",
-            renderer=renderer,
         )
         write_text_atomic(
             INSTALL_DIR / SERVER_CONFIG,
@@ -477,14 +447,13 @@ def collect_answers(
     env: dict[str, str],
     config: dict[str, str],
     mode: str,
-    renderer: str | None = None,
 ) -> dict[str, object]:
     print()
     print("Configuration")
     print("-------------")
 
     answers: dict[str, object] = {}
-    answers["renderer"] = renderer or collect_renderer(config)
+    answers["renderer"] = DEFAULT_RENDERER
     answers["host"] = prompt_ip_address(
         "Server bind IP",
         default=config.get("server.host", DEFAULT_HOST),
@@ -669,38 +638,26 @@ def collect_answers(
     return answers
 
 
-def configured_renderer(config: dict[str, str]) -> str:
-    default_profile = config.get(
-        "outputs.default",
-        DEFAULT_OUTPUT_PROFILE,
-    )
-    renderer = config.get(
-        f"outputs.profiles.{default_profile}.renderer",
-        DEFAULT_RENDERER,
-    )
-    return renderer if renderer in dict(RENDERER_CHOICES) else DEFAULT_RENDERER
-
-
-def required_dependency_renderer(config: dict[str, str]) -> str:
-    renderers = {
+def require_renderer_migration(
+    config: dict[str, str],
+    action: str,
+) -> None:
+    configured = {
         value
         for key, value in config.items()
         if key.startswith("outputs.profiles.")
         and key.endswith(".renderer")
-        and value in dict(RENDERER_CHOICES)
     }
-    if renderers == {"pillow"}:
-        return "pillow"
-    return "firefox"
-
-
-def collect_renderer(config: dict[str, str]) -> str:
-    return prompt_choice(
-        "Output renderer",
-        list(RENDERER_CHOICES),
-        default=configured_renderer(config),
-        key="renderer",
-    )
+    if "firefox" in configured and action not in (
+        "fresh",
+        "reconfigure",
+        "update_reconfigure",
+    ):
+        raise SystemExit(
+            "ERROR: Firefox rendering was removed in v4. "
+            "Run the installer again and choose 'update_reconfigure' "
+            "to migrate the output profiles to Pillow, or remain on v3.x."
+        )
 
 
 def weather_provider_choices() -> list[tuple[str, str]]:
@@ -779,7 +736,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "  profiles:",
         f"    {DEFAULT_OUTPUT_PROFILE}:",
         "      enabled: true",
-        f"      renderer: {answers.get('renderer', DEFAULT_RENDERER)}",
+        f"      renderer: {DEFAULT_RENDERER}",
         f"      width: {DEFAULT_IMAGE_WIDTH}",
         f"      height: {DEFAULT_IMAGE_HEIGHT}",
         f"      filename: {DEFAULT_OUTPUT_FILENAME}",
@@ -820,15 +777,7 @@ def render_env(
         values["INKPLATE_SERVER_PORT"] = str(
             answers.get("port", DEFAULT_PORT)
         )
-        renderer = str(answers.get("renderer", DEFAULT_RENDERER))
-        values["INKPLATE_BUILD_TARGET"] = (
-            "pillow" if renderer == "pillow" else "full"
-        )
-        values["INKPLATE_IMAGE"] = (
-            "inkplate10-weather-cal:pillow-local"
-            if renderer == "pillow"
-            else "inkplate10-weather-cal:local"
-        )
+        values["INKPLATE_IMAGE"] = "inkplate10-weather-cal:local"
         values["INKPLATE_BUILD_DATE"] = str(
             build_metadata.get("build_date", "unknown")
         )
@@ -858,23 +807,15 @@ def render_env(
     return "\n".join(lines)
 
 
-def update_compose_flavour_env(
+def update_compose_build_env(
     path: Path,
-    renderer: str,
     *,
     build_metadata: dict | None = None,
     dry_run: bool,
 ) -> None:
     build_metadata = build_metadata or {}
     values = {
-        "INKPLATE_BUILD_TARGET": (
-            "pillow" if renderer == "pillow" else "full"
-        ),
-        "INKPLATE_IMAGE": (
-            "inkplate10-weather-cal:pillow-local"
-            if renderer == "pillow"
-            else "inkplate10-weather-cal:local"
-        ),
+        "INKPLATE_IMAGE": "inkplate10-weather-cal:local",
         "INKPLATE_BUILD_DATE": str(
             build_metadata.get("build_date", "unknown")
         ),
@@ -894,6 +835,8 @@ def update_compose_flavour_env(
             updated.append(line)
             continue
         key = line.split("=", 1)[0].strip()
+        if key == "INKPLATE_BUILD_TARGET":
+            continue
         if key in values:
             updated.append(f"{key}={values[key]}")
             found.add(key)
@@ -1065,9 +1008,6 @@ def validate_native_platform(dry_run: bool) -> None:
         raise SystemExit("ERROR: apt not found; native install supports Debian/Ubuntu hosts.")
     if not Path("/run/systemd/system").exists() and not dry_run:
         raise SystemExit("ERROR: systemd is not available on this host.")
-    arch = normalized_arch()
-    if arch not in ("amd64", "arm64"):
-        raise SystemExit(f"ERROR: unsupported architecture for Geckodriver: {platform.machine()}")
     print("Native install target: Debian/Ubuntu with systemd.")
     configure_privilege_escalation(dry_run)
 
@@ -1114,28 +1054,15 @@ def configure_privilege_escalation(dry_run: bool) -> None:
     print(f"Privilege check: {name} elevation is available.")
 
 
-def install_native_prerequisites(dry_run: bool, renderer: str) -> None:
+def install_native_prerequisites(dry_run: bool) -> None:
     packages = [
         "ca-certificates",
         "python3",
         "python3-pip",
         "python3-venv",
     ]
-    if renderer == "firefox":
-        packages.extend(["curl", choose_firefox_package(dry_run)])
     run(["apt-get", "update"], sudo=True, dry_run=dry_run)
     run(["apt-get", "install", "-y", "--no-install-recommends", *packages], sudo=True, dry_run=dry_run)
-
-
-def choose_firefox_package(dry_run: bool) -> str:
-    if dry_run:
-        return "firefox-esr"
-    result = subprocess.run(
-        ["apt-cache", "show", "firefox-esr"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return "firefox-esr" if result.returncode == 0 else "firefox"
 
 
 def ensure_system_user(dry_run: bool) -> None:
@@ -1233,37 +1160,31 @@ def ensure_venv(dry_run: bool) -> None:
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
 
 
-def refresh_dependencies(dry_run: bool, renderer: str) -> None:
-    requirements = (
-        "requirements-pillow-only.txt"
-        if renderer == "pillow"
-        else "requirements.txt"
-    )
+def refresh_dependencies(dry_run: bool) -> None:
     run(
         [
             "bin/refresh_deps",
             "--venv",
             str(VENV_DIR),
             "--requirements",
-            str(INSTALL_DIR / "server" / requirements),
+            str(INSTALL_DIR / "server" / "requirements.txt"),
         ],
         sudo=True,
         dry_run=dry_run,
     )
-    if renderer == "pillow":
-        run(
-            [
-                str(VENV_DIR / "bin" / "python"),
-                "-m",
-                "pip",
-                "uninstall",
-                "-y",
-                "airium",
-                "selenium",
-            ],
-            sudo=True,
-            dry_run=dry_run,
-        )
+    run(
+        [
+            str(VENV_DIR / "bin" / "python"),
+            "-m",
+            "pip",
+            "uninstall",
+            "-y",
+            "airium",
+            "selenium",
+        ],
+        sudo=True,
+        dry_run=dry_run,
+    )
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(VENV_DIR)], sudo=True, dry_run=dry_run)
 
 
@@ -1316,33 +1237,6 @@ def install_copy_ignore(repo_root: Path):
         return ignored
 
     return ignore
-
-
-def install_geckodriver(repo_root: Path, dry_run: bool) -> None:
-    version = dockerfile_geckodriver_version(repo_root / "Dockerfile")
-    gecko_arch = {"amd64": "linux64", "arm64": "linux-aarch64"}[normalized_arch()]
-    url = f"https://github.com/mozilla/geckodriver/releases/download/{version}/geckodriver-{version}-{gecko_arch}.tar.gz"
-    archive = Path("/tmp") / f"geckodriver-{version}-{gecko_arch}.tar.gz"
-    run(["curl", "-fsSL", "-o", str(archive), url], sudo=True, dry_run=dry_run)
-    run(["tar", "xzf", str(archive), "-C", "/usr/local/bin"], sudo=True, dry_run=dry_run)
-    run(["chmod", "0755", "/usr/local/bin/geckodriver"], sudo=True, dry_run=dry_run)
-
-
-def dockerfile_geckodriver_version(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r"^ARG\s+GECKOVERSION=(\S+)", text, re.MULTILINE)
-    if not match:
-        raise SystemExit("ERROR: could not find GECKOVERSION in Dockerfile.")
-    return match.group(1)
-
-
-def normalized_arch() -> str:
-    machine = platform.machine().lower()
-    if machine in ("x86_64", "amd64"):
-        return "amd64"
-    if machine in ("aarch64", "arm64"):
-        return "arm64"
-    return machine
 
 
 def read_env_file(path: Path) -> dict[str, str]:

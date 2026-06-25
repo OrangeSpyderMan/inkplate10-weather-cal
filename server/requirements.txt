@@ -1,3 +1,2 @@
 -r requirements-common.txt
 -r requirements-pillow.txt
--r requirements-firefox.txt

@@ -38,11 +38,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - full
-          - pillow
 
     steps:
       - uses: actions/checkout@v7
@@ -66,12 +61,11 @@ jobs:
         run: |
           docker build . \
             --file Dockerfile \
-            --target "${{ matrix.target }}" \
-            --tag "inkplate10-weather-cal:ci-${{ matrix.target }}"
+            --tag "inkplate10-weather-cal:ci"
 
       - name: Smoke test Docker image
         env:
-          IMAGE: inkplate10-weather-cal:ci-${{ matrix.target }}
+          IMAGE: inkplate10-weather-cal:ci
         run: |
           test "$(docker image inspect "$IMAGE" \
             --format '{{json .Config.Cmd}}')" = \
@@ -82,7 +76,7 @@ jobs:
             "$(git rev-parse --short HEAD)"
           test "$(docker image inspect "$IMAGE" \
             --format '{{index .Config.Labels "org.opencontainers.image.variant"}}')" = \
-            "${{ matrix.target }}"
+            "pillow"
           docker run --rm "$IMAGE" python3 -m py_compile \
             server/server.py \
             server/server_status.py \
@@ -101,30 +95,23 @@ jobs:
             server/weather/openweathermapv4/openweathermapv4.py
           docker run --rm "$IMAGE" \
             python3 -m unittest discover -s server/tests -v
-          if [ "${{ matrix.target }}" = "full" ]; then
-            docker run --rm "$IMAGE" geckodriver --version
-            docker run --rm "$IMAGE" firefox --version
-            docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
-              'import airium, selenium; from renderers import build_renderer; build_renderer("firefox")'
-          else
-            if docker run --rm "$IMAGE" python3 -c 'import airium, selenium'; then
-              echo "Pillow image unexpectedly contains browser dependencies" >&2
-              exit 1
-            fi
-            docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
-              'from renderers import build_renderer; build_renderer("pillow")'
-            if output="$(docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
-              'from renderers import build_renderer; build_renderer("firefox")' \
-              2>&1)"; then
-              echo "Firefox renderer unexpectedly available" >&2
-              exit 1
-            fi
-            echo "$output" | grep -q "unavailable"
+          if docker run --rm "$IMAGE" python3 -c 'import airium, selenium'; then
+            echo "Image unexpectedly contains removed browser dependencies" >&2
+            exit 1
           fi
+          docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
+            'from renderers import build_renderer; build_renderer("pillow")'
+          if output="$(docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
+            'from renderers import build_renderer; build_renderer("firefox")' \
+            2>&1)"; then
+            echo "Firefox renderer unexpectedly available" >&2
+            exit 1
+          fi
+          echo "$output" | grep -q "removed in v4"
 
       - name: Smoke test Gunicorn web service
         env:
-          IMAGE: inkplate10-weather-cal:ci-${{ matrix.target }}
+          IMAGE: inkplate10-weather-cal:ci
         run: |
           mkdir -p "$RUNNER_TEMP/inkplate-data"
           cat > "$RUNNER_TEMP/inkplate-config.yaml" <<'EOF'

@@ -23,7 +23,7 @@ class ServerStatusTests(unittest.TestCase):
         self.profiles = {
             DEFAULT_OUTPUT_PROFILE: OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )
