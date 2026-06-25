@@ -7,6 +7,7 @@ import signal
 import threading
 from pathlib import Path
 
+from artifacts import ArtifactStore
 from configuration import load_config
 from mqtt_diagnostics import MqttDiagnosticListener
 
@@ -23,7 +24,7 @@ def configure_logging():
     return logging.getLogger("server")
 
 
-def build_listener(config):
+def build_listener(config, store=None):
     mqtt_config = config.get("mqtt") or {}
     diagnostics_config = mqtt_config.get("diagnostics") or {}
     if not diagnostics_config.get("enabled", False):
@@ -37,13 +38,17 @@ def build_listener(config):
             "inkplate/weather-calendar/diagnostics",
         ),
         qos=diagnostics_config.get("qos", 0),
+        store=store,
     )
 
 
 def main():
     log = configure_logging()
     config_path, config = load_config()
-    listener = build_listener(config)
+    store = ArtifactStore(
+        os.environ.get("INKPLATE_DATA_DIR", SERVER_DIR / "data")
+    )
+    listener = build_listener(config, store=store)
     if listener is None:
         log.info(
             "MQTT diagnostic listener is disabled in %s",

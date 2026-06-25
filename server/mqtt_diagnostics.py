@@ -1,8 +1,13 @@
 import logging
+from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 
 from redaction import exception_text
+
+
+DIAGNOSTIC_SCHEMA_VERSION = "1.0"
+MAX_DIAGNOSTIC_MESSAGE_LENGTH = 4096
 
 
 class MqttDiagnosticListener:
@@ -13,12 +18,16 @@ class MqttDiagnosticListener:
         topic="inkplate/weather-calendar/diagnostics",
         qos=0,
         client_id="inkplate-diagnostics-server",
+        store=None,
+        now=None,
     ):
         self.broker = broker
         self.port = port
         self.topic = topic
         self.qos = qos
         self.client_id = client_id
+        self.store = store
+        self.now = now or (lambda: datetime.now(timezone.utc))
         self.log = logging.getLogger("server")
         self.client_log = logging.getLogger("MQTT")
         self.client = mqtt.Client(
@@ -86,4 +95,24 @@ class MqttDiagnosticListener:
         if message.retain:
             return
 
-        self.client_log.info(message.payload.decode(errors="replace"))
+        value = message.payload.decode(errors="replace")
+        self.client_log.info(value)
+        if self.store is None:
+            return
+
+        try:
+            self.store.write_diagnostic(
+                {
+                    "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
+                    "received_at": self.now().isoformat(),
+                    "topic": getattr(message, "topic", self.topic),
+                    "message": value[:MAX_DIAGNOSTIC_MESSAGE_LENGTH],
+                    "truncated": len(value)
+                    > MAX_DIAGNOSTIC_MESSAGE_LENGTH,
+                }
+            )
+        except OSError as exc:
+            self.log.error(
+                "Failed to persist Inkplate diagnostic: %s",
+                exception_text(exc),
+            )

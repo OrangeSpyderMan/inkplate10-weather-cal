@@ -1,4 +1,5 @@
 import logging
+import datetime as dt
 import pathlib
 import sys
 import unittest
@@ -14,9 +15,10 @@ import mqtt_publisher
 
 
 class FakeMessage:
-    def __init__(self, payload, retain=False):
+    def __init__(self, payload, retain=False, topic="inkplate/diagnostics"):
         self.payload = payload
         self.retain = retain
+        self.topic = topic
 
 
 class MqttDiagnosticListenerTests(unittest.TestCase):
@@ -53,7 +55,18 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
 
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_ignores_retained_messages(self, client_class):
-        listener = mqtt_diagnostics.MqttDiagnosticListener(broker="broker")
+        store = mock.Mock()
+        listener = mqtt_diagnostics.MqttDiagnosticListener(
+            broker="broker",
+            store=store,
+            now=lambda: dt.datetime(
+                2026,
+                6,
+                25,
+                12,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
         self.assertEqual(listener.client_log.name, "MQTT")
         listener.client_log = mock.Mock()
 
@@ -69,6 +82,60 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
         )
 
         listener.client_log.info.assert_called_once_with("current")
+        store.write_diagnostic.assert_called_once_with(
+            {
+                "schema_version": "1.0",
+                "received_at": "2026-06-25T12:00:00+00:00",
+                "topic": "inkplate/diagnostics",
+                "message": "current",
+                "truncated": False,
+            }
+        )
+
+    @mock.patch("mqtt_diagnostics.mqtt.Client")
+    def test_caps_persisted_diagnostic_message(self, client_class):
+        store = mock.Mock()
+        listener = mqtt_diagnostics.MqttDiagnosticListener(
+            broker="broker",
+            store=store,
+        )
+        payload = b"x" * (
+            mqtt_diagnostics.MAX_DIAGNOSTIC_MESSAGE_LENGTH + 1
+        )
+
+        listener._on_message(
+            client_class.return_value,
+            None,
+            FakeMessage(payload),
+        )
+
+        diagnostic = store.write_diagnostic.call_args.args[0]
+        self.assertEqual(
+            len(diagnostic["message"]),
+            mqtt_diagnostics.MAX_DIAGNOSTIC_MESSAGE_LENGTH,
+        )
+        self.assertTrue(diagnostic["truncated"])
+
+    @mock.patch("mqtt_diagnostics.mqtt.Client")
+    def test_persistence_failure_does_not_escape_callback(self, client_class):
+        store = mock.Mock()
+        store.write_diagnostic.side_effect = OSError("read-only")
+        listener = mqtt_diagnostics.MqttDiagnosticListener(
+            broker="broker",
+            store=store,
+        )
+
+        with self.assertLogs("server", logging.ERROR) as logs:
+            listener._on_message(
+                client_class.return_value,
+                None,
+                FakeMessage(b"current"),
+            )
+
+        self.assertIn(
+            "Failed to persist Inkplate diagnostic",
+            logs.output[0],
+        )
 
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_start_failure_is_non_fatal(self, client_class):
@@ -104,6 +171,7 @@ class MqttDiagnosticServerTests(unittest.TestCase):
 
     @mock.patch("mqtt_diagnostics_server.MqttDiagnosticListener")
     def test_builds_enabled_listener_from_config(self, listener_class):
+        store = mock.Mock()
         listener = mqtt_diagnostics_server.build_listener(
             {
                 "mqtt": {
@@ -115,7 +183,8 @@ class MqttDiagnosticServerTests(unittest.TestCase):
                         "qos": 1,
                     }
                 }
-            }
+            },
+            store=store,
         )
 
         self.assertEqual(listener, listener_class.return_value)
@@ -124,6 +193,7 @@ class MqttDiagnosticServerTests(unittest.TestCase):
             port=1884,
             topic="inkplate/diagnostics",
             qos=1,
+            store=store,
         )
 
     @mock.patch("mqtt_diagnostics_server.load_config")

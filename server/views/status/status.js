@@ -38,6 +38,7 @@ function render(payload) {
   const providers = payload.providers || {};
   const readiness = payload.readiness || {};
   const mqtt = payload.mqtt || {};
+  const diagnostic = payload.inkplate?.latest_diagnostic;
   const state = producer.state || "unavailable";
   const stateElement = document.getElementById("state");
 
@@ -62,6 +63,17 @@ function render(payload) {
     mqtt.last_publish_success == null
       ? "-"
       : mqtt.last_publish_success ? "Success" : `Failed: ${mqtt.last_error}`,
+  );
+  text(
+    "inkplate-diagnostic-time",
+    diagnostic ? timestamp(diagnostic.received_at) : "-",
+  );
+  text("inkplate-diagnostic-topic", diagnostic?.topic);
+  text(
+    "inkplate-diagnostic-message",
+    diagnostic
+      ? `${diagnostic.message}${diagnostic.truncated ? "\n[truncated]" : ""}`
+      : "No diagnostic received",
   );
   text("updated", `Updated ${timestamp(payload.updated_at)}`);
 

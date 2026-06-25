@@ -24,6 +24,10 @@ class ArtifactStore:
     def status_path(self):
         return self.root / "server-status.json"
 
+    @property
+    def diagnostic_path(self):
+        return self.root / "inkplate-diagnostic.json"
+
     def output_path(self, profile, filename):
         return self.root / "outputs" / profile / filename
 
@@ -60,6 +64,13 @@ class ArtifactStore:
     def read_status(self):
         with self.status_path.open(encoding="utf-8") as status_file:
             return json.load(status_file)
+
+    def write_diagnostic(self, diagnostic):
+        self.write_json(self.diagnostic_path, diagnostic)
+
+    def read_diagnostic(self):
+        with self.diagnostic_path.open(encoding="utf-8") as diagnostic_file:
+            return json.load(diagnostic_file)
 
     def output_status(self, profiles):
         status = {name: False for name in profiles}

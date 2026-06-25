@@ -119,6 +119,13 @@ def register_routes(app):
                 snapshot_exists and all(output_status.values())
             ),
         }
+        try:
+            latest_diagnostic = store.read_diagnostic()
+        except (OSError, TypeError, json.JSONDecodeError):
+            latest_diagnostic = None
+        payload["inkplate"] = {
+            "latest_diagnostic": latest_diagnostic,
+        }
         return jsonify(payload)
 
     @app.get("/outputs/<profile>/<filename>")

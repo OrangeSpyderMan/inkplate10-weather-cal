@@ -80,6 +80,36 @@ class WebAppTests(unittest.TestCase):
         self.assertFalse(
             response.get_json()["readiness"]["producer_cycle_complete"]
         )
+        self.assertEqual(
+            response.get_json()["inkplate"],
+            {"latest_diagnostic": None},
+        )
+
+    def test_status_includes_latest_inkplate_diagnostic(self):
+        ArtifactStore.write_json(
+            self.store.status_path,
+            {
+                "schema_version": "1.0",
+                "updated_at": "2026-06-25T12:00:00+00:00",
+                "producer": {"state": "ready"},
+            },
+        )
+        diagnostic = {
+            "schema_version": "1.0",
+            "received_at": "2026-06-25T12:01:00+00:00",
+            "topic": "inkplate/weather-calendar/diagnostics",
+            "message": "REFRESH - status=ready",
+            "truncated": False,
+        }
+        self.store.write_diagnostic(diagnostic)
+
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["inkplate"]["latest_diagnostic"],
+            diagnostic,
+        )
 
     def test_serves_status_dashboard_assets(self):
         page = self.client.get("/status")
@@ -91,7 +121,9 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(trailing.status_code, 200)
         self.assertIn(b"Server status", page.data)
         self.assertIn(b"Displayed time zone", page.data)
+        self.assertIn(b"Latest diagnostic", page.data)
         self.assertIn(b"/api/v1/status", javascript.data)
+        self.assertIn(b"inkplate-diagnostic-message", javascript.data)
         self.assertIn(b'timeZoneName: "short"', javascript.data)
         self.assertIn(b"grid-template-columns", css.data)
         page.close()

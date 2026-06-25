@@ -15,6 +15,21 @@ from output_profiles import DEFAULT_OUTPUT_PROFILE, OutputProfile
 
 
 class ArtifactStoreTests(unittest.TestCase):
+    def test_writes_and_reads_latest_diagnostic_atomically(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            diagnostic = {
+                "schema_version": "1.0",
+                "received_at": "2026-06-25T12:00:00+00:00",
+                "topic": "inkplate/diagnostics",
+                "message": "REFRESH - status=ready",
+                "truncated": False,
+            }
+
+            store.write_diagnostic(diagnostic)
+
+            self.assertEqual(store.read_diagnostic(), diagnostic)
+
     def test_writes_snapshot_and_output_paths_under_root(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             store = ArtifactStore(temporary_dir)

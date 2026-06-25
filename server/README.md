@@ -441,7 +441,11 @@ after an interrupted write. Valid snapshots and outputs are never age-pruned.
 
 The diagnostic listener runs as an independent process from weather production
 and publishing. It records non-retained messages from the Inkplate through the
-`MQTT` logger and resubscribes after reconnecting. Native installations use
+`MQTT` logger, atomically stores the latest message in the shared data
+directory, and resubscribes after reconnecting. `/api/v1/status` exposes the
+message as `inkplate.latest_diagnostic`, and `/status` displays its receive
+time, topic, and text. Messages are capped at 4096 characters and retained
+broker messages are ignored. Native installations use
 `inkplate-diagnostics.service`; Compose uses the `diagnostics` service. When
 diagnostics are disabled, that process exits successfully. The matching
 firmware topic is configured in the Inkplate `mqtt_logger` section, either on
