@@ -74,13 +74,12 @@ class ArtifactStore:
                 == snapshot_signature
             )
             upgraded = False
-            if snapshot_matches and "sha256" not in snapshot:
-                snapshot["sha256"] = self.file_sha256(snapshot_path)
-                upgraded = True
-            snapshot_matches = (
-                snapshot_matches
-                and snapshot["sha256"] == self.file_sha256(snapshot_path)
-            )
+            if snapshot_matches:
+                snapshot_sha256 = self.file_sha256(snapshot_path)
+                if "sha256" not in snapshot:
+                    snapshot["sha256"] = snapshot_sha256
+                    upgraded = True
+                snapshot_matches = snapshot["sha256"] == snapshot_sha256
             for name, profile in profiles.items():
                 output = ready["outputs"][name]
                 expected_path = self.output_path(name, profile.filename)
@@ -89,14 +88,16 @@ class ArtifactStore:
                     self.root / output["path"] == expected_path
                     and output["signature"] == output_signature
                 )
+                output_sha256 = None
                 if output_matches and "sha256" not in output:
-                    output["sha256"] = self.file_sha256(expected_path)
+                    output_sha256 = self.file_sha256(expected_path)
+                    output["sha256"] = output_sha256
                     upgraded = True
-                status[name] = (
-                    snapshot_matches
-                    and output_matches
-                    and output["sha256"] == self.file_sha256(expected_path)
-                )
+                if snapshot_matches and output_matches:
+                    if output_sha256 is None:
+                        output_sha256 = self.file_sha256(expected_path)
+                    output_matches = output["sha256"] == output_sha256
+                status[name] = snapshot_matches and output_matches
             if upgraded:
                 try:
                     self.write_json(self.ready_path, ready)

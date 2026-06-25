@@ -149,7 +149,13 @@ class ArtifactStoreTests(unittest.TestCase):
                 },
             )
 
-            self.assertTrue(store.producer_cycle_complete(profiles))
+            with mock.patch.object(
+                store,
+                "file_sha256",
+                wraps=store.file_sha256,
+            ) as file_sha256:
+                self.assertTrue(store.producer_cycle_complete(profiles))
+            self.assertEqual(file_sha256.call_count, 2)
 
             ready = json.loads(store.ready_path.read_text(encoding="utf-8"))
             self.assertEqual(
