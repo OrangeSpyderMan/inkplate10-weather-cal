@@ -196,13 +196,15 @@ topic:
 inkplate/weather-calendar/diagnostics
 ```
 
-The server diagnostic listener also stores the latest non-retained message in
-the shared artifact directory. It is exposed as
-`inkplate.latest_diagnostic` by `/api/v1/status` and displayed on `/status`
-with the receive time and MQTT topic. The stored message is capped at 4096
-characters; a `truncated` flag indicates when the original payload was longer.
-Retained messages are ignored so a stale broker value cannot appear as a newly
-received client diagnostic after server startup.
+The server diagnostic listener also stores the 10 most recent non-retained
+client messages in the shared artifact directory. They are exposed as
+`inkplate.recent_diagnostics` by `/api/v1/status` and displayed under
+**Inkplate client diagnostics** on `/status`, with receive times and MQTT
+topics. This is separate from the MQTT section describing the server's own
+weather/status publishing. Each stored message is capped at 4096 characters;
+a `truncated` flag indicates when the original payload was longer. Retained
+messages are ignored so a stale broker value cannot appear as newly received
+client diagnostics after server startup.
 
 Messages should identify their originating client in the text. The
 `weather-cal-micropython` clients use:

@@ -82,10 +82,10 @@ class WebAppTests(unittest.TestCase):
         )
         self.assertEqual(
             response.get_json()["inkplate"],
-            {"latest_diagnostic": None},
+            {"recent_diagnostics": []},
         )
 
-    def test_status_includes_latest_inkplate_diagnostic(self):
+    def test_status_includes_recent_inkplate_client_diagnostics(self):
         ArtifactStore.write_json(
             self.store.status_path,
             {
@@ -94,21 +94,54 @@ class WebAppTests(unittest.TestCase):
                 "producer": {"state": "ready"},
             },
         )
-        diagnostic = {
-            "schema_version": "1.0",
-            "received_at": "2026-06-25T12:01:00+00:00",
-            "topic": "inkplate/weather-calendar/diagnostics",
-            "message": "REFRESH - status=ready",
-            "truncated": False,
-        }
-        self.store.write_diagnostic(diagnostic)
+        diagnostics = [
+            {
+                "received_at": "2026-06-25T12:00:00+00:00",
+                "topic": "inkplate/weather-calendar/diagnostics",
+                "message": "BATTERY - voltage=4.11V",
+                "truncated": False,
+            },
+            {
+                "received_at": "2026-06-25T12:01:00+00:00",
+                "topic": "inkplate/weather-calendar/diagnostics",
+                "message": "REFRESH - status=ready",
+                "truncated": False,
+            },
+        ]
+        self.store.write_diagnostic(
+            {
+                "schema_version": "1.0",
+                "diagnostics": diagnostics,
+            }
+        )
 
         response = self.client.get("/api/v1/status")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            response.get_json()["inkplate"]["latest_diagnostic"],
-            diagnostic,
+            response.get_json()["inkplate"]["recent_diagnostics"],
+            diagnostics,
+        )
+
+    def test_status_ignores_malformed_diagnostic_history_entries(self):
+        self.store.write_status(
+            {
+                "schema_version": "1.0",
+                "producer": {"state": "ready"},
+            }
+        )
+        self.store.write_diagnostic(
+            {
+                "schema_version": "1.0",
+                "diagnostics": [None, "invalid", {"message": "valid"}],
+            }
+        )
+
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(
+            response.get_json()["inkplate"]["recent_diagnostics"],
+            [{"message": "valid"}],
         )
 
     def test_serves_status_dashboard_assets(self):
@@ -121,9 +154,9 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(trailing.status_code, 200)
         self.assertIn(b"Server status", page.data)
         self.assertIn(b"Displayed time zone", page.data)
-        self.assertIn(b"Latest diagnostic", page.data)
+        self.assertIn(b"Inkplate client diagnostics", page.data)
         self.assertIn(b"/api/v1/status", javascript.data)
-        self.assertIn(b"inkplate-diagnostic-message", javascript.data)
+        self.assertIn(b"inkplate-diagnostics", javascript.data)
         self.assertIn(b'timeZoneName: "short"', javascript.data)
         self.assertIn(b"grid-template-columns", css.data)
         page.close()

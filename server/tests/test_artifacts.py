@@ -15,20 +15,55 @@ from output_profiles import DEFAULT_OUTPUT_PROFILE, OutputProfile
 
 
 class ArtifactStoreTests(unittest.TestCase):
-    def test_writes_and_reads_latest_diagnostic_atomically(self):
+    def test_appends_bounded_recent_diagnostics_atomically(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             store = ArtifactStore(temporary_dir)
-            diagnostic = {
-                "schema_version": "1.0",
-                "received_at": "2026-06-25T12:00:00+00:00",
-                "topic": "inkplate/diagnostics",
-                "message": "REFRESH - status=ready",
-                "truncated": False,
-            }
+            for index in range(4):
+                store.append_diagnostic(
+                    {
+                        "received_at": f"2026-06-25T12:0{index}:00+00:00",
+                        "topic": "inkplate/diagnostics",
+                        "message": f"message {index}",
+                        "truncated": False,
+                    },
+                    limit=3,
+                )
 
-            store.write_diagnostic(diagnostic)
+            artifact = store.read_diagnostic()
+            self.assertEqual(artifact["schema_version"], "1.0")
+            self.assertEqual(
+                [item["message"] for item in artifact["diagnostics"]],
+                ["message 1", "message 2", "message 3"],
+            )
 
-            self.assertEqual(store.read_diagnostic(), diagnostic)
+    def test_migrates_single_diagnostic_artifact_to_history(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            store.write_diagnostic(
+                {
+                    "received_at": "2026-06-25T12:00:00+00:00",
+                    "topic": "inkplate/diagnostics",
+                    "message": "old",
+                    "truncated": False,
+                }
+            )
+
+            store.append_diagnostic(
+                {
+                    "received_at": "2026-06-25T12:01:00+00:00",
+                    "topic": "inkplate/diagnostics",
+                    "message": "new",
+                    "truncated": False,
+                }
+            )
+
+            self.assertEqual(
+                [
+                    item["message"]
+                    for item in store.read_diagnostic()["diagnostics"]
+                ],
+                ["old", "new"],
+            )
 
     def test_writes_snapshot_and_output_paths_under_root(self):
         with tempfile.TemporaryDirectory() as temporary_dir:

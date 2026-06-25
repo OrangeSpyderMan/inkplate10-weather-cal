@@ -72,6 +72,25 @@ class ArtifactStore:
         with self.diagnostic_path.open(encoding="utf-8") as diagnostic_file:
             return json.load(diagnostic_file)
 
+    def append_diagnostic(self, diagnostic, limit=10):
+        try:
+            existing = self.read_diagnostic()
+        except (OSError, TypeError, json.JSONDecodeError):
+            existing = {}
+
+        diagnostics = existing.get("diagnostics", [])
+        if not isinstance(diagnostics, list):
+            diagnostics = []
+        if not diagnostics and isinstance(existing.get("message"), str):
+            diagnostics = [existing]
+        diagnostics.append(diagnostic)
+        self.write_diagnostic(
+            {
+                "schema_version": "1.0",
+                "diagnostics": diagnostics[-limit:],
+            }
+        )
+
     def output_status(self, profiles):
         status = {name: False for name in profiles}
         try:

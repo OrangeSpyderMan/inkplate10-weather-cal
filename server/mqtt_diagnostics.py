@@ -8,6 +8,7 @@ from redaction import exception_text
 
 DIAGNOSTIC_SCHEMA_VERSION = "1.0"
 MAX_DIAGNOSTIC_MESSAGE_LENGTH = 4096
+MAX_RECENT_DIAGNOSTICS = 10
 
 
 class MqttDiagnosticListener:
@@ -101,7 +102,7 @@ class MqttDiagnosticListener:
             return
 
         try:
-            self.store.write_diagnostic(
+            self.store.append_diagnostic(
                 {
                     "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
                     "received_at": self.now().isoformat(),
@@ -109,7 +110,8 @@ class MqttDiagnosticListener:
                     "message": value[:MAX_DIAGNOSTIC_MESSAGE_LENGTH],
                     "truncated": len(value)
                     > MAX_DIAGNOSTIC_MESSAGE_LENGTH,
-                }
+                },
+                limit=MAX_RECENT_DIAGNOSTICS,
             )
         except OSError as exc:
             self.log.error(

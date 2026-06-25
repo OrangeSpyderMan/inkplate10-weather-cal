@@ -82,14 +82,15 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
         )
 
         listener.client_log.info.assert_called_once_with("current")
-        store.write_diagnostic.assert_called_once_with(
+        store.append_diagnostic.assert_called_once_with(
             {
                 "schema_version": "1.0",
                 "received_at": "2026-06-25T12:00:00+00:00",
                 "topic": "inkplate/diagnostics",
                 "message": "current",
                 "truncated": False,
-            }
+            },
+            limit=mqtt_diagnostics.MAX_RECENT_DIAGNOSTICS,
         )
 
     @mock.patch("mqtt_diagnostics.mqtt.Client")
@@ -109,7 +110,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
             FakeMessage(payload),
         )
 
-        diagnostic = store.write_diagnostic.call_args.args[0]
+        diagnostic = store.append_diagnostic.call_args.args[0]
         self.assertEqual(
             len(diagnostic["message"]),
             mqtt_diagnostics.MAX_DIAGNOSTIC_MESSAGE_LENGTH,
@@ -119,7 +120,7 @@ class MqttDiagnosticListenerTests(unittest.TestCase):
     @mock.patch("mqtt_diagnostics.mqtt.Client")
     def test_persistence_failure_does_not_escape_callback(self, client_class):
         store = mock.Mock()
-        store.write_diagnostic.side_effect = OSError("read-only")
+        store.append_diagnostic.side_effect = OSError("read-only")
         listener = mqtt_diagnostics.MqttDiagnosticListener(
             broker="broker",
             store=store,

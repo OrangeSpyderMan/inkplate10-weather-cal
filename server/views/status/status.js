@@ -38,7 +38,7 @@ function render(payload) {
   const providers = payload.providers || {};
   const readiness = payload.readiness || {};
   const mqtt = payload.mqtt || {};
-  const diagnostic = payload.inkplate?.latest_diagnostic;
+  const diagnostics = payload.inkplate?.recent_diagnostics || [];
   const state = producer.state || "unavailable";
   const stateElement = document.getElementById("state");
 
@@ -64,17 +64,30 @@ function render(payload) {
       ? "-"
       : mqtt.last_publish_success ? "Success" : `Failed: ${mqtt.last_error}`,
   );
-  text(
-    "inkplate-diagnostic-time",
-    diagnostic ? timestamp(diagnostic.received_at) : "-",
-  );
-  text("inkplate-diagnostic-topic", diagnostic?.topic);
-  text(
-    "inkplate-diagnostic-message",
-    diagnostic
-      ? `${diagnostic.message}${diagnostic.truncated ? "\n[truncated]" : ""}`
-      : "No diagnostic received",
-  );
+  const diagnosticList = document.getElementById("inkplate-diagnostics");
+  diagnosticList.replaceChildren();
+  if (diagnostics.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = "No client diagnostics received";
+    diagnosticList.append(empty);
+  } else {
+    [...diagnostics].reverse().forEach((diagnostic) => {
+      const entry = document.createElement("article");
+      entry.className = "diagnostic";
+      const metadata = document.createElement("div");
+      metadata.className = "diagnostic-metadata";
+      const received = document.createElement("time");
+      const topic = document.createElement("span");
+      const message = document.createElement("pre");
+      received.textContent = timestamp(diagnostic.received_at);
+      topic.textContent = diagnostic.topic || "-";
+      message.textContent =
+        `${diagnostic.message}${diagnostic.truncated ? "\n[truncated]" : ""}`;
+      metadata.append(received, topic);
+      entry.append(metadata, message);
+      diagnosticList.append(entry);
+    });
+  }
   text("updated", `Updated ${timestamp(payload.updated_at)}`);
 
   const outputs = document.getElementById("outputs");

@@ -154,16 +154,38 @@ dd {
   padding: 4px 0;
 }
 
-.diagnostic-message {
+.section-note {
+  color: #66716b;
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+}
+
+.diagnostics {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnostic {
   background: #f4f5f2;
   border: 1px solid #e0e4e0;
   border-radius: 4px;
+  padding: 10px;
+}
+
+.diagnostic-metadata {
+  color: #66716b;
+  display: flex;
+  font-size: 0.72rem;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.diagnostic pre {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.8rem;
-  margin: 12px 0 0;
-  max-height: 12rem;
+  margin: 8px 0 0;
+  max-height: 8rem;
   overflow: auto;
-  padding: 12px;
   white-space: pre-wrap;
   word-break: break-word;
 }

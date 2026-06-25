@@ -54,12 +54,13 @@
       </section>
 
       <section>
-        <h2>Inkplate client</h2>
-        <dl>
-          <div><dt>Latest diagnostic</dt><dd id="inkplate-diagnostic-time">-</dd></div>
-          <div><dt>Topic</dt><dd id="inkplate-diagnostic-topic">-</dd></div>
-        </dl>
-        <pre id="inkplate-diagnostic-message" class="diagnostic-message">No diagnostic received</pre>
+        <h2>Inkplate client diagnostics</h2>
+        <p class="section-note">
+          Recently received from the configured Inkplate diagnostics MQTT topic.
+        </p>
+        <div id="inkplate-diagnostics" class="diagnostics">
+          <p>No client diagnostics received</p>
+        </div>
       </section>
 
       <section id="error-panel" hidden>

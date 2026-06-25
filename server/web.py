@@ -120,11 +120,19 @@ def register_routes(app):
             ),
         }
         try:
-            latest_diagnostic = store.read_diagnostic()
+            diagnostic_artifact = store.read_diagnostic()
         except (OSError, TypeError, json.JSONDecodeError):
-            latest_diagnostic = None
+            diagnostic_artifact = {}
+        diagnostics = diagnostic_artifact.get("diagnostics", [])
+        if not isinstance(diagnostics, list):
+            diagnostics = []
+        diagnostics = [
+            diagnostic
+            for diagnostic in diagnostics
+            if isinstance(diagnostic, dict)
+        ]
         payload["inkplate"] = {
-            "latest_diagnostic": latest_diagnostic,
+            "recent_diagnostics": diagnostics,
         }
         return jsonify(payload)
 
