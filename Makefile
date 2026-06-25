@@ -6,8 +6,10 @@ export ARDUINO_DIRECTORIES_USER := $(CURDIR)/$(FIRMWARE_SKETCHBOOK_DIR)
 FIRMWARE_FQBN ?= Inkplate_Boards:esp32:Inkplate10V2
 FIRMWARE_CORE ?= Inkplate_Boards:esp32@8.1.0
 FIRMWARE_CORE_ID := $(firstword $(subst @, ,$(FIRMWARE_CORE)))
-FIRMWARE_BOARD_URL ?= https://github.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
-FIRMWARE_LIBRARIES ?= InkplateLibrary ArduinoJson Queue StreamUtils YAMLDuino ezTime SdFat
+FIRMWARE_CORE_VERSION := $(word 2,$(subst @, ,$(FIRMWARE_CORE)))
+FIRMWARE_BOARD_INDEX_COMMIT ?= bbbcd7bd640eca9cce73bbfae9d6d1c9abffce62
+FIRMWARE_BOARD_URL ?= https://raw.githubusercontent.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/$(FIRMWARE_BOARD_INDEX_COMMIT)/package_Dasduino_Boards_index.json
+FIRMWARE_LIBRARIES ?= InkplateLibrary@11.1.0 ArduinoJson@7.4.3 Queue@2.0 StreamUtils@1.9.2 YAMLDuino@1.5.0 ezTime@0.8.3 SdFat@2.3.0
 FIRMWARE_UPLOAD_SPEED ?= 115200
 FIRMWARE_VERSION ?=
 FIRMWARE_VERSION_DIR := build/firmware-version
@@ -51,13 +53,15 @@ firmware-ensure-cli:
 
 firmware-ensure-setup:
 	@missing_core=0; \
-	if ! { $(ARDUINO_CLI) core list | awk '$$1 == "$(FIRMWARE_CORE_ID)" { found = 1 } END { exit !found }'; }; then \
+	if ! { $(ARDUINO_CLI) core list | awk '$$1 == "$(FIRMWARE_CORE_ID)" && $$2 == "$(FIRMWARE_CORE_VERSION)" { found = 1 } END { exit !found }'; }; then \
 		missing_core=1; \
 	fi; \
 	missing_libs=""; \
-	for lib in $(FIRMWARE_LIBRARIES); do \
-		if ! { $(ARDUINO_CLI) lib list "$$lib" | awk -v lib="$$lib" '$$1 == lib { found = 1 } END { exit !found }'; }; then \
-			missing_libs="$$missing_libs $$lib"; \
+	for spec in $(FIRMWARE_LIBRARIES); do \
+		lib="$${spec%@*}"; \
+		version="$${spec##*@}"; \
+		if ! { $(ARDUINO_CLI) lib list "$$lib" | awk -v lib="$$lib" -v version="$$version" '$$1 == lib && $$2 == version { found = 1 } END { exit !found }'; }; then \
+			missing_libs="$$missing_libs $$spec"; \
 		fi; \
 	done; \
 	if [ "$$missing_core" -eq 1 ] || [ -n "$$missing_libs" ]; then \
@@ -78,8 +82,8 @@ firmware-install-cli:
 firmware-setup:
 	$(ARDUINO_CLI) core update-index --additional-urls $(FIRMWARE_BOARD_URL)
 	$(ARDUINO_CLI) core install $(FIRMWARE_CORE) --additional-urls $(FIRMWARE_BOARD_URL)
-	@for lib in $(FIRMWARE_LIBRARIES); do \
-		$(ARDUINO_CLI) lib install "$$lib"; \
+	@for spec in $(FIRMWARE_LIBRARIES); do \
+		$(ARDUINO_CLI) lib install "$$spec"; \
 	done
 
 firmware-generate-version: version-manifest

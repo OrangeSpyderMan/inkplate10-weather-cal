@@ -423,8 +423,13 @@ make firmware-board-list
 ```
 
 The default CLI build target is `Inkplate_Boards:esp32:Inkplate10V2`, using the
-Inkplate board package version `8.1.0`. These defaults can be overridden, for
-example:
+Inkplate board package version `8.1.0`. The board index is pinned to a Git
+commit, every Arduino library is installed at the version recorded in the
+`Makefile`, and the repo-local Arduino CLI download is verified against its
+published SHA-256 digest. CI actions used to build and publish firmware are
+also pinned to commit SHAs.
+
+These defaults can be overridden, for example:
 
 ```bash
 make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
@@ -435,8 +440,9 @@ make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
 The firmware can be compiled correctly on the Arduino IDE. Generic compiled
 firmware is attached to each [GitHub release](../../releases), and CI builds
 also provide a downloadable workflow artifact. You may be able to use a release
-binary to program your board directly, but I would recommend setting up an
-Arduino IDE with the latest library versions and compiling a version locally.
+binary to program your board directly. To reproduce a release locally, use the
+board and library versions pinned in the `Makefile`; newer library versions may
+change behavior or generated binaries.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition). The documentation for that is available here :
 
