@@ -39,6 +39,31 @@ class ProducerConfigTests(unittest.TestCase):
         self.assertEqual(settings.realtime_config, {})
         self.assertEqual(settings.mqtt_weather_config, {})
 
+    def test_legacy_current_temperature_config_remains_accepted(self):
+        legacy_config = {
+            "source": "netatmo",
+            "netatmo": {
+                "client_id": "id",
+            },
+        }
+        settings = ProducerConfig.from_config(
+            {
+                "server": {},
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+                "current_temperature": legacy_config,
+            }
+        )
+
+        self.assertEqual(settings.realtime_config, legacy_config)
+
     def test_accepts_missing_server_section_when_checking_enabled(self):
         self.assertTrue(producer_enabled({}))
         self.assertFalse(producer_enabled({"server": {"enabled": False}}))

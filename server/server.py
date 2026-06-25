@@ -12,7 +12,6 @@ from configuration import load_config
 from producer_config import ProducerConfig, producer_enabled
 from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
-from weather.models import CurrentConditions
 from server_status import ServerStatus, sanitized_error, utc_now
 from weather.providers import (
     ConfigurationError,
@@ -188,26 +187,9 @@ def build_weather_service(
     )
 
 
-def build_current_conditions_service(config, metric):
-    realtime_config = config.get("current_conditions")
-    if realtime_config is None:
-        realtime_config = config.get("current_temperature", {})
-    return build_realtime_provider(
-        realtime_config,
-        metric=metric,
-        base_dir=os.path.abspath(cwd),
-    )
-
-
 def apply_current_conditions(daily_summary, realtime_svc):
-    legacy_dict = isinstance(daily_summary, dict)
-    conditions = (
-        CurrentConditions.from_dict(daily_summary)
-        if legacy_dict
-        else daily_summary
-    )
     if realtime_svc is None:
-        return conditions
+        return daily_summary
 
     try:
         current_conditions = realtime_svc.get_current_conditions()
@@ -216,15 +198,9 @@ def apply_current_conditions(daily_summary, realtime_svc):
             "Realtime conditions unavailable; using forecast conditions: %s",
             exc,
         )
-        return conditions
+        return daily_summary
 
-    if isinstance(current_conditions, dict):
-        current_conditions = CurrentConditions.from_dict(current_conditions)
-    result = conditions.overlay(current_conditions)
-    if legacy_dict:
-        daily_summary.clear()
-        daily_summary.update(result.to_dict())
-    return result
+    return daily_summary.overlay(current_conditions)
 
 
 def build_weather_snapshot(

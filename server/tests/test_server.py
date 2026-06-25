@@ -12,6 +12,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import server
 from artifacts import ArtifactStore
 from output_profiles import OutputProfile
+from weather.models import CurrentConditions, Temperature
 from weather.snapshot import WeatherSnapshot
 
 
@@ -157,20 +158,21 @@ class ProducerTests(unittest.TestCase):
         )
 
     def test_realtime_failure_preserves_forecast_conditions(self):
-        daily_summary = {
-            "temperature": {
-                "unit": "\N{DEGREE SIGN}C",
-                "value": 10,
-                "min": 5,
-                "max": 15,
-            }
-        }
+        daily_summary = CurrentConditions(
+            temperature=Temperature(
+                unit="\N{DEGREE SIGN}C",
+                value=10,
+                minimum=5,
+                maximum=15,
+            )
+        )
         realtime = mock.Mock()
         realtime.get_current_conditions.side_effect = RuntimeError("offline")
 
-        server.apply_current_conditions(daily_summary, realtime)
+        result = server.apply_current_conditions(daily_summary, realtime)
 
-        self.assertEqual(daily_summary["temperature"]["value"], 10)
+        self.assertIs(result, daily_summary)
+        self.assertEqual(result.temperature.value, 10)
         server.log.warning.assert_called_once_with(
             "Realtime conditions unavailable; using forecast conditions: %s",
             mock.ANY,
