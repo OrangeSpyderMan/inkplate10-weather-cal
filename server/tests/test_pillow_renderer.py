@@ -207,6 +207,39 @@ class PillowCalendarRendererTests(unittest.TestCase):
         # 0% rain probability should be drawn as a baseline using line()
         self.assertTrue(canvas.rough.line.called)
 
+    def test_small_nonzero_rain_bar_survives_scaled_border_inset(self):
+        from pillow_renderer import CalendarCanvas
+
+        for width, height, supersample in (
+            (825, 1200, 1),
+            (825, 1200, 2),
+            (600, 448, 1),
+            (600, 448, 2),
+        ):
+            with self.subTest(
+                width=width,
+                height=height,
+                supersample=supersample,
+            ):
+                canvas = CalendarCanvas(
+                    width,
+                    height,
+                    supersample=supersample,
+                )
+                canvas._hatched_bar(100, 1106, 200, 1110)
+                if supersample > 1:
+                    canvas.image = canvas.image.resize(
+                        (width, height),
+                        Image.Resampling.LANCZOS,
+                    )
+
+                left = canvas._x(100) // supersample
+                right = canvas._x(200) // supersample
+                top = max(0, canvas._y(1100) // supersample)
+                bottom = min(height, canvas._y(1110) // supersample + 1)
+                bar = canvas.image.crop((left, top, right, bottom))
+                self.assertLess(bar.getextrema()[0], 250)
+
 
 if __name__ == "__main__":
     unittest.main()

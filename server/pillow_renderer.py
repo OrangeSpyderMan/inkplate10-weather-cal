@@ -376,9 +376,13 @@ class CalendarCanvas:
                     max_randomness_offset=self._size(2),
                 )
             return
+        border_width = self._size(3)
+        scaled_left, scaled_top, scaled_right, scaled_bottom = box
+        if scaled_bottom - scaled_top <= border_width:
+            scaled_top = scaled_bottom - border_width - 1
         self.rough.hatched_rectangle(
-            box,
-            border_width=self._size(3),
+            (scaled_left, scaled_top, scaled_right, scaled_bottom),
+            border_width=border_width,
             hatch_width=self._size(1),
             gap=self._size(18),
             roughness=4,
