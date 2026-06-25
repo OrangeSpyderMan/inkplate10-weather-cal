@@ -422,6 +422,41 @@ On macOS the port is usually under `/dev/cu.*`; on Windows it is usually a
 make firmware-board-list
 ```
 
+### Hardware fault and soak test
+
+`tools/hardware_soak.py` exercises a connected Inkplate against a local fault
+server. It flashes isolated test builds and verifies these behaviors from the
+serial lifecycle log:
+
+- simulated critical battery voltage skips Wi-Fi and returns to deep sleep;
+- failed Wi-Fi displays the connection error and returns to deep sleep;
+- an unavailable status endpoint falls back to downloading the image;
+- an unchanged output hash skips the image download and panel refresh;
+- a failed image download retries, retains the previous e-ink image, and uses
+  the shorter recovery sleep;
+- repeated successful wake cycles continue to use the unchanged-output path.
+
+The battery and shortened sleep controls are compile-time-only macros used by
+the soak runner. Normal firmware builds do not define them.
+
+Connect the Inkplate by USB and run this from a host on the same Wi-Fi network:
+
+```bash
+python3 tools/hardware_soak.py \
+  --port /dev/ttyUSB0 \
+  --host-address 192.0.2.10 \
+  --wifi-ssid my-network \
+  --cycles 20
+```
+
+`--host-address` must be the address of the test host as reachable by the
+Inkplate; do not use `127.0.0.1`. The runner listens on TCP port `18081` by
+default, so the host firewall must allow the Inkplate to reach that port. It
+prompts for the Wi-Fi password without putting it in the process arguments.
+It requires Python's `pyserial` package and will repeatedly flash and reset
+the connected board. Use a disposable test configuration rather than a
+production device that cannot tolerate interruption.
+
 The default CLI build target is `Inkplate_Boards:esp32:Inkplate10V2`, using the
 Inkplate board package version `8.1.0`. The board index is pinned to a Git
 commit, every Arduino library is installed at the version recorded in the

@@ -12,9 +12,10 @@ FIRMWARE_BOARD_URL ?= https://raw.githubusercontent.com/SolderedElectronics/Dasd
 FIRMWARE_LIBRARIES ?= InkplateLibrary@11.1.0 ArduinoJson@7.4.3 Queue@2.0 StreamUtils@1.9.2 YAMLDuino@1.5.0 ezTime@0.8.3 SdFat@2.3.0
 FIRMWARE_UPLOAD_SPEED ?= 115200
 FIRMWARE_VERSION ?=
+FIRMWARE_EXTRA_FLAGS ?=
 FIRMWARE_VERSION_DIR := build/firmware-version
 FIRMWARE_VERSION_HEADER := $(FIRMWARE_VERSION_DIR)/firmware_version.h
-FIRMWARE_COMMON_BUILD_FLAGS := -I$(abspath $(FIRMWARE_VERSION_DIR))
+FIRMWARE_COMMON_BUILD_FLAGS := -I$(abspath $(FIRMWARE_VERSION_DIR)) $(FIRMWARE_EXTRA_FLAGS)
 
 ifeq ($(strip $(CONFIG)),)
 FIRMWARE_CONFIG_MODE := sd

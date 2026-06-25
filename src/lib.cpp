@@ -130,6 +130,10 @@ esp_err_t configureWiFi(const char *ssid, const char *pass, int retries)
 
 float readBatteryVoltage()
 {
+#ifdef INKPLATE_SOAK_BATTERY_VOLTAGE
+    return INKPLATE_SOAK_BATTERY_VOLTAGE;
+#endif
+
     float samples[BATTERY_CONFIRMATION_SAMPLES];
     samples[0] = board.readBattery();
 
@@ -723,6 +727,9 @@ void sleep(const int sleepHours)
 void sleepForSeconds(const uint32_t sleepSeconds)
 {
     uint32_t boundedSleepSeconds = sleepSeconds;
+#ifdef INKPLATE_SOAK_SLEEP_SECONDS
+    boundedSleepSeconds = INKPLATE_SOAK_SLEEP_SECONDS;
+#endif
     if (boundedSleepSeconds == 0)
     {
         boundedSleepSeconds =
