@@ -2,6 +2,8 @@ import logging
 
 import paho.mqtt.client as mqtt
 
+from redaction import exception_text
+
 
 class MqttDiagnosticListener:
     def __init__(
@@ -33,7 +35,10 @@ class MqttDiagnosticListener:
             self.client.connect_async(self.broker, self.port, 60)
             self.client.loop_start()
         except Exception as exc:
-            self.log.error("Failed to start MQTT diagnostic listener: %s", exc)
+            self.log.error(
+                "Failed to start MQTT diagnostic listener: %s",
+                exception_text(exc),
+            )
             return False
 
         return True

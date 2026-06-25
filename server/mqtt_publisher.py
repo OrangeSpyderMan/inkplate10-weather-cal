@@ -3,6 +3,8 @@ import logging
 
 import paho.mqtt.client as mqtt
 
+from redaction import exception_text
+
 
 def create_mqtt_client(client_id):
     return mqtt.Client(
@@ -92,8 +94,8 @@ class MqttWeatherPublisher:
                     )
             return {"success": True, "error": None}
         except Exception as exc:
-            error = f"{type(exc).__name__}: {exc}"
-            self.log.error("Failed to publish MQTT messages: %s", exc)
+            error = exception_text(exc)
+            self.log.error("Failed to publish MQTT messages: %s", error)
             return {"success": False, "error": error}
         finally:
             if loop_started:

@@ -111,6 +111,24 @@ class ServerStatusTests(unittest.TestCase):
             },
         )
 
+    def test_sanitized_error_redacts_api_keys_and_tokens(self):
+        secret = "weather-secret"
+        value = sanitized_error(
+            "weather",
+            RuntimeError(
+                "request failed for "
+                "https://api.example.test/data?appid=weather-secret "
+                "Authorization: Bearer access-secret"
+            ),
+            timestamp=self.now,
+            secrets=(secret,),
+        )
+
+        encoded = json.dumps(value)
+        self.assertNotIn(secret, encoded)
+        self.assertNotIn("access-secret", encoded)
+        self.assertIn("<redacted>", encoded)
+
     def test_runtime_metadata_reads_shared_version_manifest(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             metadata_path = pathlib.Path(temporary_dir) / ".version.json"

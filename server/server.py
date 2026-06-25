@@ -10,6 +10,7 @@ from mqtt_publisher import MqttWeatherPublisher
 from artifacts import ArtifactStore
 from configuration import load_config
 from producer_config import ProducerConfig, producer_enabled
+from redaction import exception_text
 from renderers import build_renderer
 from weather.snapshot import WeatherSnapshot
 from server_status import ServerStatus, sanitized_error, utc_now
@@ -46,11 +47,20 @@ def main():
     try:
         return run()
     except (ConfigurationError, KeyError) as exc:
+        error = exception_text(exc)
         if log is None:
             logging.basicConfig()
-            logging.getLogger("server").error("Configuration error: %s", exc)
+            logging.getLogger("server").error("Configuration error: %s", error)
         else:
-            log.error("Configuration error: %s", exc)
+            log.error("Configuration error: %s", error)
+        return 1
+    except Exception as exc:
+        error = exception_text(exc)
+        if log is None:
+            logging.basicConfig()
+            logging.getLogger("server").error("Producer failed: %s", error)
+        else:
+            log.error("Producer failed: %s", error)
         return 1
 
 
@@ -118,11 +128,18 @@ def run():
 
     gapi = GoogleAPIService(settings.google_api_key)
     map_file = os.path.join(cwd, "views", "html", "map.png")
-    gapi.save_static_map(
-        settings.static_maps_id,
-        settings.location,
-        map_file,
-    )
+    try:
+        gapi.save_static_map(
+            settings.static_maps_id,
+            settings.location,
+            map_file,
+        )
+    except Exception as exc:
+        log.error(
+            "Static map update failed: %s",
+            exception_text(exc, (settings.google_api_key,)),
+        )
+        return 1
     map_url = "map.png"
 
     if settings.always_on:
@@ -194,9 +211,10 @@ def apply_current_conditions(daily_summary, realtime_svc):
     try:
         current_conditions = realtime_svc.get_current_conditions()
     except Exception as exc:
+        secrets = realtime_service_secrets(realtime_svc)
         log.warning(
             "Realtime conditions unavailable; using forecast conditions: %s",
-            exc,
+            exception_text(exc, secrets),
         )
         return daily_summary
 
@@ -261,6 +279,7 @@ def produce_artifacts(
     success_state="ready",
     next_refresh_seconds=None,
 ):
+    secrets = service_secrets(weather_svc, realtime_svc)
     cycle_started_at = utc_now()
     if status is not None:
         status.transition(
@@ -276,12 +295,15 @@ def produce_artifacts(
             weather_metric,
         )
     except Exception as exc:
-        log.exception("An error occurred whilst getting weather data: %s", exc)
+        log.error(
+            "An error occurred whilst getting weather data: %s",
+            exception_text(exc, secrets),
+        )
         if status is not None:
             status.transition(
                 "degraded",
                 failure_at=utc_now(),
-                error=sanitized_error("weather", exc),
+                error=sanitized_error("weather", exc, secrets=secrets),
             )
         return False
 
@@ -297,12 +319,15 @@ def produce_artifacts(
         store.write_snapshot(snapshot)
         store.write_ready(snapshot, profiles)
     except Exception as exc:
-        log.exception("An error occurred whilst creating artifacts: %s", exc)
+        log.error(
+            "An error occurred whilst creating artifacts: %s",
+            exception_text(exc, secrets),
+        )
         if status is not None:
             status.transition(
                 "degraded",
                 failure_at=utc_now(),
-                error=sanitized_error("render", exc),
+                error=sanitized_error("render", exc, secrets=secrets),
             )
         return False
 
@@ -347,6 +372,25 @@ def publish_weather_snapshot(weather_publisher, snapshot):
         return {"success": True, "error": None}
 
     return weather_publisher.publish_snapshot(snapshot)
+
+
+def realtime_service_secrets(service):
+    if service is None:
+        return ()
+    return tuple(
+        getattr(service, name, None)
+        for name in (
+            "client_secret",
+            "refresh_token",
+        )
+    )
+
+
+def service_secrets(weather_service, realtime_service):
+    return (
+        getattr(weather_service, "apikey", None),
+        *realtime_service_secrets(realtime_service),
+    )
 
 
 if __name__ == "__main__":

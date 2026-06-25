@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from build_version import read_version_manifest
+from redaction import redact_sensitive
 
 
 STATUS_SCHEMA_VERSION = "1.0"
@@ -135,10 +136,10 @@ class ServerStatus:
             self.store.write_status(self.payload)
 
 
-def sanitized_error(stage, exc, timestamp=None):
+def sanitized_error(stage, exc, timestamp=None, secrets=()):
     return {
         "stage": stage,
         "type": type(exc).__name__,
-        "message": str(exc),
+        "message": redact_sensitive(exc, secrets),
         "timestamp": isoformat(timestamp or utc_now()),
     }
