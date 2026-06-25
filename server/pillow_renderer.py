@@ -289,12 +289,25 @@ class CalendarCanvas:
         live=False,
     ):
         self._circle(center, 63, fill=0)
-        self._text(value, (center[0], center[1] - 10), 48, fill=255, anchor="mm")
-        self._text(unit, (center[0], center[1] + 31), 18, fill=255, anchor="mm")
+        text_offset = -10
+        self._text(
+            value,
+            (center[0], center[1] - 10 + text_offset),
+            48,
+            fill=255,
+            anchor="mm",
+        )
+        self._text(
+            unit,
+            (center[0], center[1] + 31 + text_offset),
+            18,
+            fill=255,
+            anchor="mm",
+        )
         if detail:
             self._text(
                 detail,
-                (center[0], center[1] + 52),
+                (center[0], center[1] + 52 + text_offset),
                 17,
                 bold=True,
                 fill=255,

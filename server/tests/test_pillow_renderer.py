@@ -240,6 +240,30 @@ class PillowCalendarRendererTests(unittest.TestCase):
                 bar = canvas.image.crop((left, top, right, bottom))
                 self.assertLess(bar.getextrema()[0], 250)
 
+    def test_wind_measurement_text_keeps_clear_bottom_margin(self):
+        from pillow_renderer import CalendarCanvas
+
+        center = (94, 499)
+        canvas = CalendarCanvas(825, 1200, supersample=1)
+        canvas._measurement_circle(
+            center,
+            "18",
+            "km/h",
+            detail="WSW",
+        )
+
+        white_pixels = [
+            (x, y)
+            for y in range(center[1] - 55, center[1] + 56)
+            for x in range(center[0] - 20, center[0] + 21)
+            if canvas.image.getpixel((x, y)) > 245
+        ]
+        self.assertTrue(white_pixels)
+        self.assertLessEqual(
+            max(y for _, y in white_pixels),
+            center[1] + 50,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
