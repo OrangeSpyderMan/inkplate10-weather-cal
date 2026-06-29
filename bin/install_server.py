@@ -212,6 +212,11 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
         answers = collect_answers(current_env, current_config, mode=mode)
+        # Docker and Podman bind mount this YAML read-only into containers
+        # running as an unprivileged user whose UID/GID may not match the
+        # installer user. Keep it UID/GID-agnostic for readability. It contains
+        # only operational settings and environment-variable placeholders;
+        # credentials and tokens are stored separately in .env with 0600.
         write_text_atomic(
             repo_root / SERVER_CONFIG,
             render_config(answers, mode=mode),
@@ -290,6 +295,8 @@ def ensure_compose_config_readable(
     if dry_run:
         print(f"Would set {config_path} mode to 0o644")
         return
+    # Keep existing Compose config readable by containers after update-only
+    # installs. Secrets are not stored in this YAML; .env remains 0600.
     os.chmod(config_path, 0o644)
 
 
