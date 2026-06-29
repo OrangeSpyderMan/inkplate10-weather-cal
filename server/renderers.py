@@ -1,44 +1,23 @@
-from views.calendar import CalendarPage
+from pillow_renderer import PillowCalendarRenderer
 
 
-class FirefoxCalendarRenderer:
-    name = "firefox"
-
-    def render(
-        self,
-        snapshot,
-        map_url,
-        output_path,
-        width,
-        height,
-        options=None,
-    ):
-        page = CalendarPage(
-            width,
-            height,
-            output_path=output_path,
-        )
-        page.template(
-            map_url=map_url,
-            daily_summary=snapshot.daily_summary,
-            hourly_forecasts=snapshot.hourly_forecasts,
-        )
-        page.save()
-
-
-RENDERERS = {
-    FirefoxCalendarRenderer.name: FirefoxCalendarRenderer,
-}
+RENDERERS = {"pillow": PillowCalendarRenderer}
 
 
 def build_renderer(name):
-    renderer = RENDERERS.get(name)
-    if renderer is not None:
-        return renderer()
-
-    raise ValueError(
-        "unsupported output renderer {!r}; supported renderers: {}".format(
-            name,
-            ", ".join(sorted(RENDERERS)),
+    if name == "firefox":
+        raise ValueError(
+            "output renderer 'firefox' was removed in v4; "
+            "use 'pillow' or remain on a v3.x release"
         )
-    )
+
+    renderer_class = RENDERERS.get(name)
+    if renderer_class is None:
+        raise ValueError(
+            "unsupported output renderer {!r}; supported renderers: {}".format(
+                name,
+                ", ".join(sorted(RENDERERS)),
+            )
+        )
+
+    return renderer_class()

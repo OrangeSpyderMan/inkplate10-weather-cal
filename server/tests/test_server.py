@@ -12,6 +12,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import server
 from artifacts import ArtifactStore
 from output_profiles import OutputProfile
+from weather.models import CurrentConditions, Temperature
 from weather.snapshot import WeatherSnapshot
 
 
@@ -71,13 +72,26 @@ class ProducerTests(unittest.TestCase):
         profiles = {
             "future": OutputProfile(
                 "future",
-                "pillow",
+                "unknown",
                 800,
                 600,
             )
         }
 
         with self.assertRaisesRegex(ValueError, "unsupported output renderer"):
+            server.build_output_renderers(profiles)
+
+    def test_rejects_removed_firefox_renderer(self):
+        profiles = {
+            "portrait": OutputProfile(
+                "portrait",
+                "firefox",
+                825,
+                1200,
+            )
+        }
+
+        with self.assertRaisesRegex(ValueError, "removed in v4"):
             server.build_output_renderers(profiles)
 
     def test_renders_each_profile_with_dimensions_and_options(self):
@@ -87,7 +101,7 @@ class ProducerTests(unittest.TestCase):
         profiles = {
             "portrait": OutputProfile(
                 "portrait",
-                "firefox",
+                "pillow",
                 825,
                 1200,
                 options={"layout": "classic"},
@@ -134,20 +148,21 @@ class ProducerTests(unittest.TestCase):
         )
 
     def test_realtime_failure_preserves_forecast_conditions(self):
-        daily_summary = {
-            "temperature": {
-                "unit": "\N{DEGREE SIGN}C",
-                "value": 10,
-                "min": 5,
-                "max": 15,
-            }
-        }
+        daily_summary = CurrentConditions(
+            temperature=Temperature(
+                unit="\N{DEGREE SIGN}C",
+                value=10,
+                minimum=5,
+                maximum=15,
+            )
+        )
         realtime = mock.Mock()
         realtime.get_current_conditions.side_effect = RuntimeError("offline")
 
-        server.apply_current_conditions(daily_summary, realtime)
+        result = server.apply_current_conditions(daily_summary, realtime)
 
-        self.assertEqual(daily_summary["temperature"]["value"], 10)
+        self.assertIs(result, daily_summary)
+        self.assertEqual(result.temperature.value, 10)
         server.log.warning.assert_called_once_with(
             "Realtime conditions unavailable; using forecast conditions: %s",
             mock.ANY,
@@ -175,13 +190,14 @@ class ProducerTests(unittest.TestCase):
             profiles = {
                 "inkplate10-portrait": OutputProfile(
                     "inkplate10-portrait",
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )
             }
             renderers = {"inkplate10-portrait": mock.Mock()}
             output = store.output_path("inkplate10-portrait", "calendar.png")
+            status = mock.Mock()
 
             def render(*args):
                 output.parent.mkdir(parents=True)
@@ -199,6 +215,9 @@ class ProducerTests(unittest.TestCase):
                 profiles,
                 renderers,
                 store,
+                status=status,
+                success_state="ready",
+                next_refresh_seconds=900,
             )
 
             self.assertTrue(success)
@@ -206,6 +225,21 @@ class ProducerTests(unittest.TestCase):
             self.assertTrue(store.ready_path.is_file())
             self.assertTrue(store.producer_cycle_complete(profiles))
             publish_snapshot.assert_called_once()
+            self.assertEqual(status.transition.call_count, 2)
+            self.assertEqual(
+                status.transition.call_args_list[0].args[0],
+                "refreshing",
+            )
+            self.assertEqual(
+                status.transition.call_args_list[1].args[0],
+                "ready",
+            )
+            completed_transition = status.transition.call_args_list[1]
+            self.assertEqual(
+                completed_transition.kwargs["next_refresh_at"]
+                - completed_transition.kwargs["success_at"],
+                dt.timedelta(seconds=900),
+            )
 
     @mock.patch("server.render_outputs", side_effect=RuntimeError("render"))
     @mock.patch("server.publish_weather_snapshot")
@@ -223,12 +257,13 @@ class ProducerTests(unittest.TestCase):
             profiles = {
                 "inkplate10-portrait": OutputProfile(
                     "inkplate10-portrait",
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )
             }
             renderers = {"inkplate10-portrait": mock.Mock()}
+            status = mock.Mock()
 
             success = server.produce_artifacts(
                 mock.Mock(),
@@ -240,9 +275,19 @@ class ProducerTests(unittest.TestCase):
                 profiles,
                 renderers,
                 store,
+                status=status,
             )
 
             self.assertFalse(success)
             self.assertFalse(store.snapshot_path.exists())
             self.assertFalse(store.ready_path.exists())
             publish_snapshot.assert_not_called()
+            self.assertEqual(status.transition.call_count, 2)
+            self.assertEqual(
+                status.transition.call_args_list[1].args[0],
+                "degraded",
+            )
+            self.assertEqual(
+                status.transition.call_args_list[1].kwargs["error"]["stage"],
+                "render",
+            )

@@ -3,6 +3,8 @@ import logging
 
 import paho.mqtt.client as mqtt
 
+from redaction import exception_text
+
 
 def create_mqtt_client(client_id):
     return mqtt.Client(
@@ -31,43 +33,71 @@ class MqttWeatherPublisher:
 
     def publish_snapshot(self, snapshot):
         payload = snapshot.to_payload()
-        messages = {
-            self.base_topic: payload,
-            f"{self.base_topic}/current": payload["current"],
-            f"{self.base_topic}/hourly": payload["hourly"],
-            f"{self.base_topic}/status": {
+        current = payload["current"]
+        messages = [
+            (self.base_topic, payload),
+            (f"{self.base_topic}/generated_at", payload["generated_at"]),
+            (f"{self.base_topic}/current", current),
+            (f"{self.base_topic}/hourly", payload["hourly"]),
+            (
+                f"{self.base_topic}/status",
+                {
                 "generated_at": payload["generated_at"],
                 "source": payload["source"],
                 "units": payload["units"],
             },
-        }
+            ),
+            (f"{self.base_topic}/current/rain", current.get("rain")),
+            (f"{self.base_topic}/current/wind", current.get("wind")),
+        ]
+        return self.publish_messages(messages, "weather snapshot")
 
+    def publish_server_status(self, status):
+        return self.publish_messages(
+            [(f"{self.base_topic}/server/status", status)],
+            "server status",
+        )
+
+    def publish_messages(self, messages, description="messages"):
         client = create_mqtt_client(self.client_id)
+        loop_started = False
         try:
             client.connect(self.broker, self.port, 60)
             client.loop_start()
+            loop_started = True
             self.log.info(
-                "Publishing weather snapshot to MQTT broker %s:%s under %s",
+                "Publishing MQTT %s to broker %s:%s under %s",
+                description,
                 self.broker,
                 self.port,
                 self.base_topic,
             )
-            for topic, value in messages.items():
+            for topic, value in messages:
+                encoded = (
+                    ""
+                    if value is None
+                    else json.dumps(value, default=str)
+                )
                 result = client.publish(
                     topic,
-                    json.dumps(value, default=str),
+                    encoded,
                     qos=self.qos,
                     retain=self.retain,
                 )
                 result.wait_for_publish(timeout=5)
                 if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                    self.log.error(
-                        "Failed to publish weather snapshot to MQTT topic %s: %s",
-                        topic,
-                        mqtt.error_string(result.rc),
+                    raise RuntimeError(
+                        "publish to {} failed: {}".format(
+                            topic,
+                            mqtt.error_string(result.rc),
+                        )
                     )
+            return {"success": True, "error": None}
         except Exception as exc:
-            self.log.error("Failed to publish weather snapshot to MQTT: %s", exc)
+            error = exception_text(exc)
+            self.log.error("Failed to publish MQTT messages: %s", error)
+            return {"success": False, "error": error}
         finally:
-            client.loop_stop()
-            client.disconnect()
+            if loop_started:
+                client.loop_stop()
+                client.disconnect()

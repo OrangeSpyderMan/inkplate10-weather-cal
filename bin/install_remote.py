@@ -15,7 +15,17 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SERVER_DIR = REPO_ROOT / "server"
+sys.path.insert(0, str(SERVER_DIR))
+
+from build_version import (  # noqa: E402
+    VERSION_MANIFEST_FILENAME,
+    generate_version_manifest,
+)
+
+
 REMOTE_ANSWERS = ".remote/answers.json"
+REMOTE_VERSION_MANIFEST = VERSION_MANIFEST_FILENAME
 SUPPORTED_MODES = ("proxmox", "systemd")
 
 
@@ -29,6 +39,7 @@ def main() -> int:
 
     print("Inkplate remote installer")
     print("--------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     print(f"Target: {args.target}")
     print(f"Mode: {args.mode}")
     print(f"Remote command: {shlex.join(installer_args)}")
@@ -342,6 +353,12 @@ def tracked_files() -> list[Path]:
 
 
 def create_bundle(answers: Path | None) -> Path:
+    try:
+        generate_version_manifest(REPO_ROOT)
+    except ValueError as exc:
+        raise SystemExit(
+            f"ERROR: unable to generate {VERSION_MANIFEST_FILENAME}: {exc}"
+        ) from None
     temporary = tempfile.NamedTemporaryFile(
         prefix="inkplate-remote-",
         suffix=".tar.gz",
@@ -357,6 +374,11 @@ def create_bundle(answers: Path | None) -> Path:
                     arcname=relative.as_posix(),
                     recursive=False,
                 )
+            archive.add(
+                REPO_ROOT / VERSION_MANIFEST_FILENAME,
+                arcname=REMOTE_VERSION_MANIFEST,
+                recursive=False,
+            )
             if answers is not None:
                 data = answers.read_bytes()
                 info = tarfile.TarInfo(REMOTE_ANSWERS)
@@ -425,5 +447,13 @@ def cleanup_remote(ssh: list[str], remote_dir: str) -> None:
         )
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nRemote installer cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

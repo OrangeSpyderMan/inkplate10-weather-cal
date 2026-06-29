@@ -1,8 +1,10 @@
 import importlib.util
+import json
 import pathlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -10,6 +12,13 @@ SCRIPT_PATH = REPO_ROOT / "bin" / "generate_firmware_version.py"
 SPEC = importlib.util.spec_from_file_location("generate_firmware_version", SCRIPT_PATH)
 generate_firmware_version = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(generate_firmware_version)
+BUILD_VERSION_PATH = REPO_ROOT / "server" / "build_version.py"
+BUILD_VERSION_SPEC = importlib.util.spec_from_file_location(
+    "test_build_version",
+    BUILD_VERSION_PATH,
+)
+build_version = importlib.util.module_from_spec(BUILD_VERSION_SPEC)
+BUILD_VERSION_SPEC.loader.exec_module(build_version)
 
 
 def git(repo, *args):
@@ -45,7 +54,7 @@ class FirmwareVersionTests(unittest.TestCase):
             git(repo, "tag", "-a", "v1.2.3", "-m", "v1.2.3")
 
             self.assertEqual(
-                generate_firmware_version.detected_version(cwd=repo),
+                build_version.detected_version(cwd=repo),
                 "v1.2.3",
             )
 
@@ -65,6 +74,72 @@ class FirmwareVersionTests(unittest.TestCase):
             short_commit = git(repo, "rev-parse", "--short", "HEAD")
 
             self.assertEqual(
-                generate_firmware_version.detected_version(cwd=repo),
+                build_version.detected_version(cwd=repo),
                 f"v1.2.3+g{short_commit}",
+            )
+
+    def test_manifest_is_shared_with_firmware_header(self):
+        temporary_dir, repo = self.create_repo()
+        with temporary_dir:
+            self.commit(repo, "released")
+            git(repo, "tag", "-a", "v1.2.3", "-m", "v1.2.3")
+            self.commit(repo, "next")
+            output = repo / "firmware_version.h"
+
+            manifest = build_version.generate_version_manifest(
+                repo,
+                build_date="2026-06-19T12:00:00Z",
+            )
+            content = (
+                "#ifndef FIRMWARE_VERSION_H\n"
+                "#define FIRMWARE_VERSION_H\n\n"
+                f'#define FIRMWARE_VERSION "{manifest["version"]}"\n\n'
+                "#endif\n"
+            )
+            output.write_text(content, encoding="utf-8")
+
+            persisted = json.loads(
+                (repo / ".version.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(persisted, manifest)
+            self.assertIn(manifest["version"], output.read_text())
+
+    @mock.patch.object(build_version.subprocess, "run")
+    def test_git_explicitly_trusts_only_the_requested_checkout(self, run):
+        run.return_value = mock.Mock(returncode=0, stdout="abc1234\n")
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            checkout = pathlib.Path(temporary_dir).resolve()
+
+            result = build_version.git(
+                "rev-parse",
+                "--short",
+                "HEAD",
+                cwd=checkout,
+            )
+
+        self.assertEqual(result, "abc1234")
+        self.assertEqual(
+            run.call_args.args[0][:3],
+            ["git", "-c", f"safe.directory={checkout}"],
+        )
+        self.assertEqual(run.call_args.kwargs["cwd"], checkout)
+
+    @mock.patch.object(build_version, "git", return_value="")
+    def test_failed_git_lookup_does_not_overwrite_manifest(self, git):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = pathlib.Path(temporary_dir)
+            manifest_path = root / ".version.json"
+            original = '{"version": "v3.2.0+gabc1234"}\n'
+            manifest_path.write_text(original, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "cannot resolve the Git revision",
+            ):
+                build_version.generate_version_manifest(root)
+
+            self.assertEqual(
+                manifest_path.read_text(encoding="utf-8"),
+                original,
             )

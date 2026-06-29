@@ -99,3 +99,50 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("--base next", publish_workflow)
         self.assertIn("--head \"$branch\"", publish_workflow)
         self.assertIn("Merge this PR using a merge commit", prepare_workflow)
+
+    def test_container_workflow_embeds_shared_version_manifest(self):
+        publish_workflow = (
+            REPO_ROOT / ".github/workflows/container-publish.yml"
+        ).read_text()
+        ci_workflow = (
+            REPO_ROOT / ".github/workflows/docker-image.yml"
+        ).read_text()
+        dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+
+        for workflow in (publish_workflow, ci_workflow):
+            self.assertIn("fetch-depth: 0", workflow)
+            self.assertIn("bin/generate_version_manifest.py", workflow)
+        self.assertIn("COPY --chown=${USERNAME}:${USERNAME} ./.version.json", dockerfile)
+        self.assertNotIn("ENV INKPLATE_VERSION=", dockerfile)
+
+    def test_container_workflows_build_only_pillow_image(self):
+        publish_workflow = (
+            REPO_ROOT / ".github/workflows/container-publish.yml"
+        ).read_text()
+        ci_workflow = (
+            REPO_ROOT / ".github/workflows/docker-image.yml"
+        ).read_text()
+        dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+
+        self.assertNotIn('suffix: "-pillow"', publish_workflow)
+        self.assertNotIn("matrix.target", publish_workflow)
+        self.assertNotIn("matrix.target", ci_workflow)
+        self.assertNotIn(" AS full", dockerfile)
+        self.assertNotIn(" AS pillow", dockerfile)
+        self.assertIn("PIP_ROOT_USER_ACTION=ignore", dockerfile)
+        self.assertIn(
+            'org.opencontainers.image.variant="pillow"',
+            dockerfile,
+        )
+        pillow_requirements = (
+            REPO_ROOT / "server/requirements-pillow.txt"
+        ).read_text()
+        common_requirements = (
+            REPO_ROOT / "server/requirements-common.txt"
+        ).read_text()
+        self.assertIn("rough==", pillow_requirements)
+        self.assertIn("Pillow==", common_requirements)
+        self.assertNotIn("selenium==", common_requirements)
+        self.assertFalse(
+            (REPO_ROOT / "server/requirements-firefox.txt").exists()
+        )

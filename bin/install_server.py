@@ -10,11 +10,12 @@ from __future__ import annotations
 import argparse
 import filecmp
 import getpass
+import ipaddress
 import json
 import os
-import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,11 @@ from output_profiles import (  # noqa: E402
     DEFAULT_RENDERER,
     DEFAULT_WIDTH as DEFAULT_IMAGE_WIDTH,
 )
+from build_version import (  # noqa: E402
+    VERSION_MANIFEST_FILENAME,
+    generate_version_manifest,
+    read_version_manifest,
+)
 from weather.providers import FORECAST_PROVIDERS  # noqa: E402
 
 
@@ -48,7 +54,9 @@ DIAGNOSTICS_SERVICE_FILE = Path(
 )
 DOCKER_ENV_FILE = Path(".env")
 SERVER_CONFIG = Path("server/config/config.yaml")
+PODMAN_COMPOSE_OVERRIDE = Path("docker-compose.podman.yml")
 DEFAULT_PORT = 8080
+DEFAULT_HOST = "0.0.0.0"
 DEFAULT_REFRESH_MINUTES = 180
 DEFAULT_FORECASTS = 6
 DEFAULT_FORECAST_SLICE_HOURS = 3
@@ -94,9 +102,9 @@ def main() -> int:
     repo_root = Path.cwd()
     ensure_repo_root(repo_root)
     configure_answers(args.answers, args.non_interactive)
-
     print("Inkplate Weather Calendar server installer")
     print("------------------------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     if args.dry_run:
         print("Dry run: no files will be written and no commands will be run.")
     print()
@@ -160,6 +168,7 @@ def ensure_repo_root(repo_root: Path) -> None:
         repo_root / "server" / "web_server.py",
         repo_root / "server" / "requirements.txt",
         repo_root / "docker-compose.yml",
+        repo_root / PODMAN_COMPOSE_OVERRIDE,
         repo_root / "bin" / "inkplate.service",
         repo_root / "bin" / "inkplate-producer.service",
         repo_root / "bin" / "inkplate-diagnostics.service",
@@ -174,6 +183,15 @@ def ensure_repo_root(repo_root: Path) -> None:
 
 def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
     label = "Docker" if mode == "docker" else "Podman"
+    compose_command = check_compose_runtime(mode, dry_run)
+    if mode == "podman":
+        compose_command = [
+            *compose_command,
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            str(PODMAN_COMPOSE_OVERRIDE),
+        ]
     existing = [
         path
         for path in (
@@ -187,33 +205,92 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
         print("No changes made.")
         return
 
+    manifest = prepare_version_manifest(repo_root, dry_run=dry_run)
+    answers = None
+    current_config = read_simple_yaml(existing_config_path(repo_root))
+    require_renderer_migration(current_config, action)
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(repo_root / DOCKER_ENV_FILE)
-        current_config = read_simple_yaml(existing_config_path(repo_root))
         answers = collect_answers(current_env, current_config, mode=mode)
         write_text_atomic(
             repo_root / SERVER_CONFIG,
             render_config(answers, mode=mode),
             dry_run=dry_run,
-            mode=0o600,
+            mode=0o644,
         )
         write_text_atomic(
             repo_root / DOCKER_ENV_FILE,
-            render_env(answers, include_optional=answers["netatmo_enabled"]),
+            render_env(
+                answers,
+                include_optional=answers["netatmo_enabled"],
+                compose=True,
+                build_metadata=manifest,
+            ),
             dry_run=dry_run,
             mode=0o600,
         )
+    elif action == "update":
+        update_compose_build_env(
+            repo_root / DOCKER_ENV_FILE,
+            build_metadata=manifest,
+            dry_run=dry_run,
+        )
 
-    compose_command = check_compose_runtime(mode, dry_run)
-    if prompt_yes_no(
+    ensure_compose_config_readable(repo_root, dry_run=dry_run)
+
+    start_now = prompt_yes_no(
         f"Start or update the {label} containers now?",
         default=True,
         key="start_now",
-    ):
-        run([*compose_command, "up", "--build", "-d"], dry_run=dry_run)
+    )
+    if start_now:
+        if answers is not None:
+            port = int(answers["port"])
+        else:
+            config = read_simple_yaml(existing_config_path(repo_root))
+            port = int(config.get("server.port", DEFAULT_PORT))
+        check_compose_host_port(
+            compose_command,
+            port,
+            dry_run=dry_run,
+        )
+        try:
+            run(
+                [*compose_command, "build", "inkplate"],
+                dry_run=dry_run,
+            )
+            run(
+                [*compose_command, "up", "--no-build", "-d"],
+                dry_run=dry_run,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise SystemExit(
+                f"ERROR: {label} Compose failed with exit status "
+                f"{exc.returncode}. Review the errors above."
+            ) from None
         print(f"Logs: {' '.join(compose_command)} logs -f")
     else:
-        print(f"Start later with: {' '.join(compose_command)} up --build -d")
+        print(
+            f"Build later with: {' '.join(compose_command)} build inkplate"
+        )
+        print(
+            f"Start later with: {' '.join(compose_command)} "
+            "up --no-build -d"
+        )
+
+
+def ensure_compose_config_readable(
+    repo_root: Path,
+    *,
+    dry_run: bool,
+) -> None:
+    config_path = repo_root / SERVER_CONFIG
+    if not config_path.exists():
+        return
+    if dry_run:
+        print(f"Would set {config_path} mode to 0o644")
+        return
+    os.chmod(config_path, 0o644)
 
 
 def install_systemd(repo_root: Path, dry_run: bool) -> None:
@@ -234,6 +311,8 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         return
 
     validate_native_platform(dry_run)
+    current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
+    require_renderer_migration(current_config, action)
 
     if action in ("fresh", "update", "update_reconfigure"):
         install_native_prerequisites(dry_run)
@@ -241,12 +320,15 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
         copy_repo(repo_root, INSTALL_DIR, dry_run)
         ensure_venv(dry_run)
         refresh_dependencies(dry_run)
-        install_geckodriver(repo_root, dry_run)
 
     if action in ("fresh", "reconfigure", "update_reconfigure"):
         current_env = read_env_file(NATIVE_ENV_FILE)
         current_config = read_simple_yaml(existing_config_path(INSTALL_DIR))
-        answers = collect_answers(current_env, current_config, mode="systemd")
+        answers = collect_answers(
+            current_env,
+            current_config,
+            mode="systemd",
+        )
         write_text_atomic(
             INSTALL_DIR / SERVER_CONFIG,
             render_config(answers, mode="systemd"),
@@ -361,12 +443,22 @@ def choose_existing_action(label: str, existing: list[Path]) -> str:
     )
 
 
-def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> dict[str, object]:
+def collect_answers(
+    env: dict[str, str],
+    config: dict[str, str],
+    mode: str,
+) -> dict[str, object]:
     print()
     print("Configuration")
     print("-------------")
 
     answers: dict[str, object] = {}
+    answers["renderer"] = DEFAULT_RENDERER
+    answers["host"] = prompt_ip_address(
+        "Server bind IP",
+        default=config.get("server.host", DEFAULT_HOST),
+        key="host",
+    )
     answers["port"] = prompt_int(
         "Server port",
         default=int(config.get("server.port", DEFAULT_PORT)),
@@ -472,55 +564,100 @@ def collect_answers(env: dict[str, str], config: dict[str, str], mode: str) -> d
         key="mqtt_weather_enabled",
     )
     default_mqtt_broker = container_host_alias(mode)
-    answers["mqtt_weather_broker"] = prompt_text(
-        "MQTT weather publisher broker",
-        default=config.get("mqtt.weather.broker", default_mqtt_broker),
-        required=False,
-        key="mqtt_weather_broker",
-    )
-    answers["mqtt_weather_port"] = prompt_int(
-        "MQTT weather publisher port",
-        default=int(config.get("mqtt.weather.port", 1883)),
-        minimum=1,
-        maximum=65535,
-        key="mqtt_weather_port",
-    )
-    answers["mqtt_weather_base_topic"] = prompt_text(
-        "MQTT weather base topic",
-        default=config.get(
+    if answers["mqtt_weather_enabled"]:
+        answers["mqtt_weather_broker"] = prompt_text(
+            "MQTT weather publisher broker",
+            default=config.get("mqtt.weather.broker", default_mqtt_broker),
+            required=False,
+            key="mqtt_weather_broker",
+        )
+        answers["mqtt_weather_port"] = prompt_int(
+            "MQTT weather publisher port",
+            default=int(config.get("mqtt.weather.port", 1883)),
+            minimum=1,
+            maximum=65535,
+            key="mqtt_weather_port",
+        )
+        answers["mqtt_weather_base_topic"] = prompt_text(
+            "MQTT weather base topic",
+            default=config.get(
+                "mqtt.weather.base_topic", "inkplate/weather-calendar"
+            ),
+            required=False,
+            key="mqtt_weather_base_topic",
+        )
+    else:
+        answers["mqtt_weather_broker"] = config.get(
+            "mqtt.weather.broker", default_mqtt_broker
+        )
+        answers["mqtt_weather_port"] = int(
+            config.get("mqtt.weather.port", 1883)
+        )
+        answers["mqtt_weather_base_topic"] = config.get(
             "mqtt.weather.base_topic", "inkplate/weather-calendar"
-        ),
-        required=False,
-        key="mqtt_weather_base_topic",
-    )
+        )
     answers["mqtt_diagnostics_enabled"] = prompt_yes_no(
         "Listen for Inkplate diagnostics on MQTT?",
         default=parse_bool(config.get("mqtt.diagnostics.enabled", "false")),
         key="mqtt_diagnostics_enabled",
     )
-    answers["mqtt_diagnostics_broker"] = prompt_text(
-        "MQTT diagnostic listener broker",
-        default=config.get("mqtt.diagnostics.broker", default_mqtt_broker),
-        required=False,
-        key="mqtt_diagnostics_broker",
-    )
-    answers["mqtt_diagnostics_port"] = prompt_int(
-        "MQTT diagnostic listener port",
-        default=int(config.get("mqtt.diagnostics.port", 1883)),
-        minimum=1,
-        maximum=65535,
-        key="mqtt_diagnostics_port",
-    )
-    answers["mqtt_diagnostics_topic"] = prompt_text(
-        "MQTT diagnostic topic",
-        default=config.get(
+    if answers["mqtt_diagnostics_enabled"]:
+        answers["mqtt_diagnostics_broker"] = prompt_text(
+            "MQTT diagnostic listener broker",
+            default=config.get("mqtt.diagnostics.broker", default_mqtt_broker),
+            required=False,
+            key="mqtt_diagnostics_broker",
+        )
+        answers["mqtt_diagnostics_port"] = prompt_int(
+            "MQTT diagnostic listener port",
+            default=int(config.get("mqtt.diagnostics.port", 1883)),
+            minimum=1,
+            maximum=65535,
+            key="mqtt_diagnostics_port",
+        )
+        answers["mqtt_diagnostics_topic"] = prompt_text(
+            "MQTT diagnostic topic",
+            default=config.get(
+                "mqtt.diagnostics.topic",
+                "inkplate/weather-calendar/diagnostics",
+            ),
+            required=False,
+            key="mqtt_diagnostics_topic",
+        )
+    else:
+        answers["mqtt_diagnostics_broker"] = config.get(
+            "mqtt.diagnostics.broker", default_mqtt_broker
+        )
+        answers["mqtt_diagnostics_port"] = int(
+            config.get("mqtt.diagnostics.port", 1883)
+        )
+        answers["mqtt_diagnostics_topic"] = config.get(
             "mqtt.diagnostics.topic",
             "inkplate/weather-calendar/diagnostics",
-        ),
-        required=False,
-        key="mqtt_diagnostics_topic",
-    )
+        )
     return answers
+
+
+def require_renderer_migration(
+    config: dict[str, str],
+    action: str,
+) -> None:
+    configured = {
+        value
+        for key, value in config.items()
+        if key.startswith("outputs.profiles.")
+        and key.endswith(".renderer")
+    }
+    if "firefox" in configured and action not in (
+        "fresh",
+        "reconfigure",
+        "update_reconfigure",
+    ):
+        raise SystemExit(
+            "ERROR: Firefox rendering was removed in v4. "
+            "Run the installer again and choose 'update_reconfigure' "
+            "to migrate the output profiles to Pillow, or remain on v3.x."
+        )
 
 
 def weather_provider_choices() -> list[tuple[str, str]]:
@@ -564,6 +701,7 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         "---",
         "server:",
         "  enabled: true",
+        f"  host: {json.dumps(str(answers.get('host', DEFAULT_HOST)))}",
         f"  port: {answers['port']}",
         f"  alwayson: {alwayson}",
         f"  refreshminutes: {answers['refresh_minutes']}",
@@ -623,12 +761,32 @@ def render_config(answers: dict[str, object], mode: str) -> str:
     return "\n".join(lines)
 
 
-def render_env(answers: dict[str, object], include_optional: bool) -> str:
+def render_env(
+    answers: dict[str, object],
+    include_optional: bool,
+    compose: bool = False,
+    build_metadata: dict | None = None,
+) -> str:
     values = {
         "WEATHER_API_KEY": str(answers["weather_api_key"]),
         "GOOGLE_API_KEY": str(answers["google_api_key"]),
         "GOOGLE_STATICMAPS_MAPID": str(answers["google_staticmaps_mapid"]),
     }
+    if compose:
+        build_metadata = build_metadata or {}
+        values["INKPLATE_SERVER_PORT"] = str(
+            answers.get("port", DEFAULT_PORT)
+        )
+        values["INKPLATE_IMAGE"] = "inkplate10-weather-cal:local"
+        values["INKPLATE_BUILD_DATE"] = str(
+            build_metadata.get("build_date", "unknown")
+        )
+        values["INKPLATE_VCS_REF"] = str(
+            build_metadata.get("revision", "unknown")
+        )
+        values["INKPLATE_VERSION"] = str(
+            build_metadata.get("version", "local")
+        )
     if include_optional:
         values.update(
             {
@@ -649,6 +807,55 @@ def render_env(answers: dict[str, object], include_optional: bool) -> str:
     return "\n".join(lines)
 
 
+def update_compose_build_env(
+    path: Path,
+    *,
+    build_metadata: dict | None = None,
+    dry_run: bool,
+) -> None:
+    build_metadata = build_metadata or {}
+    values = {
+        "INKPLATE_IMAGE": "inkplate10-weather-cal:local",
+        "INKPLATE_BUILD_DATE": str(
+            build_metadata.get("build_date", "unknown")
+        ),
+        "INKPLATE_VCS_REF": str(
+            build_metadata.get("revision", "unknown")
+        ),
+        "INKPLATE_VERSION": str(
+            build_metadata.get("version", "local")
+        ),
+    }
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+    found: set[str] = set()
+    updated = []
+    for line in lines:
+        if "=" not in line or line.lstrip().startswith("#"):
+            updated.append(line)
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key == "INKPLATE_BUILD_TARGET":
+            continue
+        if key in values:
+            updated.append(f"{key}={values[key]}")
+            found.add(key)
+        else:
+            updated.append(line)
+    if updated and updated[-1]:
+        updated.append("")
+    for key, value in values.items():
+        if key not in found:
+            updated.append(f"{key}={value}")
+    updated.append("")
+    write_text_atomic(
+        path,
+        "\n".join(updated),
+        dry_run=dry_run,
+        mode=0o600,
+    )
+
+
 def container_host_alias(mode: str) -> str:
     if mode == "docker":
         return "host.docker.internal"
@@ -662,6 +869,49 @@ def check_compose_runtime(mode: str, dry_run: bool) -> list[str]:
         check_docker_compose(dry_run)
         return ["docker", "compose"]
     return check_podman_compose(dry_run)
+
+
+def check_compose_host_port(
+    compose_command: list[str],
+    port: int,
+    *,
+    dry_run: bool,
+) -> None:
+    if dry_run:
+        print(f"Would check: host TCP port {port} is available")
+        return
+    if compose_service_is_running(compose_command, "inkplate"):
+        return
+    if tcp_port_is_available(port):
+        return
+    raise SystemExit(
+        f"ERROR: host TCP port {port} is already in use. "
+        "Stop the existing listener or rerun the installer and choose a "
+        "different Server port. Inspect it with: "
+        f"ss -ltnp 'sport = :{port}'"
+    )
+
+
+def compose_service_is_running(
+    compose_command: list[str],
+    service: str,
+) -> bool:
+    result = subprocess.run(
+        [*compose_command, "ps", "-q", service],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def tcp_port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind(("0.0.0.0", port))
+        except OSError:
+            return False
+    return True
 
 
 def check_docker_compose(dry_run: bool) -> None:
@@ -758,9 +1008,6 @@ def validate_native_platform(dry_run: bool) -> None:
         raise SystemExit("ERROR: apt not found; native install supports Debian/Ubuntu hosts.")
     if not Path("/run/systemd/system").exists() and not dry_run:
         raise SystemExit("ERROR: systemd is not available on this host.")
-    arch = normalized_arch()
-    if arch not in ("amd64", "arm64"):
-        raise SystemExit(f"ERROR: unsupported architecture for Geckodriver: {platform.machine()}")
     print("Native install target: Debian/Ubuntu with systemd.")
     configure_privilege_escalation(dry_run)
 
@@ -808,28 +1055,14 @@ def configure_privilege_escalation(dry_run: bool) -> None:
 
 
 def install_native_prerequisites(dry_run: bool) -> None:
-    firefox_package = choose_firefox_package(dry_run)
     packages = [
         "ca-certificates",
-        "curl",
-        firefox_package,
         "python3",
         "python3-pip",
         "python3-venv",
     ]
     run(["apt-get", "update"], sudo=True, dry_run=dry_run)
     run(["apt-get", "install", "-y", "--no-install-recommends", *packages], sudo=True, dry_run=dry_run)
-
-
-def choose_firefox_package(dry_run: bool) -> str:
-    if dry_run:
-        return "firefox-esr"
-    result = subprocess.run(
-        ["apt-cache", "show", "firefox-esr"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return "firefox-esr" if result.returncode == 0 else "firefox"
 
 
 def ensure_system_user(dry_run: bool) -> None:
@@ -845,6 +1078,7 @@ def ensure_system_user(dry_run: bool) -> None:
 
 
 def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
+    prepare_version_manifest(repo_root, dry_run=dry_run)
     if repo_root.resolve() == install_dir.resolve():
         print(f"Repository is already at {install_dir}; skipping copy.")
         return
@@ -863,8 +1097,36 @@ def copy_repo(repo_root: Path, install_dir: Path, dry_run: bool) -> None:
     run(["chown", "-R", f"{APP_USER}:{APP_GROUP}", str(install_dir)], sudo=True)
 
 
+def prepare_version_manifest(repo_root: Path, dry_run: bool) -> dict:
+    existing = read_version_manifest(repo_root)
+    has_git_checkout = (repo_root / ".git").exists()
+    if dry_run:
+        version = existing.get("version", "<derived from checkout>")
+        print(f"Would record application version: {version}")
+        return existing
+    if not has_git_checkout and not existing:
+        raise SystemExit(
+            "ERROR: application version metadata is unavailable. Run the "
+            "installer from a Git checkout or a deployment bundle containing "
+            f"{VERSION_MANIFEST_FILENAME}."
+        )
+    try:
+        manifest = (
+            generate_version_manifest(repo_root)
+            if has_git_checkout
+            else existing
+        )
+    except ValueError as exc:
+        raise SystemExit(
+            f"ERROR: unable to generate {VERSION_MANIFEST_FILENAME}: {exc}"
+        ) from None
+    print(f"Recorded application version: {manifest['version']}")
+    return manifest
+
+
 def verify_installed_runtime(repo_root: Path, install_dir: Path) -> None:
     runtime_files = (
+        Path(VERSION_MANIFEST_FILENAME),
         Path("server/server.py"),
         Path("server/producer_config.py"),
         Path("bin/install_server.py"),
@@ -900,7 +1162,26 @@ def ensure_venv(dry_run: bool) -> None:
 
 def refresh_dependencies(dry_run: bool) -> None:
     run(
-        ["bin/refresh_deps", "--venv", str(VENV_DIR), "--requirements", str(INSTALL_DIR / "server" / "requirements.txt")],
+        [
+            "bin/refresh_deps",
+            "--venv",
+            str(VENV_DIR),
+            "--requirements",
+            str(INSTALL_DIR / "server" / "requirements.txt"),
+        ],
+        sudo=True,
+        dry_run=dry_run,
+    )
+    run(
+        [
+            str(VENV_DIR / "bin" / "python"),
+            "-m",
+            "pip",
+            "uninstall",
+            "-y",
+            "airium",
+            "selenium",
+        ],
         sudo=True,
         dry_run=dry_run,
     )
@@ -956,33 +1237,6 @@ def install_copy_ignore(repo_root: Path):
         return ignored
 
     return ignore
-
-
-def install_geckodriver(repo_root: Path, dry_run: bool) -> None:
-    version = dockerfile_geckodriver_version(repo_root / "Dockerfile")
-    gecko_arch = {"amd64": "linux64", "arm64": "linux-aarch64"}[normalized_arch()]
-    url = f"https://github.com/mozilla/geckodriver/releases/download/{version}/geckodriver-{version}-{gecko_arch}.tar.gz"
-    archive = Path("/tmp") / f"geckodriver-{version}-{gecko_arch}.tar.gz"
-    run(["curl", "-fsSL", "-o", str(archive), url], sudo=True, dry_run=dry_run)
-    run(["tar", "xzf", str(archive), "-C", "/usr/local/bin"], sudo=True, dry_run=dry_run)
-    run(["chmod", "0755", "/usr/local/bin/geckodriver"], sudo=True, dry_run=dry_run)
-
-
-def dockerfile_geckodriver_version(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r"^ARG\s+GECKOVERSION=(\S+)", text, re.MULTILINE)
-    if not match:
-        raise SystemExit("ERROR: could not find GECKOVERSION in Dockerfile.")
-    return match.group(1)
-
-
-def normalized_arch() -> str:
-    machine = platform.machine().lower()
-    if machine in ("x86_64", "amd64"):
-        return "amd64"
-    if machine in ("aarch64", "arm64"):
-        return "arm64"
-    return machine
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -1169,6 +1423,22 @@ def prompt_text(label: str, default: str = "", required: bool = True, key: str |
         print("This value is required.")
 
 
+def prompt_ip_address(label: str, default: str, key: str) -> str:
+    while True:
+        value = prompt_text(label, default=default, key=key)
+        try:
+            ipaddress.ip_address(value)
+        except ValueError:
+            if key in INSTALLER_ANSWERS or NON_INTERACTIVE:
+                raise SystemExit(
+                    f"ERROR: {key} must be an IPv4 or IPv6 address"
+                )
+            print("Please enter an IPv4 or IPv6 address.")
+            default = value
+            continue
+        return value
+
+
 def prompt_secret(label: str, default: str = "", required: bool = True, key: str | None = None) -> str:
     if key in INSTALLER_ANSWERS or NON_INTERACTIVE:
         value = require_non_interactive_value(key, default, required)
@@ -1252,5 +1522,13 @@ def unquote_env_value(value: str) -> str:
     return value
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nInstaller cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

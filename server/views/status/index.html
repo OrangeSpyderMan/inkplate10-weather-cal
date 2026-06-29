@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/status.css">
+    <title>Weather Calendar Status</title>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Weather Calendar</p>
+        <h1>Server status</h1>
+      </div>
+      <div id="state" class="state" data-state="unavailable">Unavailable</div>
+    </header>
+
+    <main>
+      <section class="summary" aria-label="Server summary">
+        <div><span>Version</span><strong id="version">-</strong></div>
+        <div><span>Mode</span><strong id="mode">-</strong></div>
+        <div><span>Displayed time zone</span><strong id="time-zone">-</strong></div>
+        <div><span>Forecast</span><strong id="forecast-provider">-</strong></div>
+        <div><span>Realtime</span><strong id="realtime-provider">-</strong></div>
+      </section>
+
+      <section>
+        <h2>Producer</h2>
+        <dl>
+          <div><dt>Cycle started</dt><dd id="cycle-started">-</dd></div>
+          <div><dt>Last success</dt><dd id="last-success">-</dd></div>
+          <div><dt>Last failure</dt><dd id="last-failure">-</dd></div>
+          <div><dt>Next refresh</dt><dd id="next-refresh">-</dd></div>
+          <div><dt>Weather generated</dt><dd id="weather-generated">-</dd></div>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Readiness</h2>
+        <dl>
+          <div><dt>Snapshot</dt><dd id="snapshot-ready">-</dd></div>
+          <div><dt>Cycle complete</dt><dd id="cycle-complete">-</dd></div>
+        </dl>
+        <div id="outputs" class="outputs"></div>
+      </section>
+
+      <section>
+        <h2>MQTT</h2>
+        <dl>
+          <div><dt>Enabled</dt><dd id="mqtt-enabled">-</dd></div>
+          <div><dt>Last publish</dt><dd id="mqtt-publish">-</dd></div>
+          <div><dt>Result</dt><dd id="mqtt-result">-</dd></div>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Inkplate client diagnostics</h2>
+        <p class="section-note">
+          Recently received from the configured Inkplate diagnostics MQTT topic.
+        </p>
+        <div id="inkplate-diagnostics" class="diagnostics">
+          <p>No client diagnostics received</p>
+        </div>
+      </section>
+
+      <section id="error-panel" hidden>
+        <h2>Latest error</h2>
+        <p id="error-message"></p>
+      </section>
+    </main>
+
+    <footer>
+      <span id="updated">Waiting for status</span>
+      <span id="connection"></span>
+    </footer>
+    <script src="/status.js" defer></script>
+  </body>
+</html>

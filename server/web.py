@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,11 +14,13 @@ from output_profiles import load_exported_output_profiles
 SERVER_DIR = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = SERVER_DIR / "data"
 DEFAULT_PWA_DIR = SERVER_DIR / "views" / "pwa"
+DEFAULT_STATUS_DIR = SERVER_DIR / "views" / "status"
 
 
 def create_app(
     data_dir=None,
     pwa_dir=None,
+    status_dir=None,
     legacy_calendar_served=None,
     output_profiles=None,
     default_output_profile=None,
@@ -32,6 +35,7 @@ def create_app(
         data_dir or os.environ.get("INKPLATE_DATA_DIR", DEFAULT_DATA_DIR)
     )
     app.config["PWA_DIR"] = Path(pwa_dir or DEFAULT_PWA_DIR)
+    app.config["STATUS_DIR"] = Path(status_dir or DEFAULT_STATUS_DIR)
     app.config["LEGACY_CALENDAR_SERVED"] = legacy_calendar_served
     app.config["OUTPUT_PROFILES"] = output_profiles
     app.config["DEFAULT_OUTPUT_PROFILE"] = default_output_profile
@@ -90,6 +94,47 @@ def register_routes(app):
             weak=True,
         )
         return response.make_conditional(request)
+
+    @app.get("/api/v1/status")
+    def server_status():
+        store = _store(app)
+        try:
+            payload = store.read_status()
+        except (OSError, TypeError, json.JSONDecodeError):
+            return jsonify(
+                {
+                    "schema_version": "1.0",
+                    "status": "unavailable",
+                    "error": "server status is not available",
+                }
+            ), 503
+
+        payload = copy.deepcopy(payload)
+        output_status = store.output_status(_profiles(app))
+        snapshot_exists = store.snapshot_path.is_file()
+        payload["readiness"] = {
+            "snapshot": snapshot_exists,
+            "outputs": output_status,
+            "producer_cycle_complete": (
+                snapshot_exists and all(output_status.values())
+            ),
+        }
+        try:
+            diagnostic_artifact = store.read_diagnostic()
+        except (OSError, TypeError, json.JSONDecodeError):
+            diagnostic_artifact = {}
+        diagnostics = diagnostic_artifact.get("diagnostics", [])
+        if not isinstance(diagnostics, list):
+            diagnostics = []
+        diagnostics = [
+            diagnostic
+            for diagnostic in diagnostics
+            if isinstance(diagnostic, dict)
+        ]
+        payload["inkplate"] = {
+            "recent_diagnostics": diagnostics,
+        }
+        return jsonify(payload)
 
     @app.get("/outputs/<profile>/<filename>")
     def output(profile, filename):
@@ -192,6 +237,19 @@ def register_routes(app):
     @app.get("/app/calendar.png")
     def legacy_pwa_calendar_output():
         return _send_default_output(app, as_attachment=False)
+
+    @app.get("/status")
+    @app.get("/status/")
+    def status_page():
+        return send_from_directory(app.config["STATUS_DIR"], "index.html")
+
+    @app.get("/status.css")
+    def status_css():
+        return send_from_directory(app.config["STATUS_DIR"], "status.css")
+
+    @app.get("/status.js")
+    def status_js():
+        return send_from_directory(app.config["STATUS_DIR"], "status.js")
 
 
 def _store(app):

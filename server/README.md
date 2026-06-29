@@ -1,6 +1,6 @@
 # Inkplate 10 Weather Calendar Server
 
-A service for the weather calendar client written in Python3, backed by [Airium](https://pypi.org/project/airium/) and [Firefox](https://www.mozilla.org/firefox/).
+A Python service for the weather calendar client with direct Pillow rendering.
 
 
 
@@ -14,7 +14,8 @@ Example 1                  | Example 2                 | Example 3
 
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
-- Uses [Airium](https://pypi.org/project/airium/) then [Selenium](https://pypi.org/project/selenium/) / [Geckodriver](https://github.com/mozilla/geckodriver) / [Firefox](https://www.mozilla.org/firefox/) to generate HTML and save it as PNG files for image serving.
+- Uses [Pillow](https://pypi.org/project/pillow/) with
+  [rough-py](https://github.com/cktlco/rough-py), to produce PNG images.
 - Uses [Gunicorn](https://gunicorn.org/) and
   [Flask](https://flask.palletsprojects.com/en/2.3.x/) to serve images, the
   weather API, and a browser/PWA viewer independently from artifact generation.
@@ -24,7 +25,7 @@ The runtime has three roles:
 - `server.py` retrieves weather, renders outputs, publishes MQTT data, and
   atomically updates the shared artifact directory.
 - `web_server.py` launches Gunicorn, which serves only persisted artifacts and
-  does not load weather providers or Selenium.
+  does not load weather providers or the rendering stack.
 - `mqtt_diagnostics_server.py` independently subscribes to Inkplate diagnostic
   messages when that feature is enabled.
 
@@ -54,23 +55,41 @@ It uses the same defaults as the server code and example config: OpenWeatherMap
 v3, port `8080`, six forecast slots, a three-hour refresh interval, `825x1200`
 images, and MQTT disabled.
 
-It prompts for the location, weather API key, Google Static Maps API key, Google
-Static Maps Map ID, optional Netatmo credentials, optional MQTT weather
-publishing, optional MQTT diagnostic listening, and whether to start the service
-or container. Secrets are written outside committed YAML:
+It prompts for the server bind IP and port, location, weather API key, Google
+Static Maps API key, Google Static Maps Map ID, optional Netatmo credentials,
+optional MQTT weather publishing, optional MQTT diagnostic listening, and
+whether to start the service or container. Secrets are written outside
+committed YAML:
 
 - Docker or Podman: `.env` plus `server/config/config.yaml`
 - systemd: `/etc/inkplate/weather.env`,
   `/srv/inkplate/server/config/config.yaml`, and `/srv/inkplate/inkplate_venv`
 
+For Compose installs, `.env` remains owner-only (`0600`) because it contains
+secrets. The generated YAML contains environment placeholders rather than
+secret values and is written as `0644` so the non-root application user inside
+either Docker or Podman can read the bind-mounted file.
+
 Docker and Podman modes run as the current user. Docker expects `docker compose`
 and daemon access. Podman expects either `podman compose` or `podman-compose`
-and supports rootless operation. Native systemd mode needs root privileges for
-package installation, `/srv/inkplate`, `/etc/inkplate/weather.env`,
-Geckodriver, and systemd service management. Run it as root or as a user that
-can elevate with `sudo`, `doas`, or `run0`; the installer checks this before
-making system changes. Container modes validate their selected runtime before
-starting.
+and supports rootless operation. Podman automatically layers
+`docker-compose.podman.yml` over the main Compose file so containers use the
+Podman-supported `journald` log driver instead of Docker's `local` driver and
+applies a private SELinux relabel (`:Z`) to the read-only config bind mount.
+For both runtimes, the installer writes `INKPLATE_SERVER_PORT` and
+`INKPLATE_IMAGE` to `.env`. Compose uses the port for both the published host
+port and container target port.
+Before building, the installer checks that this host port is free unless this
+Compose project's web container is already running there. If another process
+owns the port, choose a different Server port or stop the existing listener.
+Native systemd mode needs root privileges for package installation,
+`/srv/inkplate`, `/etc/inkplate/weather.env`, and systemd service management.
+It installs the Pillow renderer dependencies. A v4 application update removes
+the obsolete Selenium and Airium packages from the application virtualenv, but
+does not remove a system-wide Firefox package or Geckodriver binary left by a
+v3 install. Run it as root or as a user that can elevate with `sudo`, `doas`,
+or `run0`; the installer checks this before making system changes. Container
+modes validate their selected runtime before starting.
 
 Use dry-run mode to preview actions:
 
@@ -123,7 +142,10 @@ Re-run the installer to update an existing install. It will detect existing
 Docker, Podman, or systemd files and offer to update the application while
 preserving config/secrets, update and reconfigure together, reconfigure
 config/secrets only, or abort. Use the combined option when a release changes
-both application code and configuration keys.
+both application code and configuration keys. An existing v3 configuration
+that explicitly selects `renderer: firefox` must use `update_reconfigure` so
+the installer can migrate it to Pillow. Users that still require the historical
+Firefox renderer should remain on a v3.x release.
 
 Logs:
 
@@ -294,9 +316,13 @@ weather refresh:
 
 ```text
 inkplate/weather-calendar
+inkplate/weather-calendar/generated_at
 inkplate/weather-calendar/current
 inkplate/weather-calendar/hourly
 inkplate/weather-calendar/status
+inkplate/weather-calendar/current/rain
+inkplate/weather-calendar/current/wind
+inkplate/weather-calendar/server/status
 ```
 
 Publishing failures are logged but do not stop image generation or HTTP
@@ -321,6 +347,18 @@ are exposed under `current.alerts`.
 The current payload schema is `2.0`. Wind measurements use `wind.value`;
 the OpenWeatherMap v4-specific `wind.real` field from schema `1.0` has been
 removed.
+
+Operational producer state is exposed separately:
+
+```text
+GET /api/v1/status
+GET /status
+```
+
+The JSON endpoint reports refresh state and timestamps, provider names,
+artifact readiness, MQTT publication state, runtime metadata, and the latest
+sanitized error. The HTML dashboard polls that endpoint every 10 seconds.
+Status data never includes provider credentials, tokens, or tracebacks.
 
 Generated display artifacts use named output profiles:
 
@@ -347,10 +385,12 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
-      renderer: firefox
+      renderer: pillow
       width: 825
       height: 1200
       filename: calendar.png
+      options:
+        supersample: 2
 ```
 
 Each enabled profile has its own URL, dimensions, renderer, and filename.
@@ -359,12 +399,16 @@ types. The `default` profile backs `/calendar.png` and `/app/calendar.png`.
 Legacy `image.width` and `image.height` settings still configure the default
 Inkplate 10 profile when `outputs.profiles` is absent.
 
-Profiles may also contain an `options` mapping for renderer-specific layout or
-style settings. Unknown options are left to the selected renderer.
+Profiles may also contain an `options` mapping for layout or style settings.
+The Pillow renderer draws the calendar directly using
+[rough-py](https://github.com/cktlco/rough-py) for sketch geometry, plus local
+fonts, icons, and the generated map. It requires no browser or SVG rasterizer.
+Its optional `supersample` setting defaults to `2` for antialiased output.
 
-Only the `firefox` renderer is implemented currently. The registry allows a
-future `pillow` or device-specific renderer without changing artifact storage,
-readiness, or HTTP routing.
+Pillow is the only renderer in v4. Configurations that explicitly select
+`renderer: firefox` are rejected with migration guidance. The Firefox
+HTML/CSS/Chart.js renderer remains available in the v3.x release series for
+users that still need it.
 
 The existing `/calendar.png` and `/app/calendar.png` routes remain compatibility
 aliases for the same image. `/calendar.png` retains its attachment response for
@@ -397,7 +441,13 @@ after an interrupted write. Valid snapshots and outputs are never age-pruned.
 
 The diagnostic listener runs as an independent process from weather production
 and publishing. It records non-retained messages from the Inkplate through the
-`MQTT` logger and resubscribes after reconnecting. Native installations use
+`MQTT` logger, atomically stores recent messages in the shared data directory,
+and resubscribes after reconnecting. The listener keeps the 10 most
+recent client messages. `/api/v1/status` exposes them as
+`inkplate.recent_diagnostics`, and `/status` displays their receive times,
+topics, and text under **Inkplate client diagnostics**, separately from the
+server's MQTT publishing status. Messages are capped at 4096 characters and
+retained broker messages are ignored. Native installations use
 `inkplate-diagnostics.service`; Compose uses the `diagnostics` service. When
 diagnostics are disabled, that process exits successfully. The matching
 firmware topic is configured in the Inkplate `mqtt_logger` section, either on
@@ -433,11 +483,11 @@ expand to an empty string when unset.
 
 ### Output dimensions
 
-Each profile's `width` and `height` values set its capture target. The current
-Firefox HTML/CSS layout is tuned for Inkplate 10 portrait output at `825x1200`;
-dimensions alone are not a general layout scaling system. A different device
-size may require its own renderer or renderer `options` to avoid cropped,
-stretched, or poorly spaced output.
+Each profile's `width` and `height` values set its output target. The current
+layout is tuned for Inkplate 10 portrait output at `825x1200`; dimensions alone
+are not a general layout scaling system. A different device size may require
+renderer `options` or layout changes to avoid cropped, stretched, or poorly
+spaced output.
 
 ### Browser and PWA viewer
 
@@ -522,10 +572,12 @@ At startup the server fetches this static map, converts it to a dithered graysca
 
 ### Manual native server setup
 
-Ensure Python3 is installed on your system
+The native installation baseline is Debian 13 (Trixie) or another supported
+distribution providing Python 3.13 or newer. Ensure Python 3 is installed:
+
 ```
 python3 --version
-Python 3.11.2
+Python 3.13.5
 ```
 
 Download project and install dependencies. The default main branch is the latest
@@ -573,9 +625,22 @@ repair individual systemd pieces manually.
 ## Running with Docker or Podman
 
 The repository root contains the Dockerfile and a Compose file that works with
-Docker Compose or Podman Compose. The image installs Firefox, Geckodriver,
-Gunicorn, and the required Python modules, then runs as an unprivileged
-`inkplate` user.
+Docker Compose or Podman Compose. The image runs as an unprivileged `inkplate`
+user and contains the Pillow and `rough-py` rendering stack.
+
+Published images use the normal release or branch tags:
+
+```text
+ghcr.io/orangespyderman/inkplate10-weather-cal:v4.0.0
+ghcr.io/orangespyderman/inkplate10-weather-cal:main
+ghcr.io/orangespyderman/inkplate10-weather-cal:next
+```
+
+For a local build, set the image name in `.env` if the default is unsuitable:
+
+```dotenv
+INKPLATE_IMAGE=inkplate10-weather-cal:local
+```
 
 ### Configure
 
@@ -643,29 +708,36 @@ promoted to `main`.
 Do not commit `server/config/config.yaml` or `.env`; keep API keys and refresh
 tokens in local files or runtime environment variables.
 
-Docker dependency updates are split across two mechanisms. Dependabot updates
-the Python packages, GitHub Actions, and Docker base image on the `next` branch.
-Geckodriver is pinned with the `GECKOVERSION` build argument, so a scheduled
-GitHub Actions workflow checks Mozilla's latest release and opens a pull request
-when that pin needs updating.
+Dependabot updates the Python packages, GitHub Actions, and Docker base image
+on the `next` branch.
 
 ### Starting the container
 
 Run from the root of your cloned repository:
 
 ```bash
-docker compose up --build
+make version-manifest
+docker compose build inkplate
+docker compose up --no-build
 # or
-podman compose up --build
+podman compose build inkplate
+podman compose up --no-build
 ```
 
 Or detach it:
 
 ```bash
-docker compose up --build -d
+make version-manifest
+docker compose build inkplate
+docker compose up --no-build -d
 # or
-podman compose up --build -d
+podman compose build inkplate
+podman compose up --no-build -d
 ```
+
+All three services share one image name. Building the `inkplate` service
+explicitly avoids Podman Compose rebuilding that same image independently for
+the web, producer, and diagnostics services.
 
 To use the published image instead of building locally, change the shared
 `image:` value and remove its `build:` block:
@@ -674,7 +746,20 @@ To use the published image instead of building locally, change the shared
 image: ghcr.io/orangespyderman/inkplate10-weather-cal:main
 ```
 
-The server listens on port `8080` and serves the generated image from:
+The server defaults to all IPv4 interfaces on port `8080`:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+```
+
+Set `host` to a specific local IP to restrict the listener. Use `"::"` to bind
+Gunicorn to IPv6; whether that socket also accepts IPv4 depends on the host's
+dual-stack socket configuration. In Docker or Podman, this address is inside
+the container, while the Compose `ports` mapping controls host exposure.
+
+The generated image is served from:
 
 ```text
 http://localhost:8080/calendar.png
@@ -814,5 +899,4 @@ Known caveats:
 - Proxmox OCI support is newer than standard Docker/Podman workflows.
 - `bin/install_proxmox` currently supports fresh installations only.
 - Proxmox mount and environment-variable management is not the same as Compose.
-- Firefox/Geckodriver should be tested on the target Proxmox host.
 - The renderer is tuned for Inkplate 10 portrait output at `825x1200`.

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -94,6 +95,7 @@ def main() -> int:
 
     print("Experimental Proxmox VE 9 OCI/LXC installer")
     print("-------------------------------------------")
+    print("Press Ctrl-C at any time to cancel cleanly.")
     print("Fresh installations only. Existing CTs are never replaced.")
     if args.dry_run:
         print("Dry run: commands and generated files will only be previewed.")
@@ -142,7 +144,11 @@ def main() -> int:
         print("No changes made.")
         return 0
 
-    config_answers = install_server.collect_answers({}, {}, mode="systemd")
+    config_answers = install_server.collect_answers(
+        {},
+        {},
+        mode="systemd",
+    )
     config_text = install_server.render_config(config_answers, mode="systemd")
     env_text = install_server.render_env(
         config_answers,
@@ -383,13 +389,14 @@ def validate_target(storage_plan: StoragePlan, bridge: str, dry_run: bool) -> No
         raise SystemExit(f"ERROR: network bridge {bridge!r} does not exist.")
 
 
-def available_tags(dry_run: bool, requested: str | None = None) -> list[str]:
+def available_tags(
+    dry_run: bool,
+    requested: str | None = None,
+) -> list[str]:
     if dry_run and not shutil.which("skopeo"):
         print(f"Would query available tags for {IMAGE}.")
-        return list(dict.fromkeys([requested, "main", "next"])) if requested else [
-            "main",
-            "next",
-        ]
+        defaults = ["main", "next"]
+        return list(dict.fromkeys([requested, *defaults])) if requested else defaults
     result = subprocess.run(
         ["skopeo", "list-tags", f"docker://{IMAGE}"],
         capture_output=True,
@@ -400,22 +407,38 @@ def available_tags(dry_run: bool, requested: str | None = None) -> list[str]:
     tags = json.loads(result.stdout).get("Tags", [])
     if not tags:
         raise SystemExit("ERROR: the OCI registry returned no image tags.")
-    return sort_tags(tags)
+    return sort_tags(tag for tag in tags if supported_v4_tag(tag))
 
 
-def sort_tags(tags: list[str]) -> list[str]:
+def sort_tags(tags) -> list[str]:
     def version_key(tag: str):
-        match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
+        match = re.fullmatch(
+            r"v(\d+)\.(\d+)\.(\d+)",
+            tag,
+        )
         return tuple(int(part) for part in match.groups()) if match else None
 
+    tags = list(tags)
     versions = sorted(
         (tag for tag in tags if version_key(tag) is not None),
         key=lambda tag: version_key(tag),
         reverse=True,
     )
-    branches = [tag for tag in ("main", "next") if tag in tags]
+    branches = [
+        tag
+        for branch in ("main", "next")
+        for tag in tags
+        if tag == branch
+    ]
     others = sorted(set(tags) - set(versions) - set(branches))
     return versions + branches + others
+
+
+def supported_v4_tag(tag: str) -> bool:
+    if tag in {"main", "next"}:
+        return True
+    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
+    return match is not None and int(match.group(1)) >= 4
 
 
 def choose_tag(tags: list[str], requested: str | None) -> str:
@@ -725,5 +748,13 @@ def run(cmd: list[str], dry_run: bool = False, check: bool = True):
     return subprocess.run(cmd, check=check, text=True)
 
 
+def run_cli(main_func=main) -> int:
+    try:
+        return main_func()
+    except KeyboardInterrupt:
+        print("\nProxmox installer cancelled.", file=sys.stderr)
+        return 130
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())

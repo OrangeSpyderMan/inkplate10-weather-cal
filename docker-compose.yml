@@ -1,10 +1,12 @@
 x-inkplate-service: &inkplate-service
   init: true
-  image: inkplate10-weather-cal:local
+  image: ${INKPLATE_IMAGE:-inkplate10-weather-cal:local}
   build:
     context: .
     args:
-      GECKOVERSION: v0.37.0
+      BUILD_DATE: ${INKPLATE_BUILD_DATE:-unknown}
+      VCS_REF: ${INKPLATE_VCS_REF:-unknown}
+      VERSION: ${INKPLATE_VERSION:-local}
   restart: unless-stopped
   logging:
     driver: local
@@ -33,14 +35,14 @@ services:
     <<: *inkplate-service
     command: ["python3", "server/web_server.py"]
     ports:
-      - "8080:8080"
+      - "${INKPLATE_SERVER_PORT:-8080}:${INKPLATE_SERVER_PORT:-8080}"
     healthcheck:
       test:
         [
           "CMD",
           "python3",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v1/ready', timeout=5)",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${INKPLATE_SERVER_PORT:-8080}/api/v1/ready', timeout=5)",
         ]
       interval: 1m
       timeout: 10s

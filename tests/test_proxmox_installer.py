@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import types
 import unittest
@@ -13,6 +14,17 @@ SPEC.loader.exec_module(install_proxmox)
 
 
 class ProxmoxInstallerTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_cleanly(self):
+        stderr = io.StringIO()
+
+        with mock.patch("sys.stderr", stderr):
+            result = install_proxmox.run_cli(
+                mock.Mock(side_effect=KeyboardInterrupt)
+            )
+
+        self.assertEqual(result, 130)
+        self.assertEqual(stderr.getvalue(), "\nProxmox installer cancelled.\n")
+
     def test_parses_supported_proxmox_versions(self):
         self.assertEqual(
             install_proxmox.parse_proxmox_versions(
@@ -28,6 +40,28 @@ class ProxmoxInstallerTests(unittest.TestCase):
             ),
             ["v1.10.0", "v1.2.0", "main", "next", "test"],
         )
+
+    def test_filters_out_pre_v4_and_old_flavour_tags(self):
+        tags = [
+            "next",
+            "next-pillow",
+            "v4.0.0",
+            "v4.0.0-pillow",
+            "main-pillow",
+        ]
+
+        filtered = [tag for tag in tags if install_proxmox.supported_v4_tag(tag)]
+
+        self.assertEqual(
+            install_proxmox.sort_tags(filtered),
+            ["v4.0.0", "next"],
+        )
+
+    def test_accepts_v4_and_branch_tags(self):
+        self.assertTrue(install_proxmox.supported_v4_tag("v4.0.0"))
+        self.assertTrue(install_proxmox.supported_v4_tag("main"))
+        self.assertFalse(install_proxmox.supported_v4_tag("v3.2.0"))
+        self.assertFalse(install_proxmox.supported_v4_tag("v4.0.0-pillow"))
 
     def test_archive_name_includes_tag_and_digest(self):
         self.assertEqual(

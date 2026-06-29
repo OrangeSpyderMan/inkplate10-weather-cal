@@ -205,6 +205,10 @@ void setup()
     {
         logf(LOG_ERROR, "image display error after %d attempts", attempts);
         logf(LOG_ERROR, "calendar URL: %s", config.calendarUrl);
+        logTagged(
+            LOG_ERROR,
+            "REFRESH",
+            "status=failed retaining=previous");
         sleepForSeconds(
             static_cast<uint32_t>(config.calendarRetryIntervalMinutes) * 60UL);
     }

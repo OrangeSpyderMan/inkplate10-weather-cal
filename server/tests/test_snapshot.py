@@ -32,6 +32,43 @@ class WeatherSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot.to_payload()["current"]["alerts"], alerts)
 
+    def test_payload_preserves_hourly_forecast_timezone_offset(self):
+        location_timezone = dt.timezone(dt.timedelta(hours=2))
+        snapshot = WeatherSnapshot(
+            daily_summary={},
+            hourly_forecasts=[
+                {
+                    "dt": dt.datetime(
+                        2026,
+                        6,
+                        22,
+                        12,
+                        tzinfo=location_timezone,
+                    ),
+                    "icon": "icon/day/clear.png",
+                    "temperature": {"unit": "\N{DEGREE SIGN}C", "value": 27},
+                    "rain_probability": 0,
+                }
+            ],
+            weather_source="openweathermapv4",
+            generated_at=dt.datetime(
+                2026,
+                6,
+                22,
+                6,
+                13,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+
+        payload = snapshot.to_payload()
+
+        self.assertEqual(payload["hourly"][0]["dt"], "2026-06-22T12:00:00+02:00")
+        self.assertEqual(
+            payload["generated_at"],
+            "2026-06-22T06:13:00+00:00",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

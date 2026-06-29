@@ -35,6 +35,10 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
                 "current": {
                     "dt": start,
                     "temp": 12.4,
+                    "wind_speed": 4.2,
+                    "wind_gust": 6.1,
+                    "wind_deg": 270,
+                    "rain": {"1h": 1.3},
                     "weather": [{"icon": "01d"}],
                 },
                 "daily": [{"temp": {"min": 5.2, "max": 15.4}}],
@@ -61,6 +65,13 @@ class OpenWeatherMapv3ServiceTests(unittest.TestCase):
         forecast = service.fetch()
 
         self.assertEqual(forecast.current.temperature.value, 12)
+        self.assertEqual(forecast.current.wind.value, 4.2)
+        self.assertEqual(forecast.current.wind.direction, 270)
+        self.assertEqual(forecast.current.rain.value, 1.3)
+        self.assertEqual(
+            forecast.current.rain.rate_basis,
+            "last_hour_average",
+        )
         self.assertEqual(len(forecast.hourly), 6)
         self.assertEqual(
             [item.temperature.value for item in forecast.hourly],

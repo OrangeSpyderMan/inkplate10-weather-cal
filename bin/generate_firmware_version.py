@@ -1,53 +1,16 @@
 #!/usr/bin/env python3
 import argparse
-import subprocess
+import sys
 from pathlib import Path
+
+SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
+sys.path.insert(0, str(SERVER_DIR))
+
+from build_version import generate_version_manifest
 
 
 def c_string(value):
     return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def git(*args, cwd=None):
-    result = subprocess.run(
-        ["git", *args],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-    )
-    return result.stdout.strip() if result.returncode == 0 else ""
-
-
-def detected_version(cwd=None):
-    exact = git(
-        "describe",
-        "--tags",
-        "--exact-match",
-        "--match",
-        "v[0-9]*",
-        "HEAD",
-        cwd=cwd,
-    )
-    if exact:
-        return exact
-
-    release = git(
-        "describe",
-        "--tags",
-        "--abbrev=0",
-        "--match",
-        "v[0-9]*",
-        "HEAD",
-        cwd=cwd,
-    ) or "v0.0.0"
-    commit = git("rev-parse", "--short", "HEAD", cwd=cwd) or "unknown"
-    dirty = (
-        ".dirty"
-        if git("status", "--porcelain", "--untracked-files=no", cwd=cwd)
-        else ""
-    )
-    return f"{release}+g{commit}{dirty}"
 
 
 def main():
@@ -57,7 +20,14 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("version", nargs="?", default="")
     args = parser.parse_args()
-    version = args.version or detected_version()
+    try:
+        manifest = generate_version_manifest(
+            SERVER_DIR.parent,
+            version=args.version or None,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: {exc}") from None
+    version = manifest["version"]
 
     content = (
         "#ifndef FIRMWARE_VERSION_H\n"

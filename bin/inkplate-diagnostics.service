@@ -1,5 +1,5 @@
 [Unit]
-Description=Inkplate MQTT diagnostic listener
+Description=Weather Calendar MQTT diagnostic listener
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=60

@@ -1,4 +1,6 @@
 import importlib.util
+import io
+import json
 import pathlib
 import tarfile
 import tempfile
@@ -45,6 +47,17 @@ def arguments(**overrides):
 
 
 class RemoteInstallerTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_cleanly(self):
+        stderr = io.StringIO()
+
+        with mock.patch("sys.stderr", stderr):
+            result = install_remote.run_cli(
+                mock.Mock(side_effect=KeyboardInterrupt)
+            )
+
+        self.assertEqual(result, 130)
+        self.assertEqual(stderr.getvalue(), "\nRemote installer cancelled.\n")
+
     def test_builds_ssh_command_without_disabling_host_key_checks(self):
         args = arguments(
             port=2222,
@@ -72,7 +85,7 @@ class RemoteInstallerTests(unittest.TestCase):
             non_interactive=True,
             remote_dry_run=True,
             yes=True,
-            tag="v3.1.1",
+            tag="v4.0.0",
             ctid=123,
             storage="local-zfs",
             separate_mounts=True,
@@ -88,7 +101,7 @@ class RemoteInstallerTests(unittest.TestCase):
             [
                 "./bin/install_proxmox",
                 "--tag",
-                "v3.1.1",
+                "v4.0.0",
                 "--ctid",
                 "123",
                 "--storage",
@@ -109,6 +122,18 @@ class RemoteInstallerTests(unittest.TestCase):
                 ".remote/answers.json",
                 "--non-interactive",
                 "--dry-run",
+            ],
+        )
+
+    def test_builds_systemd_installer_command(self):
+        args = arguments(mode="systemd")
+
+        self.assertEqual(
+            install_remote.remote_installer_args(args),
+            [
+                "./bin/install_server",
+                "--mode",
+                "systemd",
             ],
         )
 
@@ -139,28 +164,71 @@ class RemoteInstallerTests(unittest.TestCase):
         self.assertIn("'weather host'", command)
         self.assertIn("sudo -H ./bin/install_proxmox", command)
 
+    @mock.patch.object(install_remote, "generate_version_manifest")
     @mock.patch.object(install_remote, "tracked_files")
     def test_bundle_contains_tracked_files_and_protected_answers(
         self,
         tracked_files,
+        generate_version_manifest,
     ):
         tracked_files.return_value = [pathlib.Path("README.md")]
-        with tempfile.TemporaryDirectory() as temporary_dir:
-            answers = pathlib.Path(temporary_dir) / "answers.json"
-            answers.write_text('{"secret": "value"}', encoding="utf-8")
+        manifest = {
+            "version": "v3.2.0+gabc1234",
+            "revision": "abc1234",
+            "build_date": "2026-06-19T12:00:00+00:00",
+        }
+        with tempfile.TemporaryDirectory() as checkout_dir:
+            checkout = pathlib.Path(checkout_dir)
+            (checkout / "README.md").write_text("readme", encoding="utf-8")
 
-            bundle = install_remote.create_bundle(answers)
-            try:
-                with tarfile.open(bundle, "r:gz") as archive:
-                    names = archive.getnames()
-                    answer_info = archive.getmember(
-                        install_remote.REMOTE_ANSWERS
+            def generate(root):
+                (root / ".version.json").write_text(
+                    json.dumps(manifest),
+                    encoding="utf-8",
+                )
+                return manifest
+
+            generate_version_manifest.side_effect = generate
+            with mock.patch.object(install_remote, "REPO_ROOT", checkout):
+                with tempfile.TemporaryDirectory() as temporary_dir:
+                    answers = pathlib.Path(temporary_dir) / "answers.json"
+                    answers.write_text(
+                        '{"secret": "value"}',
+                        encoding="utf-8",
                     )
-                    answer_data = archive.extractfile(answer_info).read()
-            finally:
-                bundle.unlink(missing_ok=True)
 
-        self.assertEqual(names, ["README.md", ".remote/answers.json"])
+                    bundle = install_remote.create_bundle(answers)
+                    try:
+                        with tarfile.open(bundle, "r:gz") as archive:
+                            names = archive.getnames()
+                            answer_info = archive.getmember(
+                                install_remote.REMOTE_ANSWERS
+                            )
+                            answer_data = archive.extractfile(
+                                answer_info
+                            ).read()
+                            manifest_info = archive.getmember(
+                                install_remote.REMOTE_VERSION_MANIFEST
+                            )
+                            archived_manifest = json.load(
+                                archive.extractfile(manifest_info)
+                            )
+                    finally:
+                        bundle.unlink(missing_ok=True)
+
+        self.assertEqual(
+            names,
+            [
+                "README.md",
+                ".version.json",
+                ".remote/answers.json",
+            ],
+        )
+        self.assertEqual(
+            archived_manifest["version"],
+            "v3.2.0+gabc1234",
+        )
+        generate_version_manifest.assert_called_once_with(checkout)
         self.assertEqual(answer_info.mode, 0o600)
         self.assertEqual(answer_data, b'{"secret": "value"}')
 

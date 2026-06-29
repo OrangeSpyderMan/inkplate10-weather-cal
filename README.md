@@ -53,8 +53,8 @@ Both a server and client are required. The main workload is on the server, which
 ### Server (Raspberry Pi)
 
 1. Gets any relevant new data (ie. weather, maps).
-2. Generates a HTML file using a Python HTML translator [Airium](https://pypi.org/project/airium/).
-3. [Selenium](https://pypi.org/project/selenium/) then uses [Geckodriver](https://github.com/mozilla/geckodriver) to make [Firefox](https://www.mozilla.org/firefox/) capture the generated HTML file as a PNG screenshot that fits the dimensions of e-ink resolution.
+2. Renders the configured output directly with Pillow and `rough-py`.
+3. Publishes the resulting PNG at the configured e-ink display dimensions.
 4. A separate Gunicorn/Flask web process serves the generated PNG and weather
    API from the shared artifact directory.
 5. (Optional) Separate server processes publish weather snapshots and listen
@@ -95,7 +95,12 @@ See the [server](/server) for more features.
 
 - **Raspberry Pi Zero W ~€40**
 
-  To run the server, you will need something that can run Python 3 and Firefox/Geckodriver. The producer does the heavier PNG rendering work while the Gunicorn web process remains available independently. The Docker image currently targets `amd64` and `arm64`, so it is a better fit for a 64-bit Raspberry Pi or similar SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than the supplied container.
+  To run the server, you need a system capable of running Python 3. The
+  Pillow-based producer does the heavier PNG rendering work while the Gunicorn
+  web process remains available independently. Container images target `amd64`
+  and `arm64`, so they are a better fit for a 64-bit Raspberry Pi or similar
+  SBC. A 32-bit Raspberry Pi Zero W may need a native/manual setup rather than
+  the supplied container.
 
 - **Black photo frame 8"x10" ~€10**
 
@@ -181,6 +186,7 @@ The server also exposes versioned data and output endpoints:
 /api/v1/weather
 /api/v1/health
 /api/v1/ready
+/api/v1/status
 /api/v1/outputs/inkplate10-portrait/status
 /outputs/inkplate10-portrait/calendar.png
 ```
@@ -188,9 +194,23 @@ The server also exposes versioned data and output endpoints:
 `/calendar.png` remains available as a compatibility alias for existing
 Inkplate firmware.
 
-Named outputs are profile-driven. Additional display sizes and renderer
-implementations can be enabled as separate profiles while `/calendar.png`
-continues to serve the configured default.
+The browser-oriented operational dashboard is available at `/status`. It
+polls the status API and reports producer refresh state, providers, output
+readiness, MQTT publication state, and sanitized failures. API timestamps are
+ISO 8601 values with explicit UTC offsets. The dashboard displays them in the
+browser's local timezone and identifies that timezone above the status details.
+Server and firmware builds share the generated root `.version.json` manifest.
+Installers and CI generate it from the checkout before copying or building, so
+installed runtimes do not require Git metadata.
+
+Named outputs are profile-driven. Additional display sizes can be enabled as
+separate profiles while `/calendar.png` continues to serve the configured
+default.
+
+The `pillow` renderer draws directly without HTML, JavaScript, a browser, or
+screenshot capture and completes a typical `825x1200` render in roughly 0.4
+seconds during local testing. Firefox rendering was removed in v4. Users that
+require the historical HTML/CSS renderer should remain on a v3.x release.
 
 The server supports AccuWeather and OpenWeatherMap One Call 3.0 and 4.0.
 OpenWeatherMap v2 has been removed. Forecast and optional realtime providers
@@ -220,16 +240,18 @@ Run it from the repository root:
 ./bin/install_server
 ```
 
-The installer prompts for the weather provider, API keys, Google Static Maps
-Map ID, location, optional Netatmo details, optional MQTT weather publishing,
-optional MQTT diagnostic listening, and whether to start the service/container.
+The installer prompts for the server bind IP and port, weather provider, API
+keys, Google Static Maps Map ID, location, optional Netatmo details, optional
+MQTT weather publishing, optional MQTT diagnostic listening, and whether to
+start the service/container.
 It keeps secrets out of committed YAML files:
 
 - Docker and Podman installs write secrets to `.env` and config to
   `server/config/config.yaml`.
 - systemd installs write secrets to `/etc/inkplate/weather.env`, config to
   `/srv/inkplate/server/config/config.yaml`, and dependencies to
-  `/srv/inkplate/inkplate_venv`.
+  `/srv/inkplate/inkplate_venv`. A v4 update removes the obsolete Selenium and
+  Airium packages from that virtualenv.
 
 For native systemd installs, run as root or as a user that can elevate with
 `sudo`, `doas`, or `run0`. The installer checks this before making system
@@ -260,6 +282,7 @@ sudo ./bin/install_proxmox --dry-run
 Interactive Proxmox runs list available LXC storage and can create separate
 mounts for generated data and read-only config. Use `--storage`,
 `--data-storage`, and `--config-storage` for unattended storage selection.
+The v4 installer ignores pre-v4 and historical `-pillow` image tags.
 
 To deploy from this checkout to another machine over SSH, use the remote
 wrapper. It currently supports Proxmox and systemd targets:
@@ -399,9 +422,49 @@ On macOS the port is usually under `/dev/cu.*`; on Windows it is usually a
 make firmware-board-list
 ```
 
+### Hardware fault and soak test
+
+`tools/hardware_soak.py` exercises a connected Inkplate against a local fault
+server. It flashes isolated test builds and verifies these behaviors from the
+serial lifecycle log:
+
+- simulated critical battery voltage skips Wi-Fi and returns to deep sleep;
+- failed Wi-Fi displays the connection error and returns to deep sleep;
+- an unavailable status endpoint falls back to downloading the image;
+- an unchanged output hash skips the image download and panel refresh;
+- a failed image download retries, retains the previous e-ink image, and uses
+  the shorter recovery sleep;
+- repeated successful wake cycles continue to use the unchanged-output path.
+
+The battery and shortened sleep controls are compile-time-only macros used by
+the soak runner. Normal firmware builds do not define them.
+
+Connect the Inkplate by USB and run this from a host on the same Wi-Fi network:
+
+```bash
+python3 tools/hardware_soak.py \
+  --port /dev/ttyUSB0 \
+  --host-address 192.0.2.10 \
+  --wifi-ssid my-network \
+  --cycles 20
+```
+
+`--host-address` must be the address of the test host as reachable by the
+Inkplate; do not use `127.0.0.1`. The runner listens on TCP port `18081` by
+default, so the host firewall must allow the Inkplate to reach that port. It
+prompts for the Wi-Fi password without putting it in the process arguments.
+It requires Python's `pyserial` package and will repeatedly flash and reset
+the connected board. Use a disposable test configuration rather than a
+production device that cannot tolerate interruption.
+
 The default CLI build target is `Inkplate_Boards:esp32:Inkplate10V2`, using the
-Inkplate board package version `8.1.0`. These defaults can be overridden, for
-example:
+Inkplate board package version `8.1.0`. The board index is pinned to a Git
+commit, every Arduino library is installed at the version recorded in the
+`Makefile`, and the repo-local Arduino CLI download is verified against its
+published SHA-256 digest. CI actions used to build and publish firmware are
+also pinned to commit SHAs.
+
+These defaults can be overridden, for example:
 
 ```bash
 make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
@@ -412,8 +475,9 @@ make firmware-compile FIRMWARE_FQBN=Inkplate_Boards:esp32:Inkplate10
 The firmware can be compiled correctly on the Arduino IDE. Generic compiled
 firmware is attached to each [GitHub release](../../releases), and CI builds
 also provide a downloadable workflow artifact. You may be able to use a release
-binary to program your board directly, but I would recommend setting up an
-Arduino IDE with the latest library versions and compiling a version locally.
+binary to program your board directly. To reproduce a release locally, use the
+board and library versions pinned in the `Makefile`; newer library versions may
+change behavior or generated binaries.
 
 The below assumes you already have a working Arduino environment, configure for the Inkplate10 (with the board definition). The documentation for that is available here :
 

@@ -20,6 +20,14 @@ class ArtifactStore:
     def ready_path(self):
         return self.root / "ready.json"
 
+    @property
+    def status_path(self):
+        return self.root / "server-status.json"
+
+    @property
+    def diagnostic_path(self):
+        return self.root / "inkplate-diagnostic.json"
+
     def output_path(self, profile, filename):
         return self.root / "outputs" / profile / filename
 
@@ -50,6 +58,39 @@ class ArtifactStore:
             },
         )
 
+    def write_status(self, status):
+        self.write_json(self.status_path, status)
+
+    def read_status(self):
+        with self.status_path.open(encoding="utf-8") as status_file:
+            return json.load(status_file)
+
+    def write_diagnostic(self, diagnostic):
+        self.write_json(self.diagnostic_path, diagnostic)
+
+    def read_diagnostic(self):
+        with self.diagnostic_path.open(encoding="utf-8") as diagnostic_file:
+            return json.load(diagnostic_file)
+
+    def append_diagnostic(self, diagnostic, limit=10):
+        try:
+            existing = self.read_diagnostic()
+        except (OSError, TypeError, json.JSONDecodeError):
+            existing = {}
+
+        diagnostics = existing.get("diagnostics", [])
+        if not isinstance(diagnostics, list):
+            diagnostics = []
+        if not diagnostics and isinstance(existing.get("message"), str):
+            diagnostics = [existing]
+        diagnostics.append(diagnostic)
+        self.write_diagnostic(
+            {
+                "schema_version": "1.0",
+                "diagnostics": diagnostics[-limit:],
+            }
+        )
+
     def output_status(self, profiles):
         status = {name: False for name in profiles}
         try:
@@ -63,13 +104,12 @@ class ArtifactStore:
                 == snapshot_signature
             )
             upgraded = False
-            if snapshot_matches and "sha256" not in snapshot:
-                snapshot["sha256"] = self.file_sha256(snapshot_path)
-                upgraded = True
-            snapshot_matches = (
-                snapshot_matches
-                and snapshot["sha256"] == self.file_sha256(snapshot_path)
-            )
+            if snapshot_matches:
+                snapshot_sha256 = self.file_sha256(snapshot_path)
+                if "sha256" not in snapshot:
+                    snapshot["sha256"] = snapshot_sha256
+                    upgraded = True
+                snapshot_matches = snapshot["sha256"] == snapshot_sha256
             for name, profile in profiles.items():
                 output = ready["outputs"][name]
                 expected_path = self.output_path(name, profile.filename)
@@ -78,14 +118,16 @@ class ArtifactStore:
                     self.root / output["path"] == expected_path
                     and output["signature"] == output_signature
                 )
+                output_sha256 = None
                 if output_matches and "sha256" not in output:
-                    output["sha256"] = self.file_sha256(expected_path)
+                    output_sha256 = self.file_sha256(expected_path)
+                    output["sha256"] = output_sha256
                     upgraded = True
-                status[name] = (
-                    snapshot_matches
-                    and output_matches
-                    and output["sha256"] == self.file_sha256(expected_path)
-                )
+                if snapshot_matches and output_matches:
+                    if output_sha256 is None:
+                        output_sha256 = self.file_sha256(expected_path)
+                    output_matches = output["sha256"] == output_sha256
+                status[name] = snapshot_matches and output_matches
             if upgraded:
                 try:
                     self.write_json(self.ready_path, ready)

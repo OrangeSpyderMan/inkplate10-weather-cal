@@ -9,6 +9,7 @@ SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
 import server
+from weather.models import CurrentConditions, Temperature
 from weather.providers import (
     ConfigurationError,
     build_forecast_provider,
@@ -185,63 +186,40 @@ class RealtimeProviderFactoryTests(unittest.TestCase):
 
 class CurrentConditionsOverlayTests(unittest.TestCase):
     def test_partial_overlay_preserves_forecast_temperature_range(self):
-        daily_summary = {
-            "temperature": {
-                "unit": "\N{DEGREE SIGN}C",
-                "value": 10,
-                "min": 5,
-                "max": 15,
-            },
-            "icon": "icon/clear.png",
-        }
+        daily_summary = CurrentConditions(
+            icon="icon/clear.png",
+            temperature=Temperature(
+                unit="\N{DEGREE SIGN}C",
+                value=10,
+                minimum=5,
+                maximum=15,
+            ),
+        )
         realtime = mock.Mock()
-        realtime.get_current_conditions.return_value = {
-            "temperature": {
-                "source": "netatmo",
-                "live": True,
-                "unit": "\N{DEGREE SIGN}C",
-                "value": 12,
-            },
-            "humidity": 60,
-        }
+        realtime.get_current_conditions.return_value = CurrentConditions(
+            temperature=Temperature(
+                source="netatmo",
+                live=True,
+                unit="\N{DEGREE SIGN}C",
+                value=12,
+            ),
+            humidity=60,
+        )
 
-        server.apply_current_conditions(daily_summary, realtime)
+        result = server.apply_current_conditions(daily_summary, realtime)
 
         self.assertEqual(
-            daily_summary["temperature"],
-            {
-                "source": "netatmo",
-                "live": True,
-                "unit": "\N{DEGREE SIGN}C",
-                "value": 12,
-                "min": 5,
-                "max": 15,
-            },
+            result.temperature,
+            Temperature(
+                source="netatmo",
+                live=True,
+                unit="\N{DEGREE SIGN}C",
+                value=12,
+                minimum=5,
+                maximum=15,
+            ),
         )
-        self.assertEqual(daily_summary["humidity"], 60)
-
-    @mock.patch("server.build_realtime_provider")
-    def test_legacy_current_temperature_config_remains_accepted(
-        self,
-        build_provider,
-    ):
-        config = {
-            "current_temperature": {
-                "source": "netatmo",
-                "netatmo": {
-                    "client_id": "id",
-                },
-            }
-        }
-
-        result = server.build_current_conditions_service(config, metric=True)
-
-        self.assertIs(result, build_provider.return_value)
-        build_provider.assert_called_once_with(
-            config["current_temperature"],
-            metric=True,
-            base_dir=str(SERVER_DIR),
-        )
+        self.assertEqual(result.humidity, 60)
 
 
 class ProducerConfigurationTests(unittest.TestCase):

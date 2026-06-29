@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - 'bin/install_server.py'
+      - 'bin/generate_version_manifest.py'
       - 'bin/install_proxmox'
       - 'bin/install_proxmox.py'
       - 'bin/install_remote'
@@ -21,6 +22,7 @@ on:
   pull_request:
     paths:
       - 'bin/install_server.py'
+      - 'bin/generate_version_manifest.py'
       - 'bin/install_proxmox'
       - 'bin/install_proxmox.py'
       - 'bin/install_remote'
@@ -38,10 +40,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Test installer helpers
         run: python3 -m unittest discover -s tests -v
+
+      - name: Generate version manifest
+        run: python3 bin/generate_version_manifest.py
 
       - name: Validate Docker Compose config
         env:
@@ -51,17 +58,28 @@ jobs:
         run: docker compose config
 
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag inkplate10-weather-cal:ci
+        run: |
+          docker build . \
+            --file Dockerfile \
+            --tag "inkplate10-weather-cal:ci"
 
       - name: Smoke test Docker image
+        env:
+          IMAGE: inkplate10-weather-cal:ci
         run: |
-          test "$(docker image inspect inkplate10-weather-cal:ci \
+          test "$(docker image inspect "$IMAGE" \
             --format '{{json .Config.Cmd}}')" = \
             '["/srv/inkplate/server/container_entrypoint.py"]'
-          docker run --rm inkplate10-weather-cal:ci geckodriver --version
-          docker run --rm inkplate10-weather-cal:ci firefox --version
-          docker run --rm inkplate10-weather-cal:ci python3 -m py_compile \
+          test "$(docker run --rm "$IMAGE" \
+            python3 -c \
+            'import json; print(json.load(open(".version.json"))["revision"])')" = \
+            "$(git rev-parse --short HEAD)"
+          test "$(docker image inspect "$IMAGE" \
+            --format '{{index .Config.Labels "org.opencontainers.image.variant"}}')" = \
+            "pillow"
+          docker run --rm "$IMAGE" python3 -m py_compile \
             server/server.py \
+            server/server_status.py \
             server/web.py \
             server/web_server.py \
             server/mqtt_diagnostics_server.py \
@@ -69,17 +87,31 @@ jobs:
             server/configuration.py \
             server/artifacts.py \
             server/output_profiles.py \
+            server/pillow_renderer.py \
             server/renderers.py \
             server/mqtt_diagnostics.py \
             server/mqtt_publisher.py \
             server/utils.py \
-            server/weather/openweathermapv4/openweathermapv4.py \
-            server/views/page.py \
-            server/views/calendar.py
-          docker run --rm inkplate10-weather-cal:ci \
+            server/weather/openweathermapv4/openweathermapv4.py
+          docker run --rm "$IMAGE" \
             python3 -m unittest discover -s server/tests -v
+          if docker run --rm "$IMAGE" python3 -c 'import airium, selenium'; then
+            echo "Image unexpectedly contains removed browser dependencies" >&2
+            exit 1
+          fi
+          docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
+            'from renderers import build_renderer; build_renderer("pillow")'
+          if output="$(docker run --rm -e PYTHONPATH=server "$IMAGE" python3 -c \
+            'from renderers import build_renderer; build_renderer("firefox")' \
+            2>&1)"; then
+            echo "Firefox renderer unexpectedly available" >&2
+            exit 1
+          fi
+          echo "$output" | grep -q "removed in v4"
 
       - name: Smoke test Gunicorn web service
+        env:
+          IMAGE: inkplate10-weather-cal:ci
         run: |
           mkdir -p "$RUNNER_TEMP/inkplate-data"
           cat > "$RUNNER_TEMP/inkplate-config.yaml" <<'EOF'
@@ -122,13 +154,19 @@ jobs:
               },
           }
           (root / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
+          (root / "server-status.json").write_text(json.dumps({
+              "schema_version": "1.0",
+              "updated_at": "2026-06-09T00:00:00+00:00",
+              "producer": {"state": "ready"},
+              "readiness": {},
+          }), encoding="utf-8")
           PY
           docker run --rm -d --name inkplate-web-ci \
             -p 18080:8080 \
             -e INKPLATE_CONFIG_FILE=/config.yaml \
             -v "$RUNNER_TEMP/inkplate-config.yaml:/config.yaml:ro" \
             -v "$RUNNER_TEMP/inkplate-data:/srv/inkplate/server/data:ro" \
-            inkplate10-weather-cal:ci \
+            "$IMAGE" \
             python3 server/web_server.py
           trap 'docker rm -f inkplate-web-ci >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
@@ -140,5 +178,7 @@ jobs:
           curl --fail http://127.0.0.1:18080/api/v1/health
           curl --fail http://127.0.0.1:18080/api/v1/ready
           curl --fail http://127.0.0.1:18080/api/v1/weather
+          curl --fail http://127.0.0.1:18080/api/v1/status
+          curl --fail http://127.0.0.1:18080/status
           curl --fail http://127.0.0.1:18080/outputs/inkplate10-portrait/calendar.png
           curl --fail http://127.0.0.1:18080/calendar.png

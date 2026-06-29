@@ -19,8 +19,6 @@
 #define CalendarYrToTm(Y) ((Y) - 1970)
 // The number of seconds to sleep if RTC not configured correctly.
 #define DEEP_SLEEP_FALLBACK_SECONDS 120
-// set the log verbosity
-#define LOG_LEVEL LOG_DEBUG
 // log message entry history size
 #define LOG_QUEUE_MAX_ENTRIES 10
 // log message maximum length

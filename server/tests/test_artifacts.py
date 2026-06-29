@@ -15,6 +15,56 @@ from output_profiles import DEFAULT_OUTPUT_PROFILE, OutputProfile
 
 
 class ArtifactStoreTests(unittest.TestCase):
+    def test_appends_bounded_recent_diagnostics_atomically(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            for index in range(4):
+                store.append_diagnostic(
+                    {
+                        "received_at": f"2026-06-25T12:0{index}:00+00:00",
+                        "topic": "inkplate/diagnostics",
+                        "message": f"message {index}",
+                        "truncated": False,
+                    },
+                    limit=3,
+                )
+
+            artifact = store.read_diagnostic()
+            self.assertEqual(artifact["schema_version"], "1.0")
+            self.assertEqual(
+                [item["message"] for item in artifact["diagnostics"]],
+                ["message 1", "message 2", "message 3"],
+            )
+
+    def test_migrates_single_diagnostic_artifact_to_history(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            store = ArtifactStore(temporary_dir)
+            store.write_diagnostic(
+                {
+                    "received_at": "2026-06-25T12:00:00+00:00",
+                    "topic": "inkplate/diagnostics",
+                    "message": "old",
+                    "truncated": False,
+                }
+            )
+
+            store.append_diagnostic(
+                {
+                    "received_at": "2026-06-25T12:01:00+00:00",
+                    "topic": "inkplate/diagnostics",
+                    "message": "new",
+                    "truncated": False,
+                }
+            )
+
+            self.assertEqual(
+                [
+                    item["message"]
+                    for item in store.read_diagnostic()["diagnostics"]
+                ],
+                ["old", "new"],
+            )
+
     def test_writes_snapshot_and_output_paths_under_root(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             store = ArtifactStore(temporary_dir)
@@ -35,7 +85,7 @@ class ArtifactStoreTests(unittest.TestCase):
             profiles = {
                 DEFAULT_OUTPUT_PROFILE: OutputProfile(
                     DEFAULT_OUTPUT_PROFILE,
-                    "firefox",
+                    "pillow",
                     825,
                     1200,
                 )
@@ -87,7 +137,7 @@ class ArtifactStoreTests(unittest.TestCase):
             snapshot.to_payload.return_value = {"value": "old"}
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )
@@ -116,7 +166,7 @@ class ArtifactStoreTests(unittest.TestCase):
             store = ArtifactStore(temporary_dir)
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )
@@ -149,7 +199,13 @@ class ArtifactStoreTests(unittest.TestCase):
                 },
             )
 
-            self.assertTrue(store.producer_cycle_complete(profiles))
+            with mock.patch.object(
+                store,
+                "file_sha256",
+                wraps=store.file_sha256,
+            ) as file_sha256:
+                self.assertTrue(store.producer_cycle_complete(profiles))
+            self.assertEqual(file_sha256.call_count, 2)
 
             ready = json.loads(store.ready_path.read_text(encoding="utf-8"))
             self.assertEqual(
@@ -166,7 +222,7 @@ class ArtifactStoreTests(unittest.TestCase):
             store = ArtifactStore(temporary_dir)
             profile = OutputProfile(
                 DEFAULT_OUTPUT_PROFILE,
-                "firefox",
+                "pillow",
                 825,
                 1200,
             )

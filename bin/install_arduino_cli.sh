@@ -3,6 +3,7 @@ set -euo pipefail
 
 VERSION="${ARDUINO_CLI_VERSION:-1.3.1}"
 INSTALL_DIR="${ARDUINO_CLI_INSTALL_DIR:-.tools}"
+EXPECTED_SHA256="${ARDUINO_CLI_SHA256:-}"
 
 usage() {
   cat <<EOF
@@ -16,6 +17,7 @@ binary. Defaults:
 Environment overrides:
   ARDUINO_CLI_VERSION
   ARDUINO_CLI_INSTALL_DIR
+  ARDUINO_CLI_SHA256 (required when overriding VERSION)
 EOF
 }
 
@@ -45,9 +47,38 @@ case "$os" in
 esac
 
 case "$arch" in
-  x86_64|amd64) arch_name="64bit" ;;
-  aarch64|arm64) arch_name="ARM64" ;;
-  armv7l|armv6l) arch_name="ARMv7" ;;
+  x86_64|amd64)
+    arch_name="64bit"
+    if [ "$os_name" = "Linux" ]; then
+      archive_sha256="376428d7d45be640c00812a71612e1742edc2f5f9ee3742a2d6da7870e079588"
+    else
+      archive_sha256="a0ca73f7e599d33a532fb2b1f8af9260541d990a684988bf8208abb42be83ced"
+    fi
+    ;;
+  aarch64|arm64)
+    arch_name="ARM64"
+    if [ "$os_name" = "Linux" ]; then
+      archive_sha256="cf4f668b1add7a20310d79e83a1f3eb148031f95e5673d9171c65f5e9a126a94"
+    else
+      archive_sha256="723f8ddaf4875e87a20380c88c15ff9d55916c3c80cb432f1f980ea32cec2341"
+    fi
+    ;;
+  armv7l)
+    [ "$os_name" = "Linux" ] || {
+      echo "Unsupported OS/architecture combination: $os/$arch" >&2
+      exit 1
+    }
+    arch_name="ARMv7"
+    archive_sha256="5bede31df9e4c3456c851207079fea0852e9190e71841196e489b1b31184e05d"
+    ;;
+  armv6l)
+    [ "$os_name" = "Linux" ] || {
+      echo "Unsupported OS/architecture combination: $os/$arch" >&2
+      exit 1
+    }
+    arch_name="ARMv6"
+    archive_sha256="689060b93711d5bebf32bf5f64ce6e6718d3c5715985b351c8736a8f39d6bfa5"
+    ;;
   *)
     echo "Unsupported architecture: $arch" >&2
     exit 1
@@ -68,7 +99,24 @@ trap cleanup EXIT
 echo "Downloading Arduino CLI ${VERSION} from:"
 echo "  $url"
 
+if [ "$VERSION" != "1.3.1" ] && [ -z "$EXPECTED_SHA256" ]; then
+  echo "ARDUINO_CLI_SHA256 is required when overriding VERSION." >&2
+  exit 1
+fi
+if [ -n "$EXPECTED_SHA256" ]; then
+  archive_sha256="$EXPECTED_SHA256"
+fi
 curl -fsSL "$url" -o "$tmpdir/$archive"
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_sha256=$(sha256sum "$tmpdir/$archive" | awk '{print $1}')
+else
+  actual_sha256=$(shasum -a 256 "$tmpdir/$archive" | awk '{print $1}')
+fi
+if [ "$actual_sha256" != "$archive_sha256" ]; then
+  echo "Checksum verification failed for $archive" >&2
+  exit 1
+fi
+echo "Checksum verified: $archive"
 tar -xzf "$tmpdir/$archive" -C "$tmpdir"
 install -m 0755 "$tmpdir/arduino-cli" "$DEST_DIR/arduino-cli"
 

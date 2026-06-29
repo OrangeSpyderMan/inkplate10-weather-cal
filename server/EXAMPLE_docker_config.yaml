@@ -1,6 +1,7 @@
 ---
 server:
   enabled: true
+  host: "0.0.0.0"
   port: 8080
   # Keep true for Docker and for the browser/PWA viewer at /app.
   # One-shot mode exits and would be restarted repeatedly by Compose.
@@ -34,10 +35,12 @@ outputs:
   profiles:
     inkplate10-portrait:
       enabled: true
-      renderer: firefox
+      renderer: pillow
       width: 825
       height: 1200
       filename: calendar.png
+      # options:
+      #   supersample: 2
 mqtt:
   weather:
     # Optional weather data publisher for other local clients.
@@ -48,7 +51,7 @@ mqtt:
     retain: true
     qos: 0
   diagnostics:
-    # Optional listener for diagnostic messages published by the Inkplate.
+    # Optional listener for diagnostics from the Inkplate and display clients.
     enabled: false
     broker: host.docker.internal
     port: 1883

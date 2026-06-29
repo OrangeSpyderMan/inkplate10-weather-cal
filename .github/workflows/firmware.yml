@@ -8,6 +8,8 @@ on:
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
       - 'bin/generate_firmware_version.py'
+      - 'bin/generate_version_manifest.py'
+      - 'server/build_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   pull_request:
@@ -17,6 +19,8 @@ on:
       - 'bin/install_arduino_cli.sh'
       - 'bin/generate_firmware_config.py'
       - 'bin/generate_firmware_version.py'
+      - 'bin/generate_version_manifest.py'
+      - 'server/build_version.py'
       - 'firmware-config.example.yaml'
       - '.github/workflows/firmware.yml'
   release:
@@ -40,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
 
@@ -48,7 +52,7 @@ jobs:
         run: make firmware-install-cli
 
       - name: Cache Arduino packages and libraries
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: |
             ~/.arduino15
@@ -79,7 +83,7 @@ jobs:
           cp build/arduino-sd/src.ino.partitions.bin firmware_binaries/inkplate10-partitions.bin
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: inkplate10-firmware
           path: firmware_binaries/*
@@ -94,7 +98,7 @@ jobs:
 
     steps:
       - name: Download firmware artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: inkplate10-firmware
           path: firmware_binaries

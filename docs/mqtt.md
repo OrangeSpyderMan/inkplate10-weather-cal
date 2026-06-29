@@ -3,7 +3,8 @@
 MQTT supports two independent features:
 
 - the server publishes normalized weather data for local clients
-- the Inkplate firmware publishes diagnostic logs for the server to record
+- the Inkplate firmware and companion display clients publish diagnostic logs
+  for the server to record
 
 Good MQTT consumers include:
 
@@ -45,6 +46,11 @@ Optional realtime-provider fields are included in the retained `/current`
 payload. Netatmo wind data uses `value`, `unit`, and optional `gust` and
 `direction`; rain data uses `value`, `unit`, and optional `last_hour` and
 `last_24_hours`.
+
+The same normalized measurements are also published on dedicated retained
+topics for clients that do not need the complete current-conditions payload.
+When a measurement is no longer available, the server clears its retained
+dedicated topic.
 
 Enable diagnostic publishing in the Inkplate configuration, either the SD-card
 `config.yaml` or the YAML passed to `make firmware-upload CONFIG=...`:
@@ -174,16 +180,42 @@ messages:
 
 ```text
 inkplate/weather-calendar
+inkplate/weather-calendar/generated_at
 inkplate/weather-calendar/current
 inkplate/weather-calendar/hourly
 inkplate/weather-calendar/status
+inkplate/weather-calendar/current/rain
+inkplate/weather-calendar/current/wind
+inkplate/weather-calendar/server/status
 ```
 
-Inkplate diagnostics use a separate, non-retained topic:
+Inkplate and companion-client diagnostics use the same separate, non-retained
+topic:
 
 ```text
 inkplate/weather-calendar/diagnostics
 ```
+
+The server diagnostic listener also stores the 10 most recent non-retained
+client messages in the shared artifact directory. They are exposed as
+`inkplate.recent_diagnostics` by `/api/v1/status` and displayed under
+**Inkplate client diagnostics** on `/status`, with receive times and MQTT
+topics. This is separate from the MQTT section describing the server's own
+weather/status publishing. Each stored message is capped at 4096 characters;
+a `truncated` flag indicates when the original payload was longer. Retained
+messages are ignored so a stale broker value cannot appear as newly received
+client diagnostics after server startup.
+
+Messages should identify their originating client in the text. The
+`weather-cal-micropython` clients use:
+
+```text
+<client-id> [<level>] <message>
+```
+
+Their retained operational status is published separately under
+`inkplate/weather-calendar/clients/<client-id>/status`; it is deliberately not
+written to the diagnostic log.
 
 ### `inkplate/weather-calendar`
 
@@ -245,6 +277,18 @@ Current conditions only. This is the simplest topic for character LCDs or
 single-screen microcontroller displays. For OpenWeatherMap v4 this includes the
 optional `alerts` object described above.
 
+### `inkplate/weather-calendar/generated_at`
+
+The retained snapshot generation time as a JSON string:
+
+```json
+"2026-06-04T09:00:00+00:00"
+```
+
+This duplicates the `generated_at` field in the full snapshot and status
+message so small clients can subscribe to the refresh time without parsing a
+larger payload. Dedicated measurement payloads retain their existing shapes.
+
 ### `inkplate/weather-calendar/hourly`
 
 Hourly forecast list. This is useful for displays that can show a short forecast
@@ -261,6 +305,58 @@ Metadata only:
   "units": "metric"
 }
 ```
+
+This existing topic remains weather-snapshot metadata. Operational server
+state is published separately at
+`inkplate/weather-calendar/server/status`.
+
+### `inkplate/weather-calendar/current/rain`
+
+Current rain measurement only. A live Netatmo value uses an instantaneous
+rate; weather-provider fallback based on the previous hour is marked as an
+average:
+
+```json
+{
+  "unit": "mm",
+  "value": 0.4,
+  "last_hour": 1.2,
+  "rate_unit": "mm/h",
+  "rate_basis": "instantaneous",
+  "source": "netatmo",
+  "live": true
+}
+```
+
+### `inkplate/weather-calendar/current/wind`
+
+Current wind measurement only:
+
+```json
+{
+  "unit": "kmh",
+  "value": 18,
+  "gust": 27,
+  "direction": 245,
+  "direction_cardinal": "WSW",
+  "source": "netatmo",
+  "live": true
+}
+```
+
+`direction` follows meteorological convention and identifies where the wind
+comes from.
+
+### `inkplate/weather-calendar/server/status`
+
+Retained operational state published when the producer starts a refresh,
+completes, fails, or schedules its next refresh. The schema includes runtime
+metadata, provider names, artifact readiness, refresh timestamps, MQTT state,
+and the latest sanitized producer error. It does not contain API keys, tokens,
+broker credentials, or tracebacks. The canonical HTTP representation is
+available at `/api/v1/status`. Timestamps are ISO 8601 values with explicit UTC
+offsets; the browser dashboard converts them to its local timezone and labels
+that timezone.
 
 ## Icons
 
