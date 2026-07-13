@@ -44,6 +44,9 @@ BRIDGE="vmbr0"
 IPV4_MODE="dhcp"
 IPV4_ADDRESS=""
 IPV4_GATEWAY=""
+IPV6_MODE="none"
+IPV6_ADDRESS=""
+IPV6_GATEWAY=""
 HOSTNAME="inkplate-weather"
 DISK_GB="$DEFAULT_ROOT_DISK_GB"
 DATA_DISK_GB="$DEFAULT_DATA_DISK_GB"
@@ -72,6 +75,8 @@ Usage: deploy_proxmox_oci [OPTIONS]
   --bridge BRIDGE              Proxmox Linux bridge (default: vmbr0)
   --ip dhcp|ADDRESS/PREFIX     IPv4 configuration (default: dhcp)
   --gateway ADDRESS            IPv4 gateway for a static address
+  --ip6 none|ADDRESS/PREFIX    IPv6 configuration (default: none)
+  --gateway6 ADDRESS           IPv6 gateway for a static address
   --hostname NAME              Container hostname
   --disk-gb SIZE               Root disk size in GiB (default: 1)
   --data-disk-gb SIZE          Data volume size in GiB (default: 1)
@@ -162,6 +167,16 @@ parse_args() {
         shift 2
         ;;
       --gateway) need_value "$1" "${2:-}"; IPV4_GATEWAY="$2"; shift 2 ;;
+      --ip6)
+        need_value "$1" "${2:-}"
+        if [[ "$2" == none ]]; then
+          IPV6_MODE=none; IPV6_ADDRESS=""
+        else
+          IPV6_MODE=static; IPV6_ADDRESS="$2"
+        fi
+        shift 2
+        ;;
+      --gateway6) need_value "$1" "${2:-}"; IPV6_GATEWAY="$2"; shift 2 ;;
       --hostname) need_value "$1" "${2:-}"; HOSTNAME="$2"; shift 2 ;;
       --disk-gb) need_value "$1" "${2:-}"; DISK_GB="$2"; shift 2 ;;
       --data-disk-gb) need_value "$1" "${2:-}"; DATA_DISK_GB="$2"; shift 2 ;;
@@ -513,6 +528,15 @@ configure_deployment() {
       IPV4_GATEWAY="$(prompt_text "IPv4 gateway (optional)" \
         "$IPV4_GATEWAY" 0 proxmox_oci_ipv4_gateway)"
     fi
+    IPV6_MODE="$(prompt_choice "IPv6 configuration" "$IPV6_MODE" proxmox_oci_ipv6_mode \
+      none "Do not configure a static IPv6 address" \
+      static "Use a fixed IPv6 address")"
+    if [[ "$IPV6_MODE" == static ]]; then
+      IPV6_ADDRESS="$(prompt_text "Static IPv6 address (CIDR, e.g. 2001:db8::184/64)" \
+        "$IPV6_ADDRESS" 1 proxmox_oci_ipv6_address)"
+      IPV6_GATEWAY="$(prompt_text "IPv6 gateway (optional)" \
+        "$IPV6_GATEWAY" 0 proxmox_oci_ipv6_gateway)"
+    fi
     CORES="$(prompt_int "CPU cores" "$CORES" 1 128 proxmox_oci_cores)"
     MEMORY_MB="$(prompt_int "Memory (MiB)" "$MEMORY_MB" "$MIN_MEMORY_MB" 1048576 proxmox_oci_memory)"
     DISK_GB="$(prompt_int "Root disk (GiB)" "$DISK_GB" 1 1048576 proxmox_oci_disk_gb)"
@@ -562,6 +586,41 @@ validate_ipv4_cidr() {
   [[ "$prefix" =~ ^[0-9]+$ ]] && (( 10#$prefix <= 32 ))
 }
 
+validate_ipv6() {
+  local address="$1" left right part group count=0 groups=()
+  [[ "$address" == *:* && "$address" =~ ^[0-9A-Fa-f:]+$ ]] || return 1
+  [[ "$address" != *:::* ]] || return 1
+  if [[ "$address" == *::* ]]; then
+    left="${address%%::*}"
+    right="${address#*::}"
+    [[ "$right" != *::* ]] || return 1
+    for part in "$left" "$right"; do
+      [[ -n "$part" ]] || continue
+      IFS=: read -r -a groups <<<"$part"
+      for group in "${groups[@]}"; do
+        [[ "$group" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+        ((count += 1))
+      done
+    done
+    (( count < 8 ))
+    return
+  fi
+  IFS=: read -r -a groups <<<"$address"
+  ((${#groups[@]} == 8)) || return 1
+  for group in "${groups[@]}"; do
+    [[ "$group" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+  done
+}
+
+validate_ipv6_cidr() {
+  local value="$1" address prefix
+  [[ "$value" == */* ]] || return 1
+  address="${value%/*}"
+  prefix="${value##*/}"
+  validate_ipv6 "$address" || return 1
+  [[ "$prefix" =~ ^[0-9]+$ ]] && (( 10#$prefix <= 128 ))
+}
+
 validate_deployment() {
   [[ "$SETUP" =~ ^(default|advanced)$ ]] || die "--setup must be default or advanced"
   validate_hostname "$HOSTNAME" || die "invalid DNS hostname: $HOSTNAME"
@@ -578,6 +637,15 @@ validate_deployment() {
   elif [[ -n "$IPV4_ADDRESS" || -n "$IPV4_GATEWAY" ]]; then
     die "a static IPv4 address or gateway requires static IPv4 configuration"
   fi
+  [[ "$IPV6_MODE" =~ ^(none|static)$ ]] || die "IPv6 configuration must be none or static"
+  if [[ "$IPV6_MODE" == static ]]; then
+    validate_ipv6_cidr "$IPV6_ADDRESS" || \
+      die "static IPv6 address must use valid CIDR notation (for example 2001:db8::184/64)"
+    [[ -z "$IPV6_GATEWAY" ]] || validate_ipv6 "$IPV6_GATEWAY" || \
+      die "IPv6 gateway must be a valid address"
+  elif [[ -n "$IPV6_ADDRESS" || -n "$IPV6_GATEWAY" ]]; then
+    die "a static IPv6 address or gateway requires static IPv6 configuration"
+  fi
   validate_number "--disk-gb" "$DISK_GB" 1
   validate_number "--data-disk-gb" "$DATA_DISK_GB" 1
   validate_number "--config-disk-gb" "$CONFIG_DISK_GB" 1
@@ -593,6 +661,11 @@ validate_deployment() {
     check_pass "Network: $BRIDGE, static IPv4 $IPV4_ADDRESS${IPV4_GATEWAY:+ via $IPV4_GATEWAY}"
   else
     check_pass "Network: $BRIDGE, IPv4 DHCP"
+  fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    check_pass "Network: $BRIDGE, static IPv6 $IPV6_ADDRESS${IPV6_GATEWAY:+ via $IPV6_GATEWAY}"
+  else
+    check_skip "Static IPv6 addressing"
   fi
   check_pass "Resource values: ${CORES} vCPU, ${MEMORY_MB} MiB RAM, ${DISK_GB} GiB root disk"
 }
@@ -924,6 +997,11 @@ show_plan() {
   else
     network_label="IPv4 DHCP"
   fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    network_label+="; static IPv6 ${IPV6_ADDRESS}${IPV6_GATEWAY:+ via $IPV6_GATEWAY}"
+  else
+    network_label+="; no static IPv6"
+  fi
   cat <<EOF
 
 Deployment plan
@@ -952,6 +1030,10 @@ network_config() {
     [[ -z "$IPV4_GATEWAY" ]] || config+=",gw=$IPV4_GATEWAY"
   else
     config+="dhcp"
+  fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    config+=",ip6=$IPV6_ADDRESS"
+    [[ -z "$IPV6_GATEWAY" ]] || config+=",gw6=$IPV6_GATEWAY"
   fi
   printf '%s,type=veth' "$config"
 }

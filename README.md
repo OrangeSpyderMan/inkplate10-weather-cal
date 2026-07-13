@@ -289,12 +289,13 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate
 
 It provides a `whiptail` TUI with default and advanced setup modes, pulls a
 published GHCR image, prompts for Proxmox image/root/config/data storage, and
-offers static IPv4 addressing in advanced setup while retaining DHCP as the
-default. It keeps secrets in a protected read-only config volume and only
-reports success after the new container's readiness endpoint responds and its
-process identity and config protection pass runtime checks. Run the same flow
-remotely over SSH by opening a root shell on the PVE host and running the
-one-liner there.
+offers static IPv4 and IPv6 addressing in advanced setup while retaining IPv4
+DHCP as the default. PVE manages the configured static addresses, gateways, and
+resolver settings for the application container. It keeps secrets in a protected
+read-only config volume and only reports success after the new container's
+readiness endpoint responds and its process identity and config protection pass
+runtime checks. Run the same flow remotely over SSH by opening a root shell on
+the PVE host and running the one-liner there.
 
 The URL selects the complete standalone installer and `--tag` selects only the
 OCI image. Test the `next` installer with the `next` image using:

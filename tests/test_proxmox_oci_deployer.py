@@ -216,6 +216,25 @@ printf 'continued\\n'
         self.assertNotEqual(invalid_gateway.returncode, 0)
         self.assertIn("gateway must be a valid address", invalid_gateway.stderr)
 
+    def test_validates_static_ipv6_configuration_before_container_creation(self):
+        base = (
+            f"source {shlex.quote(str(DEPLOYER))}; DRY_RUN=1; SETUP=advanced; "
+            "IPV6_MODE=static; IPV6_ADDRESS=$1; IPV6_GATEWAY=$2; validate_deployment"
+        )
+        valid = shell(base, "2001:db8::184/64", "fe80::1")
+        invalid_address = shell(base, "2001:db8::1::184/64", "fe80::1")
+        invalid_prefix = shell(base, "2001:db8::184/129", "fe80::1")
+        invalid_gateway = shell(base, "2001:db8::184/64", "fe80::xyz")
+
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertIn("static IPv6 2001:db8::184/64 via fe80::1", valid.stdout)
+        self.assertNotEqual(invalid_address.returncode, 0)
+        self.assertIn("valid CIDR notation", invalid_address.stderr)
+        self.assertNotEqual(invalid_prefix.returncode, 0)
+        self.assertIn("valid CIDR notation", invalid_prefix.stderr)
+        self.assertNotEqual(invalid_gateway.returncode, 0)
+        self.assertIn("IPv6 gateway must be a valid address", invalid_gateway.stderr)
+
     def test_resolves_the_host_platform_digest_from_a_multiarch_index(self):
         amd64 = "sha256:" + "a" * 64
         arm64 = "sha256:" + "b" * 64
@@ -311,7 +330,7 @@ create_container template-store:vztmpl/image.tar sha256:{'a' * 64}
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pct create 123", generated)
         self.assertIn("name=eth0,bridge=vmbr0,ip=dhcp,type=veth", generated)
-        self.assertNotIn("ip6=auto", generated)
+        self.assertNotIn("ip6=", generated)
         self.assertIn("data-store:1,mp=/srv/inkplate/server/data,backup=1", generated)
         self.assertIn("config-store:1,mp=/srv/inkplate/server/config,backup=1", generated)
 
@@ -330,6 +349,26 @@ create_container template-store:vztmpl/image.tar sha256:{'a' * 64}
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
             "name=eth0,bridge=vmbr0,ip=192.168.1.184/24,gw=192.168.1.1,type=veth",
+            generated,
+        )
+
+    def test_container_command_supports_static_dual_stack_networking(self):
+        command = f"""
+source {shlex.quote(str(DEPLOYER))}
+run() {{ printf '%q ' "$@"; printf '\n'; }}
+CTID=123; HOSTNAME=inkplate-weather; ROOT_STORAGE=root-store; DISK_GB=1
+MEMORY_MB=256; CORES=1; BRIDGE=vmbr0; TAG=next; SEPARATE_MOUNTS=0
+IPV4_MODE=static; IPV4_ADDRESS=192.168.1.184/24; IPV4_GATEWAY=192.168.1.1
+IPV6_MODE=static; IPV6_ADDRESS=2001:db8::184/64; IPV6_GATEWAY=fe80::1
+create_container template-store:vztmpl/image.tar sha256:{'a' * 64}
+"""
+        result = shell(command)
+        generated = result.stdout.replace("\\,", ",")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "name=eth0,bridge=vmbr0,ip=192.168.1.184/24,gw=192.168.1.1,"
+            "ip6=2001:db8::184/64,gw6=fe80::1,type=veth",
             generated,
         )
 

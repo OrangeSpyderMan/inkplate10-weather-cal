@@ -862,8 +862,8 @@ The standalone deployer follows the operational patterns documented by the
   host command, PVE version, architecture, dependency, terminal/UI, storage,
   network, CTID, registry, digest, and image-contract check
 - `whiptail` menus and protected password prompts, with `--no-tui` fallback
-- an unprivileged, DHCP-enabled, on-boot LXC by default, with static IPv4 in
-  advanced setup
+- an unprivileged, DHCP-enabled, on-boot LXC by default, with static IPv4 and
+  IPv6 in advanced setup
 - a final deployment summary and explicit confirmation
 - cleanup of a newly created CT when bootstrap or readiness fails; use
   `--keep-failed` to retain it for diagnosis
@@ -921,11 +921,16 @@ portable `STORAGE_ID:SIZE_IN_GiB` allocation form and can be grown later with
 normal Proxmox volume controls. The application binds to the IPv6 wildcard
 `::`, so the normal Linux dual-stack socket default accepts both IPv6 and IPv4
 connections. PVE automatically enables host-managed networking for the OCI
-application container. DHCP remains the default; advanced setup can instead
-configure a static IPv4 address in CIDR notation and an optional gateway. The
-deployer deliberately does not request guest-side IPv6 SLAAC (`ip6=auto`), which
-is incompatible with host-managed OCI networking. IPv6 availability still
-depends on the host and local network providing a routable address.
+application container. DHCP remains the IPv4 default; advanced setup can
+instead configure static IPv4 and IPv6 addresses in CIDR notation. Static IPv6
+is not configured by default. PVE's host-managed OCI networking installs the
+static address and optional `gw6` directly in the LXC network configuration;
+SLAAC (`ip6=auto`) is not supported in this mode. Supply an IPv6 gateway when
+the container needs a default IPv6 route, or leave it blank for an on-link-only
+configuration. PVE supplies the container resolver configuration from the host
+when no nameserver is explicitly configured, so the application container does
+not need its own RA or RDNSS client. IPv6 availability still depends on the host
+and local network providing a routable prefix.
 
 Advanced and command-line installs may lower RAM to 128 MiB. The 256 MiB
 recommendation remains because the OCI entry point supervises the producer,
@@ -939,13 +944,14 @@ pinned image reference and digest for provenance. The visual assets are loaded
 from this repository; deployment does not depend on them being available.
 
 The advanced flow additionally prompts for CTID, hostname, bridge, IPv4 DHCP or
-static addressing, cores, memory, and disk sizes. Static addresses must include
-their prefix, for example `192.168.1.184/24`; the gateway is optional. These
-network values can also be supplied with `--ip ADDRESS/PREFIX` and `--gateway
-ADDRESS` (`--ip dhcp` is the default). Run `./bin/deploy_proxmox_oci --help` for
-the complete option list. Repeatable installs can reuse the existing JSON
-answers format. Copy the example, replace every placeholder secret, and
-restrict it before use:
+static addressing, optional static IPv6, cores, memory, and disk sizes. Static
+addresses must include their prefix, for example `192.168.1.184/24` and
+`2001:db8::184/64`. Gateways are optional. These network values can also be
+supplied with `--ip ADDRESS/PREFIX`, `--gateway ADDRESS`, `--ip6
+ADDRESS/PREFIX`, and `--gateway6 ADDRESS`; `--ip dhcp` and `--ip6 none` are the
+defaults. Run `./bin/deploy_proxmox_oci --help` for the complete option list.
+Repeatable installs can reuse the existing JSON answers format. Copy the
+example, replace every placeholder secret, and restrict it before use:
 
 ```bash
 sudo install -m 0600 bin/install_server.answers.example.json /root/inkplate-answers.json
@@ -973,7 +979,10 @@ JSON answers file and select advanced setup:
   "proxmox_oci_setup": "advanced",
   "proxmox_oci_ipv4_mode": "static",
   "proxmox_oci_ipv4_address": "192.168.1.184/24",
-  "proxmox_oci_ipv4_gateway": "192.168.1.1"
+  "proxmox_oci_ipv4_gateway": "192.168.1.1",
+  "proxmox_oci_ipv6_mode": "static",
+  "proxmox_oci_ipv6_address": "2001:db8::184/64",
+  "proxmox_oci_ipv6_gateway": ""
 }
 ```
 
