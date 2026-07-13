@@ -920,10 +920,12 @@ image: 1 vCPU, 256 MiB RAM, 256 MiB swap, and 1 GiB each for the root, generated
 data, and read-only configuration volumes. The storage-backed volumes use PVE's
 portable `STORAGE_ID:SIZE_IN_GiB` allocation form and can be grown later with
 normal Proxmox volume controls. The application binds to the IPv6 wildcard
-`::`, while the container requests both IPv4 DHCP and IPv6 SLAAC (`ip6=auto`).
-On the normal Linux dual-stack socket default, the listener accepts both IPv6
-and IPv4 connections; an IPv6 network still needs router advertisements to
-provide a routable address.
+`::`, so the normal Linux dual-stack socket default accepts both IPv6 and IPv4
+connections. PVE automatically enables host-managed networking for the OCI
+application container, so the deployer deliberately does not request guest-side
+IPv6 SLAAC (`ip6=auto`), which is incompatible with that mode. Address assignment
+is left to PVE; IPv6 availability still depends on the host and local network
+providing a routable address.
 
 Advanced and command-line installs may lower RAM to 128 MiB. The 256 MiB
 recommendation remains because the OCI entry point supervises the producer,

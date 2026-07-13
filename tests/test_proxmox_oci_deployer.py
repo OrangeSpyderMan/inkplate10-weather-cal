@@ -521,9 +521,10 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertEqual(command[command.index("--onboot") + 1], "1")
         self.assertEqual(command[command.index("--swap") + 1], "256")
         self.assertIn(
-            "name=eth0,bridge=vmbr0,ip=dhcp,ip6=auto,type=veth",
+            "name=eth0,bridge=vmbr0,ip=dhcp,type=veth",
             command,
         )
+        self.assertNotIn("ip6=auto", " ".join(command))
         self.assertIn(
             "data-store:4,mp=/srv/inkplate/server/data",
             [item.removesuffix(",backup=1") for item in command],

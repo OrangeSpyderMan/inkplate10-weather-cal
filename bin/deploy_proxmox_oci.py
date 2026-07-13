@@ -960,7 +960,7 @@ def create_container(ctid, archive_volume, args, plan, tag, digest):
         "--cores", str(args.cores),
         "--swap", str(DEFAULT_SWAP_MB),
         "--net0",
-        f"name=eth0,bridge={args.bridge},ip=dhcp,ip6=auto,type=veth",
+        f"name=eth0,bridge={args.bridge},ip=dhcp,type=veth",
         "--unprivileged", "1",
         "--onboot", "1",
         "--description", container_description(tag, digest),
@@ -1121,7 +1121,7 @@ def show_plan(args, ctid, tag, digest, plan):
     print(f"Digest: {digest}")
     print(f"Platform: linux/{host_oci_architecture()}")
     print(f"Container: {ctid} ({args.hostname}), unprivileged, on-boot")
-    print(f"Network: {args.bridge}, IPv4 DHCP, IPv6 SLAAC")
+    print(f"Network: {args.bridge}, IPv4 DHCP, PVE host-managed OCI addressing")
     core_label = "core" if args.cores == 1 else "cores"
     print(f"Resources: {args.cores} {core_label}, {args.memory} MiB RAM")
     print(f"OCI cache: {args.template_storage}")
