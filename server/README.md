@@ -925,6 +925,11 @@ On the normal Linux dual-stack socket default, the listener accepts both IPv6
 and IPv4 connections; an IPv6 network still needs router advertisements to
 provide a routable address.
 
+Advanced and command-line installs may lower RAM to 128 MiB. The 256 MiB
+recommendation remains because the OCI entry point supervises the producer,
+diagnostics process, and Gunicorn master/worker processes together; use the
+128 MiB setting only where occasional swap use during rendering is acceptable.
+
 The PVE container notes use the same general presentation as Community Scripts:
 the Inkplate application icon and title, direct links to the GitHub repository,
 documentation, published container package and issue tracker, followed by the

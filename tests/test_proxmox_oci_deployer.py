@@ -461,6 +461,24 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertEqual(args.data_disk_gb, 1)
         self.assertEqual(args.config_disk_gb, 1)
 
+    def test_memory_floor_is_lower_than_recommended_default(self):
+        args = types.SimpleNamespace(
+            ctid=None,
+            disk_gb=1,
+            data_disk_gb=1,
+            config_disk_gb=1,
+            memory=128,
+            cores=1,
+            data_storage=None,
+            config_storage=None,
+            separate_mounts=False,
+        )
+
+        deployer.validate_deployment_arguments(args)
+        args.memory = 127
+        with self.assertRaisesRegex(SystemExit, "at least 128 MiB"):
+            deployer.validate_deployment_arguments(args)
+
     @mock.patch.object(deployer.install_server, "collect_answers", return_value={})
     def test_oci_configuration_defaults_to_ipv6_wildcard(self, collect):
         deployer.collect_configuration_answers(mock.Mock())

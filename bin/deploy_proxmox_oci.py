@@ -47,6 +47,7 @@ DEFAULT_ROOT_DISK_GB = 1
 DEFAULT_DATA_DISK_GB = 1
 DEFAULT_CONFIG_DISK_GB = 1
 DEFAULT_MEMORY_MB = 256
+MIN_MEMORY_MB = 128
 DEFAULT_CORES = 1
 DEFAULT_SWAP_MB = 256
 PROJECT_URL = "https://github.com/OrangeSpyderMan/inkplate10-weather-cal"
@@ -581,7 +582,10 @@ def configure_deployment_args(args, setup, ui, root_options, template_options):
         "proxmox_oci_bridge",
     )
     args.cores = ui.integer("CPU cores", args.cores, 1, 128, "proxmox_oci_cores")
-    args.memory = ui.integer("Memory (MiB)", args.memory, 256, 1048576, "proxmox_oci_memory")
+    args.memory = ui.integer(
+        "Memory (MiB)", args.memory, MIN_MEMORY_MB, 1048576,
+        "proxmox_oci_memory",
+    )
     args.disk_gb = ui.integer("Root disk (GiB)", args.disk_gb, 1, 1048576, "proxmox_oci_disk_gb")
     if args.separate_mounts:
         args.data_disk_gb = ui.integer("Data disk (GiB)", args.data_disk_gb, 1, 1048576, "proxmox_oci_data_disk_gb")
@@ -598,8 +602,10 @@ def validate_deployment_arguments(args):
         raise SystemExit("ERROR: --data-disk-gb must be at least 1.")
     if args.config_disk_gb < 1:
         raise SystemExit("ERROR: --config-disk-gb must be at least 1.")
-    if args.memory < 256:
-        raise SystemExit("ERROR: --memory must be at least 256 MiB.")
+    if args.memory < MIN_MEMORY_MB:
+        raise SystemExit(
+            f"ERROR: --memory must be at least {MIN_MEMORY_MB} MiB."
+        )
     if args.cores < 1:
         raise SystemExit("ERROR: --cores must be positive.")
     if (args.data_storage or args.config_storage) and not args.separate_mounts:
