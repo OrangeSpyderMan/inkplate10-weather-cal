@@ -862,7 +862,8 @@ The standalone deployer follows the operational patterns documented by the
   host command, PVE version, architecture, dependency, terminal/UI, storage,
   network, CTID, registry, digest, and image-contract check
 - `whiptail` menus and protected password prompts, with `--no-tui` fallback
-- an unprivileged, DHCP-enabled, on-boot LXC by default
+- an unprivileged, DHCP-enabled, on-boot LXC by default, with static IPv4 in
+  advanced setup
 - a final deployment summary and explicit confirmation
 - cleanup of a newly created CT when bootstrap or readiness fails; use
   `--keep-failed` to retain it for diagnosis
@@ -920,10 +921,11 @@ portable `STORAGE_ID:SIZE_IN_GiB` allocation form and can be grown later with
 normal Proxmox volume controls. The application binds to the IPv6 wildcard
 `::`, so the normal Linux dual-stack socket default accepts both IPv6 and IPv4
 connections. PVE automatically enables host-managed networking for the OCI
-application container, so the deployer deliberately does not request guest-side
-IPv6 SLAAC (`ip6=auto`), which is incompatible with that mode. Address assignment
-is left to PVE; IPv6 availability still depends on the host and local network
-providing a routable address.
+application container. DHCP remains the default; advanced setup can instead
+configure a static IPv4 address in CIDR notation and an optional gateway. The
+deployer deliberately does not request guest-side IPv6 SLAAC (`ip6=auto`), which
+is incompatible with host-managed OCI networking. IPv6 availability still
+depends on the host and local network providing a routable address.
 
 Advanced and command-line installs may lower RAM to 128 MiB. The 256 MiB
 recommendation remains because the OCI entry point supervises the producer,
@@ -936,11 +938,14 @@ documentation, published container package and issue tracker, followed by the
 pinned image reference and digest for provenance. The visual assets are loaded
 from this repository; deployment does not depend on them being available.
 
-The advanced flow additionally prompts for CTID, hostname, bridge, cores,
-memory, and disk sizes. Every value can also be provided on the command line;
-run `./bin/deploy_proxmox_oci --help` for the complete list. Repeatable installs
-can reuse the existing JSON answers format. Copy the example, replace every
-placeholder secret, and restrict it before use:
+The advanced flow additionally prompts for CTID, hostname, bridge, IPv4 DHCP or
+static addressing, cores, memory, and disk sizes. Static addresses must include
+their prefix, for example `192.168.1.184/24`; the gateway is optional. These
+network values can also be supplied with `--ip ADDRESS/PREFIX` and `--gateway
+ADDRESS` (`--ip dhcp` is the default). Run `./bin/deploy_proxmox_oci --help` for
+the complete option list. Repeatable installs can reuse the existing JSON
+answers format. Copy the example, replace every placeholder secret, and
+restrict it before use:
 
 ```bash
 sudo install -m 0600 bin/install_server.answers.example.json /root/inkplate-answers.json
@@ -959,6 +964,18 @@ sudo ./bin/deploy_proxmox_oci \
 
 The deployer refuses an answers file readable by group or other users because
 it contains API credentials and may contain Netatmo tokens.
+
+For unattended static addressing, add these deployment-specific keys to that
+JSON answers file and select advanced setup:
+
+```json
+{
+  "proxmox_oci_setup": "advanced",
+  "proxmox_oci_ipv4_mode": "static",
+  "proxmox_oci_ipv4_address": "192.168.1.184/24",
+  "proxmox_oci_ipv4_gateway": "192.168.1.1"
+}
+```
 
 This path is intentionally fresh-install-only. It refuses an existing CTID and
 does not yet implement in-place OCI image updates. Use a release tag in the raw

@@ -41,6 +41,9 @@ SEPARATE_MOUNTS=""
 DATA_STORAGE=""
 CONFIG_STORAGE=""
 BRIDGE="vmbr0"
+IPV4_MODE="dhcp"
+IPV4_ADDRESS=""
+IPV4_GATEWAY=""
 HOSTNAME="inkplate-weather"
 DISK_GB="$DEFAULT_ROOT_DISK_GB"
 DATA_DISK_GB="$DEFAULT_DATA_DISK_GB"
@@ -67,6 +70,8 @@ Usage: deploy_proxmox_oci [OPTIONS]
   --data-storage STORAGE       Storage for generated application data
   --config-storage STORAGE     Storage for configuration and secrets
   --bridge BRIDGE              Proxmox Linux bridge (default: vmbr0)
+  --ip dhcp|ADDRESS/PREFIX     IPv4 configuration (default: dhcp)
+  --gateway ADDRESS            IPv4 gateway for a static address
   --hostname NAME              Container hostname
   --disk-gb SIZE               Root disk size in GiB (default: 1)
   --data-disk-gb SIZE          Data volume size in GiB (default: 1)
@@ -147,6 +152,16 @@ parse_args() {
       --data-storage) need_value "$1" "${2:-}"; DATA_STORAGE="$2"; shift 2 ;;
       --config-storage) need_value "$1" "${2:-}"; CONFIG_STORAGE="$2"; shift 2 ;;
       --bridge) need_value "$1" "${2:-}"; BRIDGE="$2"; shift 2 ;;
+      --ip)
+        need_value "$1" "${2:-}"
+        if [[ "$2" == dhcp ]]; then
+          IPV4_MODE=dhcp; IPV4_ADDRESS=""
+        else
+          IPV4_MODE=static; IPV4_ADDRESS="$2"
+        fi
+        shift 2
+        ;;
+      --gateway) need_value "$1" "${2:-}"; IPV4_GATEWAY="$2"; shift 2 ;;
       --hostname) need_value "$1" "${2:-}"; HOSTNAME="$2"; shift 2 ;;
       --disk-gb) need_value "$1" "${2:-}"; DISK_GB="$2"; shift 2 ;;
       --data-disk-gb) need_value "$1" "${2:-}"; DATA_DISK_GB="$2"; shift 2 ;;
@@ -489,6 +504,15 @@ configure_deployment() {
     done
     ((${#bridge_pairs[@]})) || bridge_pairs=(vmbr0 "Proxmox Linux bridge")
     BRIDGE="$(prompt_choice "Network bridge" "$BRIDGE" proxmox_oci_bridge "${bridge_pairs[@]}")"
+    IPV4_MODE="$(prompt_choice "IPv4 configuration" "$IPV4_MODE" proxmox_oci_ipv4_mode \
+      dhcp "Obtain an address automatically" \
+      static "Use a fixed IPv4 address")"
+    if [[ "$IPV4_MODE" == static ]]; then
+      IPV4_ADDRESS="$(prompt_text "Static IPv4 address (CIDR, e.g. 192.168.1.184/24)" \
+        "$IPV4_ADDRESS" 1 proxmox_oci_ipv4_address)"
+      IPV4_GATEWAY="$(prompt_text "IPv4 gateway (optional)" \
+        "$IPV4_GATEWAY" 0 proxmox_oci_ipv4_gateway)"
+    fi
     CORES="$(prompt_int "CPU cores" "$CORES" 1 128 proxmox_oci_cores)"
     MEMORY_MB="$(prompt_int "Memory (MiB)" "$MEMORY_MB" "$MIN_MEMORY_MB" 1048576 proxmox_oci_memory)"
     DISK_GB="$(prompt_int "Root disk (GiB)" "$DISK_GB" 1 1048576 proxmox_oci_disk_gb)"
@@ -519,12 +543,40 @@ validate_hostname() {
   done
 }
 
+validate_ipv4() {
+  local address="$1" octet octets=()
+  [[ "$address" =~ ^[0-9]+([.][0-9]+){3}$ ]] || return 1
+  IFS=. read -r -a octets <<<"$address"
+  for octet in "${octets[@]}"; do
+    [[ "$octet" == 0 || "$octet" != 0* ]] || return 1
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
+
+validate_ipv4_cidr() {
+  local value="$1" address prefix
+  [[ "$value" == */* ]] || return 1
+  address="${value%/*}"
+  prefix="${value##*/}"
+  validate_ipv4 "$address" || return 1
+  [[ "$prefix" =~ ^[0-9]+$ ]] && (( 10#$prefix <= 32 ))
+}
+
 validate_deployment() {
   [[ "$SETUP" =~ ^(default|advanced)$ ]] || die "--setup must be default or advanced"
   validate_hostname "$HOSTNAME" || die "invalid DNS hostname: $HOSTNAME"
   [[ "$BRIDGE" =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || die "invalid Linux bridge name: $BRIDGE"
   if (( ! DRY_RUN )); then
     bridge_exists "$BRIDGE" || die "Linux network bridge does not exist: $BRIDGE"
+  fi
+  [[ "$IPV4_MODE" =~ ^(dhcp|static)$ ]] || die "IPv4 configuration must be dhcp or static"
+  if [[ "$IPV4_MODE" == static ]]; then
+    validate_ipv4_cidr "$IPV4_ADDRESS" || \
+      die "static IPv4 address must use valid CIDR notation (for example 192.168.1.184/24)"
+    [[ -z "$IPV4_GATEWAY" ]] || validate_ipv4 "$IPV4_GATEWAY" || \
+      die "IPv4 gateway must be a valid address"
+  elif [[ -n "$IPV4_ADDRESS" || -n "$IPV4_GATEWAY" ]]; then
+    die "a static IPv4 address or gateway requires static IPv4 configuration"
   fi
   validate_number "--disk-gb" "$DISK_GB" 1
   validate_number "--data-disk-gb" "$DATA_DISK_GB" 1
@@ -537,6 +589,11 @@ validate_deployment() {
   fi
   check_pass "Container hostname: $HOSTNAME"
   (( DRY_RUN )) || check_pass "Linux bridge exists: $BRIDGE"
+  if [[ "$IPV4_MODE" == static ]]; then
+    check_pass "Network: $BRIDGE, static IPv4 $IPV4_ADDRESS${IPV4_GATEWAY:+ via $IPV4_GATEWAY}"
+  else
+    check_pass "Network: $BRIDGE, IPv4 DHCP"
+  fi
   check_pass "Resource values: ${CORES} vCPU, ${MEMORY_MB} MiB RAM, ${DISK_GB} GiB root disk"
 }
 
@@ -860,8 +917,13 @@ next_ctid() {
 }
 
 show_plan() {
-  local digest="$1" core_label=cores
+  local digest="$1" core_label=cores network_label
   [[ "$CORES" == 1 ]] && core_label=core
+  if [[ "$IPV4_MODE" == static ]]; then
+    network_label="static IPv4 ${IPV4_ADDRESS}${IPV4_GATEWAY:+ via $IPV4_GATEWAY}"
+  else
+    network_label="IPv4 DHCP"
+  fi
   cat <<EOF
 
 Deployment plan
@@ -870,7 +932,7 @@ Image: ${IMAGE}:${TAG}
 Digest: ${digest}
 Platform: linux/$(host_architecture)
 Container: ${CTID} (${HOSTNAME}), unprivileged, on-boot
-Network: ${BRIDGE}, IPv4 DHCP, PVE host-managed OCI addressing
+Network: ${BRIDGE}, ${network_label}, PVE host-managed OCI addressing
 Resources: ${CORES} ${core_label}, ${MEMORY_MB} MiB RAM
 OCI cache: ${TEMPLATE_STORAGE}
 Root disk: ${ROOT_STORAGE}:${DISK_GB} GiB
@@ -883,16 +945,28 @@ EOF
   fi
 }
 
+network_config() {
+  local config="name=eth0,bridge=${BRIDGE},ip="
+  if [[ "$IPV4_MODE" == static ]]; then
+    config+="$IPV4_ADDRESS"
+    [[ -z "$IPV4_GATEWAY" ]] || config+=",gw=$IPV4_GATEWAY"
+  else
+    config+="dhcp"
+  fi
+  printf '%s,type=veth' "$config"
+}
+
 create_container() {
-  local archive_volume="$1" digest="$2" notes command
+  local archive_volume="$1" digest="$2" notes network command
   notes="$(description "$digest")"
+  network="$(network_config)"
   command=(pct create "$CTID" "$archive_volume"
     --hostname "$HOSTNAME"
     --rootfs "${ROOT_STORAGE}:${DISK_GB}"
     --memory "$MEMORY_MB"
     --cores "$CORES"
     --swap "$DEFAULT_SWAP_MB"
-    --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp,type=veth"
+    --net0 "$network"
     --unprivileged 1 --onboot 1 --description "$notes")
   if (( SEPARATE_MOUNTS )); then
     command+=(--mp0 "${DATA_STORAGE}:${DATA_DISK_GB},mp=${DATA_DIR},backup=1")

@@ -200,6 +200,22 @@ printf 'continued\\n'
         self.assertIn("[FAIL]", result.stderr)
         self.assertIn("invalid DNS hostname", result.stderr)
 
+    def test_validates_static_ipv4_configuration_before_container_creation(self):
+        base = (
+            f"source {shlex.quote(str(DEPLOYER))}; DRY_RUN=1; SETUP=advanced; "
+            "IPV4_MODE=static; IPV4_ADDRESS=$1; IPV4_GATEWAY=$2; validate_deployment"
+        )
+        valid = shell(base, "192.168.1.184/24", "192.168.1.1")
+        invalid_address = shell(base, "192.168.1.999/24", "192.168.1.1")
+        invalid_gateway = shell(base, "192.168.1.184/24", "192.168.1.999")
+
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertIn("static IPv4 192.168.1.184/24 via 192.168.1.1", valid.stdout)
+        self.assertNotEqual(invalid_address.returncode, 0)
+        self.assertIn("valid CIDR notation", invalid_address.stderr)
+        self.assertNotEqual(invalid_gateway.returncode, 0)
+        self.assertIn("gateway must be a valid address", invalid_gateway.stderr)
+
     def test_resolves_the_host_platform_digest_from_a_multiarch_index(self):
         amd64 = "sha256:" + "a" * 64
         arm64 = "sha256:" + "b" * 64
@@ -298,6 +314,24 @@ create_container template-store:vztmpl/image.tar sha256:{'a' * 64}
         self.assertNotIn("ip6=auto", generated)
         self.assertIn("data-store:1,mp=/srv/inkplate/server/data,backup=1", generated)
         self.assertIn("config-store:1,mp=/srv/inkplate/server/config,backup=1", generated)
+
+    def test_container_command_supports_static_ipv4_and_optional_gateway(self):
+        command = f"""
+source {shlex.quote(str(DEPLOYER))}
+run() {{ printf '%q ' "$@"; printf '\n'; }}
+CTID=123; HOSTNAME=inkplate-weather; ROOT_STORAGE=root-store; DISK_GB=1
+MEMORY_MB=256; CORES=1; BRIDGE=vmbr0; TAG=next; SEPARATE_MOUNTS=0
+IPV4_MODE=static; IPV4_ADDRESS=192.168.1.184/24; IPV4_GATEWAY=192.168.1.1
+create_container template-store:vztmpl/image.tar sha256:{'a' * 64}
+"""
+        result = shell(command)
+        generated = result.stdout.replace("\\,", ",")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "name=eth0,bridge=vmbr0,ip=192.168.1.184/24,gw=192.168.1.1,type=veth",
+            generated,
+        )
 
     def test_failure_after_creation_rolls_back_only_the_new_container(self):
         with tempfile.TemporaryDirectory() as directory:
