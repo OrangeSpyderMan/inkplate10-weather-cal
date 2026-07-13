@@ -207,6 +207,38 @@ class PillowCalendarRendererTests(unittest.TestCase):
         # 0% rain probability should be drawn as a baseline using line()
         self.assertTrue(canvas.rough.line.called)
 
+    def test_renders_all_eight_configured_forecast_slots(self):
+        from unittest.mock import MagicMock
+        from pillow_renderer import CalendarCanvas
+
+        canvas = CalendarCanvas(825, 1200, supersample=1)
+        canvas.rough.line = MagicMock()
+        canvas.rough.hatched_rectangle = MagicMock()
+        canvas.rough.polyline = MagicMock()
+        canvas.rough.ellipse = MagicMock()
+        canvas._text = MagicMock()
+        canvas._icon = MagicMock()
+        canvas._outlined_text = MagicMock()
+        hourly = [
+            {
+                "dt": dt.datetime(2026, 7, 13, 21) + dt.timedelta(hours=3 * index),
+                "icon": "icon/cloudy.png",
+                "temperature": {"value": 20 + index, "unit": "C"},
+                "rain_probability": index,
+            }
+            for index in range(8)
+        ]
+
+        canvas._forecast(hourly)
+
+        self.assertEqual(canvas._icon.call_count, 8)
+        self.assertEqual(canvas._outlined_text.call_count, 8)
+        rendered_hours = [call.args[0] for call in canvas._text.call_args_list[:8]]
+        self.assertEqual(
+            rendered_hours,
+            ["9pm", "12am", "3am", "6am", "9am", "12pm", "3pm", "6pm"],
+        )
+
     def test_small_nonzero_rain_bar_survives_scaled_border_inset(self):
         from pillow_renderer import CalendarCanvas
 

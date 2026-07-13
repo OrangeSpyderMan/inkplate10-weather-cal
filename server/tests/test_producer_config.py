@@ -180,6 +180,24 @@ class ProducerConfigTests(unittest.TestCase):
                 }
             )
 
+    def test_rejects_more_than_twelve_forecast_slots(self):
+        with self.assertRaisesRegex(ConfigurationError, "from 0 to 12"):
+            ProducerConfig.from_config(
+                {
+                    "server": {},
+                    "weather": {
+                        "service": "openweathermapv3",
+                        "apikey": "weather-key",
+                        "num_hourly_forecasts": 13,
+                    },
+                    "google": {
+                        "apikey": "google-key",
+                        "staticmaps_mapid": "map-id",
+                    },
+                    "location": "Landry, FR",
+                }
+            )
+
     def test_rejects_negative_forecast_lead_minutes(self):
         with self.assertRaisesRegex(
             ConfigurationError,
