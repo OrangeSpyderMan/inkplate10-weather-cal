@@ -199,7 +199,7 @@ ensure_dependencies() {
   if (( ! NO_TUI && ! NON_INTERACTIVE )) && ! command -v whiptail >/dev/null 2>&1; then
     packages+=(whiptail)
   fi
-  ((${#packages[@]})) || return
+  ((${#packages[@]})) || return 0
   printf 'Required host packages: %s\n' "${packages[*]}"
   run apt-get update
   run apt-get install -y --no-install-recommends "${packages[@]}"

@@ -111,6 +111,22 @@ class StandaloneProxmoxOciDeployerTests(unittest.TestCase):
             )
             self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
 
+    def test_dependency_preflight_succeeds_when_everything_is_installed(self):
+        command = f"""
+source {shlex.quote(str(DEPLOYER))}
+command() {{
+  [[ $1 == -v && $2 =~ ^(jq|skopeo|whiptail)$ ]] && return 0
+  builtin command "$@"
+}}
+NO_TUI=0; NON_INTERACTIVE=0
+ensure_dependencies
+printf 'continued\\n'
+"""
+        result = shell(command)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "continued\n")
+
     def test_tui_uses_the_controlling_terminal_and_captures_only_the_answer(self):
         with tempfile.TemporaryDirectory() as directory:
             fake_whiptail = pathlib.Path(directory) / "whiptail"
