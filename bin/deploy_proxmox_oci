@@ -193,8 +193,9 @@ validate_host() {
   lxc="$(version_value lxc-pve <<<"$versions")"
   [[ -n "$pve" && -n "$container" && -n "$lxc" ]] || \
     die "unable to determine installed Proxmox versions"
-  [[ "$pve" == 9.* ]] && dpkg --compare-versions "$pve" ge 9.1 || \
+  if [[ "$pve" != 9.* ]] || ! dpkg --compare-versions "$pve" ge 9.1; then
     die "native OCI containers require Proxmox VE 9.1 or newer"
+  fi
   dpkg --compare-versions "$container" ge 6.1.0 || \
     die "preserving the OCI application user requires pve-container 6.1.0 or newer"
   dpkg --compare-versions "$lxc" ge 6.0.5-4 || \
@@ -500,7 +501,8 @@ configure_deployment() {
 
 validate_number() {
   local label="$1" value="$2" minimum="$3"
-  [[ "$value" =~ ^[0-9]+$ ]] && (( value >= minimum )) || die "$label must be at least $minimum"
+  [[ "$value" =~ ^[0-9]+$ ]] || die "$label must be a whole number"
+  (( value >= minimum )) || die "$label must be at least $minimum"
 }
 
 bridge_exists() {
@@ -902,8 +904,8 @@ create_container() {
 
 wait_for_exec() {
   (( DRY_RUN )) && { echo "Would wait for container $CTID to accept pct exec commands."; return; }
-  local attempt
-  for attempt in {1..20}; do pct exec "$CTID" -- true >/dev/null 2>&1 && return; sleep 1; done
+  local _
+  for _ in {1..20}; do pct exec "$CTID" -- true >/dev/null 2>&1 && return; sleep 1; done
   die "container $CTID did not become available for setup"
 }
 
@@ -942,10 +944,10 @@ bootstrap_configuration() {
 
 wait_until_ready() {
   (( DRY_RUN )) && { echo "Would wait for /api/v1/ready on $HOST_BIND:$SERVER_PORT."; return; }
-  local probe_host="$HOST_BIND" attempt
+  local probe_host="$HOST_BIND" _
   [[ "$HOST_BIND" == "::" ]] && probe_host="::1"
   [[ "$HOST_BIND" == "0.0.0.0" ]] && probe_host="127.0.0.1"
-  for attempt in {1..36}; do
+  for _ in {1..36}; do
     pct exec "$CTID" -- python3 -c \
       "import http.client,sys;c=http.client.HTTPConnection('$probe_host',$SERVER_PORT,timeout=5);c.request('GET','/api/v1/ready');r=c.getresponse();r.read();sys.exit(0 if r.status==200 else 1)" \
       >/dev/null 2>&1 && return
