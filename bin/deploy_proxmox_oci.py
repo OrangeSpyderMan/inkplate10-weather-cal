@@ -21,6 +21,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 
@@ -38,6 +39,8 @@ IMAGE = legacy.IMAGE
 MIN_PVE_VERSION = (9, 1)
 MIN_CONTAINER_VERSION = (6, 1, 0)
 MIN_LXC_VERSION = (6, 0, 5, 4)
+OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
+OCI_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
 
 
 class PromptUI:
@@ -657,22 +660,30 @@ def validate_image_config(digest: str, dry_run: bool):
         image = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise SystemExit(f"ERROR: registry returned invalid OCI config JSON: {exc}")
+    validate_image_contract(image, "selected OCI image")
+
+
+def validate_image_contract(image: dict, source: str):
+    if not isinstance(image, dict):
+        raise SystemExit(f"ERROR: {source} configuration is not a JSON object.")
     config = image.get("config") or {}
+    if not isinstance(config, dict):
+        raise SystemExit(f"ERROR: {source} config field is not a JSON object.")
     command = [*(config.get("Entrypoint") or []), *(config.get("Cmd") or [])]
     expected = legacy.OCI_ENTRYPOINT
     if expected not in command:
         raise SystemExit(
-            f"ERROR: selected OCI image does not start {expected}; found {command!r}."
+            f"ERROR: {source} does not start {expected}; found {command!r}."
         )
     user = str(config.get("User") or "").split(":", 1)[0]
     if user != "inkplate":
         raise SystemExit(
-            f"ERROR: selected OCI image must run as user 'inkplate'; found {user!r}."
+            f"ERROR: {source} must run as user 'inkplate'; found {user!r}."
         )
     expected_architecture = host_oci_architecture()
     if image.get("os") != "linux" or image.get("architecture") != expected_architecture:
         raise SystemExit(
-            "ERROR: selected OCI image platform is "
+            f"ERROR: {source} platform is "
             f"{image.get('os')}/{image.get('architecture')}, expected "
             f"linux/{expected_architecture}."
         )
@@ -685,38 +696,130 @@ def validate_digest(digest: str, dry_run: bool):
         raise SystemExit(f"ERROR: registry returned an invalid OCI digest: {digest!r}")
 
 
-def inspect_archive_digest(archive_path: Path) -> str:
-    result = subprocess.run(
-        [
-            "skopeo", "inspect", "--format", "{{.Digest}}",
-            f"oci-archive:{archive_path}",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise SystemExit(
-            f"ERROR: unable to inspect cached OCI archive {archive_path}: "
-            f"{result.stderr.strip()}"
-        )
-    return result.stdout.strip()
+def archive_json(archive: tarfile.TarFile, members: dict, name: str, label: str):
+    member = members.get(name)
+    if member is None or not member.isfile():
+        raise SystemExit(f"ERROR: OCI archive has no regular {label} file ({name}).")
+    extracted = archive.extractfile(member)
+    if extracted is None:
+        raise SystemExit(f"ERROR: unable to read {label} from OCI archive.")
+    raw = extracted.read()
+    try:
+        return json.loads(raw), raw
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"ERROR: OCI archive contains invalid {label} JSON: {exc}")
 
 
-def verify_archive(archive_path: Path, digest: str):
-    actual = inspect_archive_digest(archive_path)
+def descriptor_blob(archive, members, descriptor, label):
+    if not isinstance(descriptor, dict):
+        raise SystemExit(f"ERROR: OCI archive has an invalid {label} descriptor.")
+    digest = str(descriptor.get("digest", ""))
+    validate_digest(digest, dry_run=False)
+    name = f"blobs/sha256/{digest.removeprefix('sha256:')}"
+    value, raw = archive_json(archive, members, name, label)
+    actual = "sha256:" + hashlib.sha256(raw).hexdigest()
     if actual != digest:
         raise SystemExit(
-            f"ERROR: OCI archive digest mismatch for {archive_path}: "
-            f"expected {digest}, found {actual}. Remove the cached archive and retry."
+            f"ERROR: OCI archive {label} digest mismatch: expected {digest}, "
+            f"found {actual}."
         )
+    expected_size = descriptor.get("size")
+    if not isinstance(expected_size, int) or expected_size != len(raw):
+        raise SystemExit(
+            f"ERROR: OCI archive {label} size mismatch: expected "
+            f"{expected_size!r}, found {len(raw)}."
+        )
+    return value
+
+
+def verify_archive(archive_path: Path):
+    """Validate the exact OCI layout contract consumed by PVE's importer."""
+    try:
+        with tarfile.open(archive_path, "r:*") as archive:
+            members = {}
+            for member in archive.getmembers():
+                name = member.name.removeprefix("./")
+                if name in members:
+                    raise SystemExit(
+                        f"ERROR: OCI archive contains duplicate member {name!r}."
+                    )
+                members[name] = member
+            index, _ = archive_json(archive, members, "index.json", "image index")
+            if not isinstance(index, dict):
+                raise SystemExit("ERROR: OCI archive image index is not a JSON object.")
+            if index.get("schemaVersion") != 2:
+                raise SystemExit("ERROR: OCI archive image index is not schema version 2.")
+            architecture = host_oci_architecture()
+            manifests = index.get("manifests")
+            if not isinstance(manifests, list):
+                manifests = []
+            compatible = [
+                item for item in manifests
+                if isinstance(item, dict)
+                and item.get("mediaType") == OCI_MANIFEST_MEDIA_TYPE
+                and (
+                    not item.get("platform")
+                    or (
+                        isinstance(item["platform"], dict)
+                        and item["platform"].get("os", "linux") == "linux"
+                        and item["platform"].get("architecture") == architecture
+                    )
+                )
+            ]
+            if not compatible:
+                media_types = sorted({
+                    str(item.get("mediaType")) for item in manifests
+                    if isinstance(item, dict)
+                })
+                raise SystemExit(
+                    "ERROR: OCI archive has no Proxmox-compatible "
+                    f"linux/{architecture} image manifest; index media types: "
+                    f"{media_types!r}."
+                )
+            manifest = descriptor_blob(
+                archive, members, compatible[0], "image manifest"
+            )
+            if not isinstance(manifest, dict):
+                raise SystemExit(
+                    "ERROR: OCI archive image manifest is not a JSON object."
+                )
+            if manifest.get("schemaVersion") != 2:
+                raise SystemExit(
+                    "ERROR: OCI archive image manifest is not schema version 2."
+                )
+            config_descriptor = manifest.get("config")
+            if not isinstance(config_descriptor, dict) or (
+                config_descriptor.get("mediaType") != OCI_CONFIG_MEDIA_TYPE
+            ):
+                found = (
+                    config_descriptor.get("mediaType")
+                    if isinstance(config_descriptor, dict)
+                    else None
+                )
+                raise SystemExit(
+                    "ERROR: OCI archive has unsupported image config media type "
+                    f"{found!r}."
+                )
+            image = descriptor_blob(
+                archive, members, config_descriptor, "image configuration"
+            )
+            validate_image_contract(image, "cached OCI image")
+    except (OSError, tarfile.TarError) as exc:
+        raise SystemExit(f"ERROR: unable to read OCI archive {archive_path}: {exc}")
 
 
 def pull_image(tag: str, digest: str, archive_path: Path, dry_run: bool):
     if archive_path.exists():
-        if not dry_run:
-            verify_archive(archive_path, digest)
-        print(f"Using cached OCI archive: {archive_path}")
-        return
+        if dry_run:
+            print(f"Would validate cached OCI archive: {archive_path}")
+            return
+        try:
+            verify_archive(archive_path)
+        except SystemExit as exc:
+            print(f"{exc}\nReplacing incompatible cached archive: {archive_path}")
+        else:
+            print(f"Using cached OCI archive: {archive_path}")
+            return
     source = f"docker://{IMAGE}:{tag}"
     if re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         source = f"docker://{IMAGE}@{digest}"
@@ -724,7 +827,7 @@ def pull_image(tag: str, digest: str, archive_path: Path, dry_run: bool):
         legacy.run(
             [
                 "skopeo", "copy", "--retry-times", "3",
-                "--preserve-digests",
+                "--format", "oci",
                 source,
                 f"oci-archive:{archive_path}",
             ],
@@ -745,12 +848,12 @@ def pull_image(tag: str, digest: str, archive_path: Path, dry_run: bool):
         legacy.run(
             [
                 "skopeo", "copy", "--retry-times", "3",
-                "--preserve-digests",
+                "--format", "oci",
                 source,
                 f"oci-archive:{partial_path}",
             ]
         )
-        verify_archive(partial_path, digest)
+        verify_archive(partial_path)
         os.replace(partial_path, archive_path)
     finally:
         partial_path.unlink(missing_ok=True)

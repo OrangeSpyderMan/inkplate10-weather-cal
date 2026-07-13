@@ -877,12 +877,17 @@ installation guidance if that prerequisite is missing.
 It installs the small host-side dependencies `skopeo` and `whiptail` when they
 are missing, queries the public GHCR package, offers versioned release images
 before the `main` and `next` branch images, resolves and pins the host-specific
-AMD64 or ARM64 manifest digest, and records that digest in the container
-description. Downloads use a temporary file, require Skopeo to preserve the
-digest, and are moved into the user-selected Proxmox `vztmpl` cache only after
-verification. Cached archives are re-verified before reuse. PVE's native OCI
-support was introduced in 9.1, so PVE 9.0 is rejected rather than failing
-partway through creation.
+AMD64 or ARM64 source manifest digest, and records that digest in the container
+description. Downloads use that immutable source digest and a temporary file.
+Skopeo explicitly converts the registry's Docker v2 manifest to an OCI manifest
+because PVE's importer requires an OCI media type in the archive index; this
+conversion necessarily gives the local manifest a different digest. Before an
+archive is moved into the user-selected Proxmox `vztmpl` cache, the deployer
+checks its index media type, platform, descriptor hashes and sizes, and image
+configuration. Cached archives receive the same validation before reuse and an
+incompatible cache entry is replaced atomically. PVE's native OCI support was
+introduced in 9.1, so PVE 9.0 is rejected rather than failing partway through
+creation.
 
 This repository-local implementation is Community-Scripts-inspired, not yet a
 drop-in Community Scripts contribution. Their current contribution format uses

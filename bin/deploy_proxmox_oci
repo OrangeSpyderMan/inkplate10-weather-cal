@@ -12,7 +12,7 @@ check_python() {
     exit 1
   fi
   if ! python3 -I -S -c '
-import argparse, contextlib, hashlib, importlib.util, ipaddress, json, os, pathlib, platform, re, shutil, signal, subprocess, sys, tempfile, time
+import argparse, contextlib, hashlib, importlib.util, ipaddress, json, os, pathlib, platform, re, shutil, signal, subprocess, sys, tarfile, tempfile, time
 raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
 ' >/dev/null 2>&1; then
     echo "ERROR: Python 3.10+ with its standard library is required." >&2

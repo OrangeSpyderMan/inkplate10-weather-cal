@@ -1,10 +1,13 @@
 import importlib.util
+import hashlib
 import io
+import json
 import os
 import pathlib
 import pty
 import subprocess
 import sys
+import tarfile
 import tempfile
 import types
 import unittest
@@ -16,6 +19,57 @@ DEPLOYER_PATH = REPO_ROOT / "bin" / "deploy_proxmox_oci.py"
 SPEC = importlib.util.spec_from_file_location("deploy_proxmox_oci", DEPLOYER_PATH)
 deployer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(deployer)
+
+
+def write_oci_archive(path, *, media_type=None, architecture="amd64"):
+    config = json.dumps(
+        {
+            "architecture": architecture,
+            "os": "linux",
+            "config": {
+                "User": "inkplate",
+                "Cmd": [deployer.legacy.OCI_ENTRYPOINT],
+            },
+        },
+        separators=(",", ":"),
+    ).encode()
+    config_digest = "sha256:" + hashlib.sha256(config).hexdigest()
+    manifest = json.dumps(
+        {
+            "schemaVersion": 2,
+            "mediaType": deployer.OCI_MANIFEST_MEDIA_TYPE,
+            "config": {
+                "mediaType": deployer.OCI_CONFIG_MEDIA_TYPE,
+                "digest": config_digest,
+                "size": len(config),
+            },
+            "layers": [],
+        },
+        separators=(",", ":"),
+    ).encode()
+    manifest_digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
+    index = json.dumps(
+        {
+            "schemaVersion": 2,
+            "manifests": [
+                {
+                    "mediaType": media_type or deployer.OCI_MANIFEST_MEDIA_TYPE,
+                    "digest": manifest_digest,
+                    "size": len(manifest),
+                }
+            ],
+        },
+        separators=(",", ":"),
+    ).encode()
+    with tarfile.open(path, "w") as archive:
+        for name, content in (
+            ("index.json", index),
+            (f"blobs/sha256/{manifest_digest[7:]}", manifest),
+            (f"blobs/sha256/{config_digest[7:]}", config),
+        ):
+            member = tarfile.TarInfo(name)
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
 
 
 class ProxmoxOciDeployerTests(unittest.TestCase):
@@ -259,15 +313,34 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             ],
         )
 
-    @mock.patch.object(deployer, "inspect_archive_digest")
-    def test_rejects_cached_archive_with_wrong_digest(self, inspect):
-        inspect.return_value = "sha256:" + "b" * 64
+    def test_accepts_proxmox_compatible_oci_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "inkplate.tar"
+            write_oci_archive(archive)
 
-        with self.assertRaisesRegex(SystemExit, "digest mismatch"):
-            deployer.verify_archive(
-                pathlib.Path("/cache/inkplate.tar"),
-                "sha256:" + "a" * 64,
+            deployer.verify_archive(archive)
+
+    def test_rejects_preserved_docker_manifest_in_oci_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "inkplate.tar"
+            write_oci_archive(
+                archive,
+                media_type="application/vnd.docker.distribution.manifest.v2+json",
             )
+
+            with self.assertRaisesRegex(SystemExit, "Proxmox-compatible"):
+                deployer.verify_archive(archive)
+
+    def test_rejects_archive_for_different_architecture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "inkplate.tar"
+            write_oci_archive(archive, architecture="arm64")
+
+            with self.assertRaisesRegex(SystemExit, "expected linux/amd64"):
+                with mock.patch.object(
+                    deployer, "host_oci_architecture", return_value="amd64"
+                ):
+                    deployer.verify_archive(archive)
 
     @mock.patch.object(deployer.legacy, "run")
     def test_pull_uses_valid_skopeo_oci_archive_command(self, run):
@@ -286,7 +359,8 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
                 "copy",
                 "--retry-times",
                 "3",
-                "--preserve-digests",
+                "--format",
+                "oci",
                 f"docker://ghcr.io/orangespyderman/inkplate10-weather-cal@{digest}",
                 "oci-archive:/not-present/inkplate.tar",
             ],
@@ -304,6 +378,26 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
 
             self.assertFalse(archive.exists())
             self.assertEqual(list(pathlib.Path(directory).iterdir()), [])
+
+    @mock.patch.object(deployer, "verify_archive")
+    @mock.patch.object(deployer.legacy, "run")
+    def test_incompatible_cached_archive_is_replaced_atomically(self, run, verify):
+        verify.side_effect = [SystemExit("ERROR: incompatible OCI archive"), None]
+
+        def write_partial(command, dry_run=False):
+            target = pathlib.Path(command[-1].removeprefix("oci-archive:"))
+            target.write_bytes(b"converted OCI archive")
+
+        run.side_effect = write_partial
+        digest = "sha256:" + "a" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            archive = pathlib.Path(directory) / "inkplate.tar"
+            archive.write_bytes(b"preserved Docker manifest archive")
+
+            deployer.pull_image("next", digest, archive, dry_run=False)
+
+            self.assertEqual(archive.read_bytes(), b"converted OCI archive")
+            self.assertEqual(verify.call_count, 2)
 
     def test_explicit_invalid_numeric_value_is_not_replaced_by_default(self):
         args = types.SimpleNamespace(
@@ -638,7 +732,7 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             dispatcher = fake_bin / "fake-pve-command"
             dispatcher.write_text(
                 f"#!{sys.executable}\n"
-                "import json, os, pathlib, sys\n"
+                "import hashlib, io, json, os, pathlib, sys, tarfile\n"
                 "name = pathlib.Path(sys.argv[0]).name\n"
                 "args = sys.argv[1:]\n"
                 "with open(os.environ['FAKE_PVE_LOG'], 'a', encoding='utf-8') as f:\n"
@@ -667,7 +761,16 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
                 "    print(os.environ['FAKE_OCI_DIGEST'])\n"
                 "elif name == 'skopeo' and args[0] == 'copy':\n"
                 "    target = args[-1].removeprefix('oci-archive:')\n"
-                "    pathlib.Path(target).write_bytes(b'fake OCI archive')\n"
+                "    config = os.environ['FAKE_OCI_CONFIG'].encode()\n"
+                "    config_digest = 'sha256:' + hashlib.sha256(config).hexdigest()\n"
+                "    manifest = json.dumps({'schemaVersion': 2, 'mediaType': 'application/vnd.oci.image.manifest.v1+json', 'config': {'mediaType': 'application/vnd.oci.image.config.v1+json', 'digest': config_digest, 'size': len(config)}, 'layers': []}, separators=(',', ':')).encode()\n"
+                "    manifest_digest = 'sha256:' + hashlib.sha256(manifest).hexdigest()\n"
+                "    index = json.dumps({'schemaVersion': 2, 'manifests': [{'mediaType': 'application/vnd.oci.image.manifest.v1+json', 'digest': manifest_digest, 'size': len(manifest)}]}, separators=(',', ':')).encode()\n"
+                "    with tarfile.open(target, 'w') as archive:\n"
+                "        for item, content in [('index.json', index), ('blobs/sha256/' + manifest_digest[7:], manifest), ('blobs/sha256/' + config_digest[7:], config)]:\n"
+                "            member = tarfile.TarInfo(item)\n"
+                "            member.size = len(content)\n"
+                "            archive.addfile(member, io.BytesIO(content))\n"
                 "elif name == 'pct' and args[0] == 'status':\n"
                 "    raise SystemExit(1)\n"
                 "elif name == 'pct' and args[0] == 'config':\n"
@@ -738,7 +841,7 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             commands = log.read_text(encoding="utf-8")
             self.assertIn("pct create 321", commands)
             self.assertIn("pct start 321", commands)
-            self.assertIn("skopeo copy --retry-times 3 --preserve-digests", commands)
+            self.assertIn("skopeo copy --retry-times 3 --format oci", commands)
             self.assertTrue(any(cache.iterdir()))
 
     def test_readiness_failure_rolls_back_new_container(self):
