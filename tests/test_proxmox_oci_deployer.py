@@ -2,6 +2,7 @@ import importlib.util
 import io
 import os
 import pathlib
+import pty
 import subprocess
 import sys
 import tempfile
@@ -22,17 +23,47 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
     @mock.patch("builtins.open", new_callable=mock.mock_open)
     def test_whiptail_draws_on_tty_while_capturing_only_answer(self, tty_open, run):
         run.return_value = types.SimpleNamespace(returncode=0, stdout="main\n")
+        input_context = mock.MagicMock(name="tty_input_context")
+        output_context = mock.MagicMock(name="tty_output_context")
+        input_terminal = input_context.__enter__.return_value
+        output_terminal = output_context.__enter__.return_value
+        tty_open.side_effect = [input_context, output_context]
         ui = deployer.PromptUI(enabled=False)
         ui.enabled = True
 
         result = ui._run("--menu", "Image", "10", "70", "2")
 
-        tty_open.assert_called_once_with("/dev/tty", "r+", encoding="utf-8")
-        terminal = tty_open.return_value.__enter__.return_value
-        self.assertIs(run.call_args.kwargs["stdin"], terminal)
-        self.assertIs(run.call_args.kwargs["stderr"], terminal)
+        self.assertEqual(
+            tty_open.call_args_list,
+            [
+                mock.call("/dev/tty", "r", encoding="utf-8"),
+                mock.call("/dev/tty", "w", encoding="utf-8"),
+            ],
+        )
+        self.assertIs(run.call_args.kwargs["stdin"], input_terminal)
+        self.assertIs(run.call_args.kwargs["stderr"], output_terminal)
         self.assertEqual(run.call_args.kwargs["stdout"], subprocess.PIPE)
         self.assertEqual(result.stdout, "main\n")
+
+    def test_tui_can_open_real_controlling_terminal(self):
+        pid, terminal = pty.fork()
+        if pid == 0:
+            try:
+                ui = deployer.PromptUI(enabled=False)
+                ui.enabled = True
+                with mock.patch.object(
+                    deployer.subprocess,
+                    "run",
+                    return_value=types.SimpleNamespace(returncode=0, stdout="main\n"),
+                ):
+                    ui._run("--menu", "Image", "10", "70", "2")
+            except BaseException:
+                os._exit(1)
+            os._exit(0)
+
+        _, status = os.waitpid(pid, 0)
+        os.close(terminal)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 0)
 
     def test_deployer_starts_with_standard_library_only(self):
         result = subprocess.run(
@@ -384,6 +415,27 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertIn("archive/${ref}.tar.gz", script)
         self.assertIn("sys.version_info >= (3, 10)", script)
         self.assertIn("python3 -I -S bin/deploy_proxmox_oci.py", script)
+
+    def test_local_bash_c_does_not_require_bash_source(self):
+        bootstrap = REPO_ROOT / "bin" / "deploy_proxmox_oci"
+        with tempfile.TemporaryDirectory() as directory:
+            fake_python = pathlib.Path(directory) / "python3"
+            fake_python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            fake_python.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{directory}:/usr/bin:/bin"
+
+            result = subprocess.run(
+                ["bash", "-c", bootstrap.read_text(encoding="utf-8"), "--"],
+                cwd=REPO_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("BASH_SOURCE", result.stderr)
+        self.assertIn("standard library is required", result.stderr)
 
     def test_documentation_has_stable_and_next_image_oneliners(self):
         documentation = (REPO_ROOT / "server" / "README.md").read_text(

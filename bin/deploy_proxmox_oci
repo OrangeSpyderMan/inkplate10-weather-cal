@@ -50,7 +50,11 @@ if [[ "${1:-}" == "--remote" ]]; then
     "if [ \$(id -u) -eq 0 ]; then $remote_script | INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; elif command -v sudo >/dev/null 2>&1; then $remote_script | sudo -H env INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; else echo 'ERROR: root or sudo access is required.' >&2; exit 1; fi"
 fi
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+source_path="${BASH_SOURCE[0]:-}"
+script_dir=""
+if [[ -n "$source_path" ]]; then
+  script_dir="$(cd -- "$(dirname -- "$source_path")" 2>/dev/null && pwd || true)"
+fi
 if [[ -n "$script_dir" ]] &&
    [[ -f "$script_dir/deploy_proxmox_oci.py" ]] &&
    [[ -f "$script_dir/install_server.py" ]]; then
