@@ -2,15 +2,11 @@
 
 A Python service for the weather calendar client with direct Pillow rendering.
 
-
-
 Example 1                  | Example 2                 | Example 3
 :-------------------------:|:-------------------------:|:-------------------------:
 <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/c37e6b65-a226-40d7-b1c7-cb3d72973054 width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/71958bcb-839d-447a-b671-a4cb5fbca25e width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/90608c9f-c16e-4d56-9edc-13b9d85ef659 width=300 />
 
 <img width="1044" alt="Screenshot 2023-05-17 at 01 07 53" src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/e02e672b-7ad0-431d-8a29-c2740857a4d7">
-
-
 
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
@@ -163,8 +159,9 @@ group, start a new login session or run `newgrp docker` before retrying.
 This provider follows AccuWeather's current Core Weather API contract, using
 HTTPS and Bearer authentication. It is covered by mocked contract tests but is
 not exercised against the live API in CI.
- 
+
 In order to obtain an API Key, you will need to:
+
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
 2. Select a Core Weather API plan and generate an API key.
 
@@ -545,7 +542,7 @@ calendar image.
 
 ### Google StaticMaps API
 
-<img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />
+<img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" alt="Inkplate calendar with a styled static map" />
 
 In order to generate a static map of your area you will need to sign up to [Google's developer console](https://developers.google.com/):
 
@@ -575,7 +572,7 @@ At startup the server fetches this static map, converts it to a dithered graysca
 The native installation baseline is Debian 13 (Trixie) or another supported
 distribution providing Python 3.13 or newer. Ensure Python 3 is installed:
 
-```
+```console
 python3 --version
 Python 3.13.5
 ```
@@ -583,7 +580,8 @@ Python 3.13.5
 Download project and install dependencies. The default main branch is the latest
 stable branch. The next branch contains changes planned for the next release -
 it should be OK to use, but may be less tested.
-```
+
+```bash
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
 cp server/config/EXAMPLE_config.yaml server/config/config.yaml
@@ -608,13 +606,17 @@ python3 server/web_server.py
 ```
 
 Run the server 9am each day:
-```
+
+```bash
 crontab -e
 ```
+
 Add this line:
-```
+
+```cron
 0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
+
 This scheduled form expects `server.alwayson: false`; keep
 `server/web_server.py` running separately. `/path/to/inkplate10-weather-cal`
 should be updated to the absolute path of your checkout.

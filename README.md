@@ -35,7 +35,7 @@ Both a server and client are required. The main workload is on the server, which
    when its content has changed.
 5. Returns to deep sleep for the configured refresh interval.
 
-#### Features:
+#### Client features
 
 - Ultra-low power consumption:
   - approx 21µA in deep sleep
@@ -63,7 +63,7 @@ Both a server and client are required. The main workload is on the server, which
    exits; web serving has an independent lifecycle.
 7. A cronjob can run the producer before the client's configured refresh interval elapses.
 
-#### Features:
+#### Server features
 
 See the [server](/server) for more features.
 
@@ -86,7 +86,7 @@ See the [server](/server) for more features.
   life measured in months, but actual runtime depends heavily on the refresh
   interval, WiFi connection time and retries, battery condition, and
   self-discharge. The client's typical deep-sleep and awake current figures are
-  listed under [Client features](#features). Here is
+  listed under [Client features](#client-features). Here is
   [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
 - **CR2032 3V coin cell ~€1**
@@ -110,7 +110,7 @@ See the [server](/server) for more features.
 
 The generic release firmware reads `config.yaml` from the root of an SD card:
 
-```
+```yaml
 display:
   # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
   rotation: 1
