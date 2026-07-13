@@ -1049,7 +1049,7 @@ Container: ${CTID} (running)
 Calendar:  http://${url_host}:${SERVER_PORT}/calendar.png
 Viewer:    http://${url_host}:${SERVER_PORT}/app
 Status:    http://${url_host}:${SERVER_PORT}/status
-Console:   pct console ${CTID}
+Shell:     pct enter ${CTID}
 EOF
   CREATE_ATTEMPTED=0
 }
