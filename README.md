@@ -292,15 +292,14 @@ published GHCR image, prompts for Proxmox image/root/config/data storage, keeps
 secrets in a protected read-only config volume, and only reports success after
 the new container's readiness endpoint responds and its process identity and
 config protection pass runtime checks. Run the same flow remotely over SSH
-with:
+by opening a root shell on the PVE host and running the one-liner there.
+
+The URL selects the complete standalone installer and `--tag` selects only the
+OCI image. Test the `next` installer with the `next` image using:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --remote root@pve1
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
 ```
-
-Deploy the published `next` image with the stable helper by adding
-`-- --tag next`. The server deployment guide also documents the one-liner for
-testing both the `next` helper and the `next` image together.
 
 See [the server deployment guide](server/README.md#guided-proxmox-ve-9-oci-deployment)
 for prerequisites, CLI automation, storage behavior, rollback, and security

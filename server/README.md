@@ -815,38 +815,29 @@ Run it directly in the Proxmox shell with the Helper-Scripts-style one-line
 entry point:
 
 ```bash
-installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
 ```
 
-Or launch the same TUI on another PVE host over SSH. Root login is supported;
-a non-root login is elevated with `sudo` when available:
-
-```bash
-installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --remote root@pve1
-```
+For a remote host, first open a root shell on that PVE host and run the same
+command there. The standalone installer deliberately does not embed a second
+SSH deployment mechanism; the existing `bin/install_remote` workflow remains
+available for repository-based remote installation.
 
 #### Testing the `next` image
 
-The launcher retains its complete source URL and derives every subsequent
-source download from the same repository branch or tag. To test both the
-deployment changes on `next` and its matching image, use:
+To test both the deployment changes on `next` and its matching image, use:
 
 ```bash
-installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --tag next
-```
-
-The equivalent remote test is:
-
-```bash
-installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --remote root@pve1 --tag next
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
 ```
 
 The installer source and OCI image remain independent: the URL selects the
-deployment code, while `--tag` selects the image. For example, this deliberately
-uses the `next` deployment code with the `main` image:
+complete standalone Bash installer to execute, while `--tag` selects only the
+OCI image. For example, this deliberately uses the `next` installer with the
+`main` image:
 
 ```bash
-installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --tag main
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag main
 ```
 
 The inverse combination is syntactically possible once the deployer is present
@@ -856,11 +847,9 @@ code understands. Matching source and image channels is therefore the normal
 and recommended path. In every case, the selected image is resolved to its
 platform-specific digest before download.
 
-The URL is assigned once because `bash -c "$(curl ...)"` receives only the
-downloaded text; Bash cannot otherwise recover the URL used by curl. Passing
-that same value as Bash's `$0` lets the bootstrap validate its origin, derive
-the correct base URL, and avoids a hidden default branch or a separate ref
-override.
+There is no branch inference, source archive, bootstrap URL, or second installer
+download. The script fetched from `main`, `next`, a release tag, or another
+branch is the installer that runs.
 
 The standalone deployer follows the operational patterns documented by the
 [Proxmox Community Scripts project](https://community-scripts.org/docs/ct/detailed_guide):
@@ -875,20 +864,14 @@ The standalone deployer follows the operational patterns documented by the
 - success only after `/api/v1/ready` returns successfully from inside the CT
   and PID 1 is verified to run as the image's `inkplate` user
 
-Its host-side implementation currently uses a Bash bootstrap and a Python 3.10+
-orchestrator. The orchestrator is always launched with Python's site-package
-loading disabled and uses only the standard library; it does not run `pip` or
-load the application's Python dependencies. PVE 9 is based on Debian 13, whose
-default `python3` is Python 3.13. The bootstrap does not assume the interpreter
-is installed: it checks the version and standard-library imports before
-downloading the source archive or creating container resources, and exits with
-installation guidance if that prerequisite is missing.
-
-It installs the small host-side dependencies `skopeo` and `whiptail` when they
-are missing, queries the public GHCR package, offers versioned release images
-before the `main` and `next` branch images, resolves and pins the host-specific
-AMD64 or ARM64 source manifest digest, and records that digest in the container
-description. Downloads use that immutable source digest and a temporary file.
+The installer is one Bash program and does not require Python on the Proxmox
+host. Its explicit host-side dependencies are `jq`, `skopeo`, and, for the TUI,
+`whiptail`; it installs any that are missing from the PVE/Debian repositories
+before container creation. It queries the public GHCR package, offers versioned
+release images before the `main` and `next` branch images, resolves and pins the
+host-specific AMD64 or ARM64 source manifest digest, and records that digest in
+the container description. Downloads use that immutable source digest and a
+temporary file.
 Skopeo explicitly converts the registry's Docker v2 manifest to an OCI manifest
 because PVE's importer requires an OCI media type in the archive index; this
 conversion necessarily gives the local manifest a different digest. Before an
@@ -973,8 +956,8 @@ The deployer refuses an answers file readable by group or other users because
 it contains API credentials and may contain Netatmo tokens.
 
 This path is intentionally fresh-install-only. It refuses an existing CTID and
-does not yet implement in-place OCI image updates. Use a release tag in
-`installer_url` when you want the deployment code itself to be immutable; the
+does not yet implement in-place OCI image updates. Use a release tag in the raw
+GitHub URL when you want the deployment code itself to be immutable; the
 selected application image is independently resolved and recorded by digest.
 
 Useful references:
