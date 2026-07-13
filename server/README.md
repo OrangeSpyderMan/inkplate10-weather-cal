@@ -802,7 +802,151 @@ podman run -d \
 
 Use `docker run` with the same arguments if you prefer Docker.
 
-### Proxmox VE 9.1 OCI LXC
+### Guided Proxmox VE 9 OCI Deployment
+
+`bin/deploy_proxmox_oci` is a parallel, fresh-install deployment path for
+fully updated Proxmox VE 9.1 and later 9.x releases. It requires
+`pve-container` 6.1.0 or newer and `lxc-pve` 6.0.5-4 or newer so PVE preserves
+the OCI image's non-root application identity. It does not replace or modify
+the existing `bin/install_server`, `bin/install_proxmox`, or
+`bin/install_remote` workflows.
+
+Run it directly in the Proxmox shell with the Helper-Scripts-style one-line
+entry point:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
+```
+
+Or launch the same TUI on another PVE host over SSH. Root login is supported;
+a non-root login is elevated with `sudo` when available:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --remote root@pve1
+```
+
+#### Testing the `next` image
+
+The helper source and the application image are selected independently. To
+exercise the published `next` image while retaining the deployment helper from
+`main`, pass the image tag explicitly:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --tag next
+```
+
+To test both the deployment changes on the `next` branch and its matching
+`next` image, select `next` for the downloaded helper as well:
+
+```bash
+INKPLATE_INSTALL_REF=next bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
+```
+
+The equivalent remote test is:
+
+```bash
+INKPLATE_INSTALL_REF=next bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --remote root@pve1 --tag next
+```
+
+`INKPLATE_INSTALL_REF` controls the source archive used by the helper after its
+small Bash bootstrap starts; `--tag next` controls the OCI image. The selected
+image is still resolved to its platform-specific digest before download.
+
+The standalone deployer follows the operational patterns documented by the
+[Proxmox Community Scripts project](https://community-scripts.org/docs/ct/detailed_guide):
+
+- a minimal default setup and a configurable advanced setup
+- pre-flight validation before container creation
+- `whiptail` menus and protected password prompts, with `--no-tui` fallback
+- an unprivileged, DHCP-enabled, on-boot LXC by default
+- a final deployment summary and explicit confirmation
+- cleanup of a newly created CT when bootstrap or readiness fails; use
+  `--keep-failed` to retain it for diagnosis
+- success only after `/api/v1/ready` returns successfully from inside the CT
+  and PID 1 is verified to run as the image's `inkplate` user
+
+Its host-side implementation currently uses a Bash bootstrap and a Python 3.10+
+orchestrator. The orchestrator is always launched with Python's site-package
+loading disabled and uses only the standard library; it does not run `pip` or
+load the application's Python dependencies. PVE 9 is based on Debian 13, whose
+default `python3` is Python 3.13. The bootstrap does not assume the interpreter
+is installed: it checks the version and standard-library imports before
+downloading the source archive or creating container resources, and exits with
+installation guidance if that prerequisite is missing.
+
+It installs the small host-side dependencies `skopeo` and `whiptail` when they
+are missing, queries the public GHCR package, offers versioned release images
+before the `main` and `next` branch images, resolves and pins the host-specific
+AMD64 or ARM64 manifest digest, and records that digest in the container
+description. Downloads use a temporary file, require Skopeo to preserve the
+digest, and are moved into the user-selected Proxmox `vztmpl` cache only after
+verification. Cached archives are re-verified before reuse. PVE's native OCI
+support was introduced in 9.1, so PVE 9.0 is rejected rather than failing
+partway through creation.
+
+This repository-local implementation is Community-Scripts-inspired, not yet a
+drop-in Community Scripts contribution. Their current contribution format uses
+a Bash `ct/AppName.sh` entry point, sources `build.func`, and delegates the
+in-container work to `install/AppName-install.sh`. Before proposing this
+deployer upstream, its host orchestration must be adapted to that framework (or
+the maintainers must explicitly accept native-OCI tooling as a different script
+category). The upstream contribution checklist also expects an application
+update function plus successful default and advanced installation tests; this
+fresh-install-only workflow does not satisfy those gates yet. Keeping it
+separate avoids coupling that future port to the existing deployment scripts.
+
+Storage is selected explicitly in the guided flow:
+
+- the OCI archive cache must use active `vztmpl` storage
+- the container root disk must use active `rootdir` storage
+- separate Proxmox-managed config and data volumes are recommended and enabled
+  by default
+- `/srv/inkplate/server/data` stays read-write for snapshots and rendered output
+- `/srv/inkplate/server/config` is populated with `config.yaml` and protected
+  `weather.env`, then changed to read-only before the application starts
+- both separate volumes are included in Proxmox backups (`backup=1`)
+- setup verifies the image's `inkplate` user can read config and write data
+  before the final container start
+- final acceptance verifies PID 1 runs as `inkplate` and that the separate
+  config volume rejects writes before reporting success
+
+The advanced flow additionally prompts for CTID, hostname, bridge, cores,
+memory, and disk sizes. Every value can also be provided on the command line;
+run `./bin/deploy_proxmox_oci --help` for the complete list. Repeatable installs
+can reuse the existing JSON answers format. Copy the example, replace every
+placeholder secret, and restrict it before use:
+
+```bash
+sudo install -m 0600 bin/install_server.answers.example.json /root/inkplate-answers.json
+sudoedit /root/inkplate-answers.json
+sudo ./bin/deploy_proxmox_oci \
+  --non-interactive \
+  --answers /root/inkplate-answers.json \
+  --yes \
+  --tag v4.0.0 \
+  --storage local-lvm \
+  --template-storage local \
+  --separate-mounts \
+  --data-storage local-lvm \
+  --config-storage local-lvm
+```
+
+The deployer refuses an answers file readable by group or other users because
+it contains API credentials and may contain Netatmo tokens.
+
+This path is intentionally fresh-install-only. It refuses an existing CTID and
+does not yet implement in-place OCI image updates. Pin
+`INKPLATE_INSTALL_REF` to a release tag when you want the bootstrap code itself
+to be immutable; the selected application image is independently resolved and
+recorded by digest.
+
+Useful references:
+
+- [Community Scripts container guide](https://community-scripts.org/docs/ct/detailed_guide)
+- [Community Scripts configuration guide](https://community-scripts.org/docs/guides/configuration_reference)
+- [Proxmox `pct` documentation](https://pve.proxmox.com/pve-docs/pct.1.html)
+
+### Existing Proxmox VE 9.1 OCI LXC Preview
 
 Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
 usable as an OCI source, but treat this as newer and less tested than Docker

@@ -279,6 +279,34 @@ The Proxmox option directs you to the dedicated fresh-install-only preview:
 sudo ./bin/install_proxmox --dry-run
 ```
 
+A new, parallel OCI deployment flow for fully updated PVE 9.1+ hosts is also
+available without changing the existing installers. From a Proxmox shell, the
+one-line entry point is:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
+```
+
+It provides a `whiptail` TUI with default and advanced setup modes, pulls a
+published GHCR image, prompts for Proxmox image/root/config/data storage, keeps
+secrets in a protected read-only config volume, and only reports success after
+the new container's readiness endpoint responds and its process identity and
+config protection pass runtime checks. Run the same flow remotely over SSH
+with:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --remote root@pve1
+```
+
+Deploy the published `next` image with the stable helper by adding
+`-- --tag next`. The server deployment guide also documents the one-liner for
+testing both the `next` helper and the `next` image together.
+
+See [the server deployment guide](server/README.md#guided-proxmox-ve-9-oci-deployment)
+for prerequisites, CLI automation, storage behavior, rollback, and security
+notes. The existing `bin/install_proxmox` and `bin/install_remote` paths remain
+available and unchanged.
+
 Interactive Proxmox runs list available LXC storage and can create separate
 mounts for generated data and read-only config. Use `--storage`,
 `--data-storage`, and `--config-storage` for unattended storage selection.

@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="OrangeSpyderMan/inkplate10-weather-cal"
+ref="${INKPLATE_INSTALL_REF:-main}"
+self_url="https://raw.githubusercontent.com/${repo}/${ref}/bin/deploy_proxmox_oci"
+
+check_python() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: Python 3.10 or newer is required on the Proxmox host." >&2
+    echo "Install the Debian python3 package, then run this helper again." >&2
+    exit 1
+  fi
+  if ! python3 -I -S -c '
+import argparse, contextlib, hashlib, importlib.util, ipaddress, json, os, pathlib, platform, re, shutil, signal, subprocess, sys, tempfile, time
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+' >/dev/null 2>&1; then
+    echo "ERROR: Python 3.10+ with its standard library is required." >&2
+    echo "The deployer does not use pip or third-party Python packages." >&2
+    exit 1
+  fi
+}
+
+if [[ ! "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$ref" == *".."* ]]; then
+  echo "ERROR: INKPLATE_INSTALL_REF contains invalid characters." >&2
+  exit 1
+fi
+
+if [[ "${1:-}" == "--remote" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "ERROR: --remote requires an SSH target such as root@pve1." >&2
+    exit 1
+  fi
+  target="$2"
+  if [[ "$target" == -* ]]; then
+    echo "ERROR: invalid SSH target: $target" >&2
+    exit 1
+  fi
+  shift 2
+  if ! command -v ssh >/dev/null 2>&1; then
+    echo "ERROR: remote mode requires the ssh client on this machine." >&2
+    exit 1
+  fi
+  remote_args=""
+  if (( $# > 0 )); then
+    printf -v remote_args ' %q' "$@"
+  fi
+  remote_script="curl -fsSL '$self_url'"
+  exec ssh -t "$target" \
+    "if [ \$(id -u) -eq 0 ]; then $remote_script | INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; elif command -v sudo >/dev/null 2>&1; then $remote_script | sudo -H env INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; else echo 'ERROR: root or sudo access is required.' >&2; exit 1; fi"
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+if [[ -n "$script_dir" ]] &&
+   [[ -f "$script_dir/deploy_proxmox_oci.py" ]] &&
+   [[ -f "$script_dir/install_server.py" ]]; then
+  repo_root="$(cd -- "$script_dir/.." && pwd)"
+  cd "$repo_root"
+  check_python
+  exec python3 -I -S bin/deploy_proxmox_oci.py "$@"
+fi
+
+for command in curl tar; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "ERROR: required command not found: $command" >&2
+    exit 1
+  fi
+done
+
+check_python
+
+workdir="$(mktemp -d /tmp/inkplate-oci-deploy.XXXXXXXX)"
+cleanup() {
+  rm -rf -- "$workdir"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+archive="$workdir/source.tar.gz"
+echo "Downloading Inkplate deployment helper (${repo}@${ref})..."
+curl --fail --show-error --silent --location \
+  "https://github.com/${repo}/archive/${ref}.tar.gz" \
+  --output "$archive"
+tar -xzf "$archive" -C "$workdir"
+
+repo_root="$(find "$workdir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+if [[ -z "$repo_root" ]] || [[ ! -f "$repo_root/bin/deploy_proxmox_oci.py" ]]; then
+  echo "ERROR: downloaded source archive does not contain the OCI deployer." >&2
+  exit 1
+fi
+
+cd "$repo_root"
+python3 -I -S bin/deploy_proxmox_oci.py "$@"
