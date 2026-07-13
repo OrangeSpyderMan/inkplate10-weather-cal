@@ -2,8 +2,38 @@
 set -euo pipefail
 
 repo="OrangeSpyderMan/inkplate10-weather-cal"
-ref="${INKPLATE_INSTALL_REF:-main}"
-self_url="https://raw.githubusercontent.com/${repo}/${ref}/bin/deploy_proxmox_oci"
+raw_prefix="https://raw.githubusercontent.com/${repo}/"
+source_url=""
+source_ref=""
+base_url=""
+
+set_source_url() {
+  local candidate="$1"
+  local relative
+
+  if [[ "$candidate" != "${raw_prefix}"*"/bin/deploy_proxmox_oci" ]]; then
+    return 1
+  fi
+  relative="${candidate#"$raw_prefix"}"
+  source_ref="${relative%/bin/deploy_proxmox_oci}"
+  if [[ -z "$source_ref" ]] ||
+     [[ ! "$source_ref" =~ ^[A-Za-z0-9._/-]+$ ]] ||
+     [[ "$source_ref" == *".."* ]]; then
+    return 1
+  fi
+  source_url="$candidate"
+  base_url="${raw_prefix}${source_ref}"
+}
+
+# bash -c uses its first argument after the script as $0. The documented
+# launcher puts the URL there so this bootstrap retains its source provenance.
+if ! set_source_url "$0"; then
+  if [[ -n "${1:-}" ]] && set_source_url "$1"; then
+    # bash -s (used by remote mode) receives the source URL as its first
+    # argument instead, so remove it before forwarding application arguments.
+    shift
+  fi
+fi
 
 check_python() {
   if ! command -v python3 >/dev/null 2>&1; then
@@ -21,12 +51,12 @@ raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
   fi
 }
 
-if [[ ! "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$ref" == *".."* ]]; then
-  echo "ERROR: INKPLATE_INSTALL_REF contains invalid characters." >&2
-  exit 1
-fi
-
 if [[ "${1:-}" == "--remote" ]]; then
+  if [[ -z "$source_url" ]]; then
+    echo "ERROR: remote mode requires the installer source URL." >&2
+    echo "Use the documented installer_url=... one-line launcher." >&2
+    exit 1
+  fi
   if [[ -z "${2:-}" ]]; then
     echo "ERROR: --remote requires an SSH target such as root@pve1." >&2
     exit 1
@@ -45,9 +75,10 @@ if [[ "${1:-}" == "--remote" ]]; then
   if (( $# > 0 )); then
     printf -v remote_args ' %q' "$@"
   fi
-  remote_script="curl -fsSL '$self_url'"
+  printf -v quoted_source '%q' "$source_url"
+  remote_script="curl -fsSL $quoted_source"
   exec ssh -t "$target" \
-    "if [ \$(id -u) -eq 0 ]; then $remote_script | INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; elif command -v sudo >/dev/null 2>&1; then $remote_script | sudo -H env INKPLATE_INSTALL_REF='$ref' bash -s --$remote_args; else echo 'ERROR: root or sudo access is required.' >&2; exit 1; fi"
+    "if [ \$(id -u) -eq 0 ]; then $remote_script | bash -s -- $quoted_source$remote_args; elif command -v sudo >/dev/null 2>&1; then $remote_script | sudo -H bash -s -- $quoted_source$remote_args; else echo 'ERROR: root or sudo access is required.' >&2; exit 1; fi"
 fi
 
 source_path="${BASH_SOURCE[0]:-}"
@@ -62,6 +93,12 @@ if [[ -n "$script_dir" ]] &&
   cd "$repo_root"
   check_python
   exec python3 -I -S bin/deploy_proxmox_oci.py "$@"
+fi
+
+if [[ -z "$source_url" ]]; then
+  echo "ERROR: installer source URL was not retained by the launcher." >&2
+  echo "Use the documented installer_url=... one-line launcher." >&2
+  exit 1
 fi
 
 for command in curl tar; do
@@ -82,15 +119,15 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 archive="$workdir/source.tar.gz"
-echo "Downloading Inkplate deployment helper (${repo}@${ref})..."
+echo "Downloading Inkplate deployment helper (${repo}@${source_ref})..."
 curl --fail --show-error --silent --location \
-  "https://github.com/${repo}/archive/${ref}.tar.gz" \
+  "https://github.com/${repo}/archive/${source_ref}.tar.gz" \
   --output "$archive"
 tar -xzf "$archive" -C "$workdir"
 
 repo_root="$(find "$workdir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 if [[ -z "$repo_root" ]] || [[ ! -f "$repo_root/bin/deploy_proxmox_oci.py" ]]; then
-  echo "ERROR: downloaded source archive does not contain the OCI deployer." >&2
+  echo "ERROR: source archive derived from ${base_url} does not contain the OCI deployer." >&2
   exit 1
 fi
 

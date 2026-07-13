@@ -634,47 +634,86 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         )
 
         self.assertIn('if [[ "${1:-}" == "--remote" ]]', script)
-        self.assertIn("remote_script=\"curl -fsSL '$self_url'\"", script)
+        self.assertIn('raw_prefix="https://raw.githubusercontent.com/${repo}/"', script)
+        self.assertIn('base_url="${raw_prefix}${source_ref}"', script)
+        self.assertIn('remote_script="curl -fsSL $quoted_source"', script)
         self.assertIn("if (( $# > 0 )); then", script)
-        self.assertIn("sudo -H env INKPLATE_INSTALL_REF='$ref' bash -s --", script)
-        self.assertIn("archive/${ref}.tar.gz", script)
+        self.assertIn("sudo -H bash -s -- $quoted_source", script)
+        self.assertIn("archive/${source_ref}.tar.gz", script)
+        self.assertNotIn("INKPLATE_INSTALL_REF", script)
         self.assertIn("sys.version_info >= (3, 10)", script)
         self.assertIn("python3 -I -S bin/deploy_proxmox_oci.py", script)
 
-    def test_local_bash_c_does_not_require_bash_source(self):
+    def test_bash_c_without_source_url_fails_clearly(self):
         bootstrap = REPO_ROOT / "bin" / "deploy_proxmox_oci"
+        result = subprocess.run(
+            ["bash", "-c", bootstrap.read_text(encoding="utf-8"), "--"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("BASH_SOURCE", result.stderr)
+        self.assertIn("installer source URL was not retained", result.stderr)
+
+    def test_bootstrap_derives_source_archive_from_launcher_url_not_image_tag(self):
+        bootstrap = REPO_ROOT / "bin" / "deploy_proxmox_oci"
+        source_url = (
+            "https://raw.githubusercontent.com/OrangeSpyderMan/"
+            "inkplate10-weather-cal/feature/source-test/bin/deploy_proxmox_oci"
+        )
         with tempfile.TemporaryDirectory() as directory:
-            fake_python = pathlib.Path(directory) / "python3"
-            fake_python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            directory_path = pathlib.Path(directory)
+            capture = directory_path / "curl-args"
+            fake_python = directory_path / "python3"
+            fake_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             fake_python.chmod(0o755)
+            fake_curl = directory_path / "curl"
+            fake_curl.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE\"\nexit 22\n",
+                encoding="utf-8",
+            )
+            fake_curl.chmod(0o755)
             environment = os.environ.copy()
             environment["PATH"] = f"{directory}:/usr/bin:/bin"
+            environment["CAPTURE"] = str(capture)
 
             result = subprocess.run(
-                ["bash", "-c", bootstrap.read_text(encoding="utf-8"), "--"],
+                [
+                    "bash", "-c", bootstrap.read_text(encoding="utf-8"),
+                    source_url, "--tag", "main",
+                ],
                 cwd=REPO_ROOT,
                 env=environment,
                 capture_output=True,
                 text=True,
             )
+            arguments = capture.read_text(encoding="utf-8").splitlines()
 
-        self.assertEqual(result.returncode, 1)
-        self.assertNotIn("BASH_SOURCE", result.stderr)
-        self.assertIn("standard library is required", result.stderr)
+        self.assertEqual(result.returncode, 22)
+        self.assertIn("inkplate10-weather-cal@feature/source-test", result.stdout)
+        self.assertIn(
+            "https://github.com/OrangeSpyderMan/inkplate10-weather-cal/"
+            "archive/feature/source-test.tar.gz",
+            arguments,
+        )
+        self.assertNotIn("archive/main.tar.gz", arguments)
 
     def test_documentation_has_stable_and_next_image_oneliners(self):
         documentation = (REPO_ROOT / "server" / "README.md").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("main/bin/deploy_proxmox_oci)\" -- --tag next", documentation)
         self.assertIn(
-            "INKPLATE_INSTALL_REF=next bash -c \"$(curl -fsSL "
-            "https://raw.githubusercontent.com/OrangeSpyderMan/"
-            "inkplate10-weather-cal/next/bin/deploy_proxmox_oci)\" -- --tag next",
+            "installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/"
+            "inkplate10-weather-cal/next/bin/deploy_proxmox_oci",
             documentation,
         )
-        self.assertIn("-- --remote root@pve1 --tag next", documentation)
+        self.assertIn('bash -c "$(curl -fsSL "$installer_url")" "$installer_url"', documentation)
+        self.assertIn('"$installer_url" --remote root@pve1 --tag next', documentation)
+        self.assertIn('"$installer_url" --tag main', documentation)
+        self.assertNotIn("INKPLATE_INSTALL_REF", documentation)
 
     def test_remote_bootstrap_without_options_passes_no_empty_argument(self):
         bootstrap = REPO_ROOT / "bin" / "deploy_proxmox_oci"
@@ -690,14 +729,17 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             env = os.environ.copy()
             env["PATH"] = f"{directory}:{env['PATH']}"
             env["CAPTURE"] = str(capture)
-            env["INKPLATE_INSTALL_REF"] = "v4.0.0"
+            source_url = (
+                "https://raw.githubusercontent.com/OrangeSpyderMan/"
+                "inkplate10-weather-cal/v4.0.0/bin/deploy_proxmox_oci"
+            )
 
             result = subprocess.run(
                 [
                     "bash",
                     "-c",
                     bootstrap.read_text(encoding="utf-8"),
-                    "--",
+                    source_url,
                     "--remote",
                     "root@pve1",
                 ],
@@ -710,18 +752,22 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             arguments = capture.read_text(encoding="utf-8").splitlines()
             self.assertEqual(arguments[:2], ["-t", "root@pve1"])
-            self.assertIn("INKPLATE_INSTALL_REF='v4.0.0' bash -s --;", arguments[2])
-            self.assertNotIn("bash -s -- '';", arguments[2])
+            self.assertIn(f"curl -fsSL {source_url} | bash -s -- {source_url};", arguments[2])
+            self.assertNotIn("INKPLATE_INSTALL_REF", arguments[2])
 
     def test_remote_bootstrap_rejects_option_like_target(self):
         bootstrap = REPO_ROOT / "bin" / "deploy_proxmox_oci"
+        source_url = (
+            "https://raw.githubusercontent.com/OrangeSpyderMan/"
+            "inkplate10-weather-cal/next/bin/deploy_proxmox_oci"
+        )
 
         result = subprocess.run(
             [
                 "bash",
                 "-c",
                 bootstrap.read_text(encoding="utf-8"),
-                "--",
+                source_url,
                 "--remote",
                 "-oProxyCommand=anything",
             ],

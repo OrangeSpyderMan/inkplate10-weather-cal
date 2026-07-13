@@ -815,42 +815,52 @@ Run it directly in the Proxmox shell with the Helper-Scripts-style one-line
 entry point:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
+installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url"
 ```
 
 Or launch the same TUI on another PVE host over SSH. Root login is supported;
 a non-root login is elevated with `sudo` when available:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --remote root@pve1
+installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --remote root@pve1
 ```
 
 #### Testing the `next` image
 
-The helper source and the application image are selected independently. To
-exercise the published `next` image while retaining the deployment helper from
-`main`, pass the image tag explicitly:
+The launcher retains its complete source URL and derives every subsequent
+source download from the same repository branch or tag. To test both the
+deployment changes on `next` and its matching image, use:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)" -- --tag next
-```
-
-To test both the deployment changes on the `next` branch and its matching
-`next` image, select `next` for the downloaded helper as well:
-
-```bash
-INKPLATE_INSTALL_REF=next bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
+installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --tag next
 ```
 
 The equivalent remote test is:
 
 ```bash
-INKPLATE_INSTALL_REF=next bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --remote root@pve1 --tag next
+installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --remote root@pve1 --tag next
 ```
 
-`INKPLATE_INSTALL_REF` controls the source archive used by the helper after its
-small Bash bootstrap starts; `--tag next` controls the OCI image. The selected
-image is still resolved to its platform-specific digest before download.
+The installer source and OCI image remain independent: the URL selects the
+deployment code, while `--tag` selects the image. For example, this deliberately
+uses the `next` deployment code with the `main` image:
+
+```bash
+installer_url=https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci; bash -c "$(curl -fsSL "$installer_url")" "$installer_url" --tag main
+```
+
+The inverse combination is syntactically possible once the deployer is present
+on `main`, but is not guaranteed to be compatible: a `next` image may introduce
+a configuration or runtime contract that only the matching `next` deployment
+code understands. Matching source and image channels is therefore the normal
+and recommended path. In every case, the selected image is resolved to its
+platform-specific digest before download.
+
+The URL is assigned once because `bash -c "$(curl ...)"` receives only the
+downloaded text; Bash cannot otherwise recover the URL used by curl. Passing
+that same value as Bash's `$0` lets the bootstrap validate its origin, derive
+the correct base URL, and avoids a hidden default branch or a separate ref
+override.
 
 The standalone deployer follows the operational patterns documented by the
 [Proxmox Community Scripts project](https://community-scripts.org/docs/ct/detailed_guide):
@@ -963,10 +973,9 @@ The deployer refuses an answers file readable by group or other users because
 it contains API credentials and may contain Netatmo tokens.
 
 This path is intentionally fresh-install-only. It refuses an existing CTID and
-does not yet implement in-place OCI image updates. Pin
-`INKPLATE_INSTALL_REF` to a release tag when you want the bootstrap code itself
-to be immutable; the selected application image is independently resolved and
-recorded by digest.
+does not yet implement in-place OCI image updates. Use a release tag in
+`installer_url` when you want the deployment code itself to be immutable; the
+selected application image is independently resolved and recorded by digest.
 
 Useful references:
 
