@@ -94,6 +94,20 @@ class ProducerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "removed in v4"):
             server.build_output_renderers(profiles)
 
+    @mock.patch("server.MqttWeatherPublisher")
+    def test_weather_publisher_uses_shared_mqtt_instance_id(self, publisher):
+        server.build_mqtt_weather_publisher(
+            {
+                "enabled": True,
+                "instance_id": "4f9k2m",
+            }
+        )
+
+        self.assertEqual(
+            publisher.call_args.kwargs["client_id"],
+            "inkplate-weather.4f9k2m",
+        )
+
     def test_renders_each_profile_with_dimensions_and_options(self):
         portrait_renderer = mock.Mock()
         landscape_renderer = mock.Mock()

@@ -293,6 +293,8 @@ weather data without talking directly to the weather provider APIs.
 
 ```yaml
 mqtt:
+  # Must be unique when multiple servers use the same broker.
+  instance_id: 4f9k2m
   weather:
     enabled: true
     broker: localhost
@@ -307,6 +309,12 @@ mqtt:
     topic: inkplate/weather-calendar/diagnostics
     qos: 0
 ```
+
+The instance ID is shared by the publisher and diagnostics listener to form
+distinct MQTT client IDs such as `inkplate-weather.4f9k2m` and
+`inkplate-diag.4f9k2m`. This prevents multiple servers on one broker from
+disconnecting each other. It must contain exactly six lowercase base-36
+characters, keeping the complete client IDs within 23 characters.
 
 When enabled, the server publishes retained JSON payloads after a successful
 weather refresh:
@@ -944,8 +952,9 @@ pinned image reference and digest for provenance. The visual assets are loaded
 from this repository; deployment does not depend on them being available.
 
 The advanced flow additionally prompts for CTID, hostname, bridge, IPv4 DHCP or
-static addressing, optional static IPv6, cores, memory, and disk sizes. Static
-addresses must include their prefix, for example `192.168.1.184/24` and
+static addressing, optional static IPv6, MQTT instance ID, cores, memory, and
+disk sizes. Static addresses must include their prefix, for example
+`192.168.1.184/24` and
 `2001:db8::184/64`. Gateways are optional. These network values can also be
 supplied with `--ip ADDRESS/PREFIX`, `--gateway ADDRESS`, `--ip6
 ADDRESS/PREFIX`, and `--gateway6 ADDRESS`; `--ip dhcp` and `--ip6 none` are the
@@ -970,6 +979,12 @@ sudo ./bin/deploy_proxmox_oci \
 
 The deployer refuses an answers file readable by group or other users because
 it contains API credentials and may contain Netatmo tokens.
+
+Every new deployment receives a random six-character base-36 MQTT instance ID.
+Advanced setup can edit it, and `--mqtt-instance-id ID` supplies it directly.
+The value is persisted as `mqtt.instance_id` in `config.yaml`; with separate
+mounts enabled, that file is on the dedicated configuration volume rather than
+the container root filesystem.
 
 For unattended static addressing, add these deployment-specific keys to that
 JSON answers file and select advanced setup:

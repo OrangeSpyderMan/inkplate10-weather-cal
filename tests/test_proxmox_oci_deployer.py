@@ -200,6 +200,27 @@ printf 'continued\\n'
         self.assertIn("[FAIL]", result.stderr)
         self.assertIn("invalid DNS hostname", result.stderr)
 
+    def test_generates_six_character_base36_mqtt_instance_id(self):
+        command = (
+            f"source {shlex.quote(str(DEPLOYER))}; "
+            "value=$(generate_instance_id); [[ $value =~ ^[a-z0-9]{6}$ ]]; "
+            "printf '%s' \"$value\""
+        )
+        result = shell(command)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stdout, r"^[a-z0-9]{6}$")
+
+    def test_rejects_invalid_mqtt_instance_id(self):
+        command = (
+            f"source {shlex.quote(str(DEPLOYER))}; DRY_RUN=1; SETUP=default; "
+            "MQTT_INSTANCE_ID=NOT-VALID; validate_deployment"
+        )
+        result = shell(command)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("six lowercase base-36", result.stderr)
+
     def test_validates_static_ipv4_configuration_before_container_creation(self):
         base = (
             f"source {shlex.quote(str(DEPLOYER))}; DRY_RUN=1; SETUP=advanced; "
@@ -469,6 +490,7 @@ main --non-interactive --answers "$ANSWERS" --yes --tag main \
         self.assertIn("[PASS] OCI image contract:", result.stdout)
         self.assertIn("http://192.0.2.25:8080/status", result.stdout)
         self.assertIn('host: "::"', config)
+        self.assertRegex(config, r"(?m)^  instance_id: \"[a-z0-9]{6}\"$")
         self.assertIn("renderer: pillow", config)
         self.assertIn("WEATHER_API_KEY=replace-with-weather-api-key", secret_env)
         self.assertNotIn("replace-with-weather-api-key", config)

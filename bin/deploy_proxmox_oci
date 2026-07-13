@@ -47,6 +47,7 @@ IPV4_GATEWAY=""
 IPV6_MODE="none"
 IPV6_ADDRESS=""
 IPV6_GATEWAY=""
+MQTT_INSTANCE_ID=""
 HOSTNAME="inkplate-weather"
 DISK_GB="$DEFAULT_ROOT_DISK_GB"
 DATA_DISK_GB="$DEFAULT_DATA_DISK_GB"
@@ -77,6 +78,7 @@ Usage: deploy_proxmox_oci [OPTIONS]
   --gateway ADDRESS            IPv4 gateway for a static address
   --ip6 none|ADDRESS/PREFIX    IPv6 configuration (default: none)
   --gateway6 ADDRESS           IPv6 gateway for a static address
+  --mqtt-instance-id ID        Unique six-character base-36 MQTT server ID
   --hostname NAME              Container hostname
   --disk-gb SIZE               Root disk size in GiB (default: 1)
   --data-disk-gb SIZE          Data volume size in GiB (default: 1)
@@ -177,6 +179,7 @@ parse_args() {
         shift 2
         ;;
       --gateway6) need_value "$1" "${2:-}"; IPV6_GATEWAY="$2"; shift 2 ;;
+      --mqtt-instance-id) need_value "$1" "${2:-}"; MQTT_INSTANCE_ID="$2"; shift 2 ;;
       --hostname) need_value "$1" "${2:-}"; HOSTNAME="$2"; shift 2 ;;
       --disk-gb) need_value "$1" "${2:-}"; DISK_GB="$2"; shift 2 ;;
       --data-disk-gb) need_value "$1" "${2:-}"; DATA_DISK_GB="$2"; shift 2 ;;
@@ -482,6 +485,18 @@ default_storage() {
   echo "${1%%|*}"
 }
 
+generate_instance_id() {
+  local alphabet=0123456789abcdefghijklmnopqrstuvwxyz result="" byte
+  while ((${#result} < 6)); do
+    byte="$(od -An -N1 -tu1 /dev/urandom)"
+    byte="${byte//[[:space:]]/}"
+    [[ "$byte" =~ ^[0-9]+$ ]] || die "unable to generate MQTT instance ID"
+    (( byte < 252 )) || continue
+    result+="${alphabet:byte%36:1}"
+  done
+  printf '%s' "$result"
+}
+
 configure_deployment() {
   local root_entries template_entries root_default template_default
   mapfile -t root_entries < <(storage_options rootdir)
@@ -494,6 +509,7 @@ configure_deployment() {
     proxmox_oci_template_storage "${template_entries[@]}")"
   check_pass "Container root storage: $ROOT_STORAGE (rootdir)"
   check_pass "OCI archive storage: $TEMPLATE_STORAGE (vztmpl)"
+  [[ -n "$MQTT_INSTANCE_ID" ]] || MQTT_INSTANCE_ID="$(generate_instance_id)"
 
   [[ -n "$SEPARATE_MOUNTS" ]] || \
     SEPARATE_MOUNTS="$(prompt_yes_no "Create separate persistent config and data volumes?" 1 proxmox_oci_separate_mounts)"
@@ -537,6 +553,8 @@ configure_deployment() {
       IPV6_GATEWAY="$(prompt_text "IPv6 gateway (optional)" \
         "$IPV6_GATEWAY" 0 proxmox_oci_ipv6_gateway)"
     fi
+    MQTT_INSTANCE_ID="$(prompt_text "MQTT instance ID" "$MQTT_INSTANCE_ID" 1 \
+      proxmox_oci_mqtt_instance_id)"
     CORES="$(prompt_int "CPU cores" "$CORES" 1 128 proxmox_oci_cores)"
     MEMORY_MB="$(prompt_int "Memory (MiB)" "$MEMORY_MB" "$MIN_MEMORY_MB" 1048576 proxmox_oci_memory)"
     DISK_GB="$(prompt_int "Root disk (GiB)" "$DISK_GB" 1 1048576 proxmox_oci_disk_gb)"
@@ -646,6 +664,8 @@ validate_deployment() {
   elif [[ -n "$IPV6_ADDRESS" || -n "$IPV6_GATEWAY" ]]; then
     die "a static IPv6 address or gateway requires static IPv6 configuration"
   fi
+  [[ -z "$MQTT_INSTANCE_ID" || "$MQTT_INSTANCE_ID" =~ ^[a-z0-9]{6}$ ]] || \
+    die "MQTT instance ID must contain six lowercase base-36 characters"
   validate_number "--disk-gb" "$DISK_GB" 1
   validate_number "--data-disk-gb" "$DATA_DISK_GB" 1
   validate_number "--config-disk-gb" "$CONFIG_DISK_GB" 1
@@ -668,6 +688,7 @@ validate_deployment() {
     check_skip "Static IPv6 addressing"
   fi
   check_pass "Resource values: ${CORES} vCPU, ${MEMORY_MB} MiB RAM, ${DISK_GB} GiB root disk"
+  [[ -z "$MQTT_INSTANCE_ID" ]] || check_pass "MQTT instance ID: $MQTT_INSTANCE_ID"
 }
 
 host_architecture() {
@@ -937,6 +958,7 @@ outputs:
       height: 1200
       filename: calendar.png
 mqtt:
+  instance_id: $(yaml_quote "$MQTT_INSTANCE_ID")
   weather:
     enabled: $([[ "$MQTT_WEATHER_ENABLED" == 1 ]] && echo true || echo false)
     broker: $(yaml_quote "${MQTT_WEATHER_BROKER:-localhost}")
