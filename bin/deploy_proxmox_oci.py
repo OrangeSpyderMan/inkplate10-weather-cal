@@ -56,24 +56,31 @@ class PromptUI:
         return key is not None and key in install_server.INSTALLER_ANSWERS
 
     def _run(self, *args: str, allow_no: bool = False):
-        with (
-            open("/dev/tty", "r", encoding="utf-8") as terminal_input,
-            open("/dev/tty", "w", encoding="utf-8") as terminal_output,
-        ):
-            result = subprocess.run(
-                [
-                    "whiptail",
-                    "--backtitle",
-                    APP_NAME,
-                    *args,
-                    "--output-fd",
-                    "1",
-                ],
-                stdin=terminal_input,
-                stdout=subprocess.PIPE,
-                stderr=terminal_output,
-                text=True,
-            )
+        answer_read_fd, answer_write_fd = os.pipe()
+        with os.fdopen(answer_read_fd, "r", encoding="utf-8") as answer_output:
+            try:
+                with (
+                    open("/dev/tty", "r", encoding="utf-8") as terminal_input,
+                    open("/dev/tty", "w", encoding="utf-8") as terminal_output,
+                ):
+                    result = subprocess.run(
+                        [
+                            "whiptail",
+                            "--backtitle",
+                            APP_NAME,
+                            *args,
+                            "--output-fd",
+                            str(answer_write_fd),
+                        ],
+                        stdin=terminal_input,
+                        stdout=terminal_output,
+                        stderr=terminal_output,
+                        pass_fds=(answer_write_fd,),
+                        text=True,
+                    )
+            finally:
+                os.close(answer_write_fd)
+            result.stdout = answer_output.read()
         if result.returncode == 0 or (allow_no and result.returncode == 1):
             return result
         raise KeyboardInterrupt

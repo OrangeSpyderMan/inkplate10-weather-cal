@@ -22,7 +22,11 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
     @mock.patch.object(deployer.subprocess, "run")
     @mock.patch("builtins.open", new_callable=mock.mock_open)
     def test_whiptail_draws_on_tty_while_capturing_only_answer(self, tty_open, run):
-        run.return_value = types.SimpleNamespace(returncode=0, stdout="main\n")
+        def emit_answer(*args, **kwargs):
+            os.write(kwargs["pass_fds"][0], b"main\n")
+            return types.SimpleNamespace(returncode=0, stdout=None)
+
+        run.side_effect = emit_answer
         input_context = mock.MagicMock(name="tty_input_context")
         output_context = mock.MagicMock(name="tty_output_context")
         input_terminal = input_context.__enter__.return_value
@@ -41,29 +45,65 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             ],
         )
         self.assertIs(run.call_args.kwargs["stdin"], input_terminal)
+        self.assertIs(run.call_args.kwargs["stdout"], output_terminal)
         self.assertIs(run.call_args.kwargs["stderr"], output_terminal)
-        self.assertEqual(run.call_args.kwargs["stdout"], subprocess.PIPE)
+        self.assertEqual(len(run.call_args.kwargs["pass_fds"]), 1)
+        self.assertIn(
+            str(run.call_args.kwargs["pass_fds"][0]),
+            run.call_args.args[0],
+        )
         self.assertEqual(result.stdout, "main\n")
 
     def test_tui_can_open_real_controlling_terminal(self):
-        pid, terminal = pty.fork()
-        if pid == 0:
-            try:
-                ui = deployer.PromptUI(enabled=False)
-                ui.enabled = True
-                with mock.patch.object(
-                    deployer.subprocess,
-                    "run",
-                    return_value=types.SimpleNamespace(returncode=0, stdout="main\n"),
-                ):
-                    ui._run("--menu", "Image", "10", "70", "2")
-            except BaseException:
-                os._exit(1)
-            os._exit(0)
+        with tempfile.TemporaryDirectory() as directory:
+            fake_whiptail = pathlib.Path(directory) / "whiptail"
+            fake_whiptail.write_text(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "args = sys.argv[1:]\n"
+                "fd = int(args[args.index('--output-fd') + 1])\n"
+                "os.write(1, b'VISIBLE-TUI\\n')\n"
+                "os.write(fd, b'main\\n')\n",
+                encoding="utf-8",
+            )
+            fake_whiptail.chmod(0o755)
+            pid, terminal = pty.fork()
+            if pid == 0:
+                try:
+                    os.environ["PATH"] = f"{directory}:{os.environ['PATH']}"
+                    ui = deployer.PromptUI(enabled=False)
+                    ui.enabled = True
+                    result = ui._run("--menu", "Image", "10", "70", "2")
+                    if result.stdout != "main\n":
+                        os._exit(2)
+                except BaseException:
+                    os._exit(1)
+                os._exit(0)
 
-        _, status = os.waitpid(pid, 0)
-        os.close(terminal)
+            output = bytearray()
+            while True:
+                try:
+                    chunk = os.read(terminal, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output.extend(chunk)
+            _, status = os.waitpid(pid, 0)
+            os.close(terminal)
+
         self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+        self.assertIn(b"VISIBLE-TUI", output)
+
+    @mock.patch.object(deployer.subprocess, "run")
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    def test_tui_cancel_aborts_cleanly(self, tty_open, run):
+        run.return_value = types.SimpleNamespace(returncode=255, stdout=None)
+        ui = deployer.PromptUI(enabled=False)
+        ui.enabled = True
+
+        with self.assertRaises(KeyboardInterrupt):
+            ui._run("--menu", "Image", "10", "70", "2")
 
     def test_deployer_starts_with_standard_library_only(self):
         result = subprocess.run(
