@@ -518,6 +518,22 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertIn("config-store:1,mp=/srv/inkplate/server/config,backup=1", command)
         self.assertNotIn("experimental", " ".join(command).lower())
 
+    def test_container_notes_use_branded_html_and_escape_provenance(self):
+        description = deployer.container_description(
+            "next'><script>alert(1)</script>",
+            "sha256:abc&def",
+        )
+
+        self.assertIn("<div align='center'>", description)
+        self.assertIn("weathercal-icon-192.png", description)
+        self.assertIn(">GitHub</a>", description)
+        self.assertIn(">Documentation</a>", description)
+        self.assertIn(">Container image</a>", description)
+        self.assertIn(">Issues</a>", description)
+        self.assertIn("sha256:abc&amp;def", description)
+        self.assertNotIn("<script>", description)
+        self.assertNotIn("\\n", description)
+
     @mock.patch.object(deployer.subprocess, "run")
     def test_readiness_probe_uses_ipv6_loopback_for_wildcard(self, run):
         run.return_value = types.SimpleNamespace(returncode=0)

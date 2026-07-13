@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import hashlib
+import html
 import importlib.util
 import ipaddress
 import json
@@ -48,6 +49,11 @@ DEFAULT_CONFIG_DISK_GB = 1
 DEFAULT_MEMORY_MB = 256
 DEFAULT_CORES = 1
 DEFAULT_SWAP_MB = 256
+PROJECT_URL = "https://github.com/OrangeSpyderMan/inkplate10-weather-cal"
+PROJECT_ICON_URL = (
+    "https://raw.githubusercontent.com/OrangeSpyderMan/"
+    "inkplate10-weather-cal/main/server/views/pwa/icons/weathercal-icon-192.png"
+)
 
 
 class PromptUI:
@@ -904,11 +910,42 @@ def pull_image(tag: str, digest: str, archive_path: Path, dry_run: bool):
         partial_path.unlink(missing_ok=True)
 
 
+def container_description(tag: str, digest: str) -> str:
+    image_reference = html.escape(f"{IMAGE}:{tag}", quote=True)
+    safe_digest = html.escape(digest, quote=True)
+    return f"""<div align='center'>
+  <a href='{PROJECT_URL}' target='_blank' rel='noopener noreferrer'>
+    <img src='{PROJECT_ICON_URL}' alt='Inkplate Weather Calendar logo' style='width:96px;height:96px;'/>
+  </a>
+
+  <h2 style='font-size:24px;margin:16px 0 8px;'>Inkplate Weather Calendar</h2>
+  <p style='margin:8px 0 16px;'>Weather forecasts and calendars for Inkplate e-paper displays.</p>
+
+  <span style='margin:0 10px;'>
+    <i class='fa fa-github fa-fw'></i>
+    <a href='{PROJECT_URL}' target='_blank' rel='noopener noreferrer'>GitHub</a>
+  </span>
+  <span style='margin:0 10px;'>
+    <i class='fa fa-book fa-fw'></i>
+    <a href='{PROJECT_URL}/blob/main/server/README.md' target='_blank' rel='noopener noreferrer'>Documentation</a>
+  </span>
+  <span style='margin:0 10px;'>
+    <i class='fa fa-cube fa-fw'></i>
+    <a href='{PROJECT_URL}/pkgs/container/inkplate10-weather-cal' target='_blank' rel='noopener noreferrer'>Container image</a>
+  </span>
+  <span style='margin:0 10px;'>
+    <i class='fa fa-exclamation-circle fa-fw'></i>
+    <a href='{PROJECT_URL}/issues' target='_blank' rel='noopener noreferrer'>Issues</a>
+  </span>
+
+  <p style='margin:16px 0 0;font-size:12px;'>
+    <strong>Image:</strong> <code>{image_reference}</code><br/>
+    <strong>Digest:</strong> <code>{safe_digest}</code>
+  </p>
+</div>"""
+
+
 def create_container(ctid, archive_volume, args, plan, tag, digest):
-    description = (
-        "Inkplate Weather Calendar OCI deployment\\n"
-        f"Image: {IMAGE}:{tag}\\nDigest: {digest}"
-    )
     command = [
         "pct", "create", str(ctid), archive_volume,
         "--hostname", args.hostname,
@@ -920,7 +957,7 @@ def create_container(ctid, archive_volume, args, plan, tag, digest):
         f"name=eth0,bridge={args.bridge},ip=dhcp,ip6=auto,type=veth",
         "--unprivileged", "1",
         "--onboot", "1",
-        "--description", description,
+        "--description", container_description(tag, digest),
     ]
     if plan.separate_mounts:
         command.extend(

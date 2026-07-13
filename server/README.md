@@ -925,6 +925,12 @@ On the normal Linux dual-stack socket default, the listener accepts both IPv6
 and IPv4 connections; an IPv6 network still needs router advertisements to
 provide a routable address.
 
+The PVE container notes use the same general presentation as Community Scripts:
+the Inkplate application icon and title, direct links to the GitHub repository,
+documentation, published container package and issue tracker, followed by the
+pinned image reference and digest for provenance. The visual assets are loaded
+from this repository; deployment does not depend on them being available.
+
 The advanced flow additionally prompts for CTID, hostname, bridge, cores,
 memory, and disk sizes. Every value can also be provided on the command line;
 run `./bin/deploy_proxmox_oci --help` for the complete list. Repeatable installs
