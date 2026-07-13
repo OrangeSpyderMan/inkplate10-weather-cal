@@ -856,6 +856,9 @@ The standalone deployer follows the operational patterns documented by the
 
 - a minimal default setup and a configurable advanced setup
 - pre-flight validation before container creation
+- an explicit `[PASS]`, `[FAIL]`, `[INSTALL]`, or `[SKIP]` result for each
+  host command, PVE version, architecture, dependency, terminal/UI, storage,
+  network, CTID, registry, digest, and image-contract check
 - `whiptail` menus and protected password prompts, with `--no-tui` fallback
 - an unprivileged, DHCP-enabled, on-boot LXC by default
 - a final deployment summary and explicit confirmation

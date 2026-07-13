@@ -84,8 +84,16 @@ EOF
 }
 
 die() {
-  printf 'ERROR: %s\n' "$*" >&2
+  printf '  [FAIL] %s\n' "$*" >&2
   exit 1
+}
+
+check_pass() {
+  printf '  [PASS] %s\n' "$*"
+}
+
+check_skip() {
+  printf '  [SKIP] %s\n' "$*"
 }
 
 run() {
@@ -166,17 +174,20 @@ version_value() {
 
 validate_host() {
   if (( DRY_RUN )) && ! command -v pveversion >/dev/null 2>&1; then
-    echo "Would verify root access, PVE 9.1+, pct, pvesm, and pvesh."
-    return
+    check_skip "Proxmox host checks (commands are unavailable in this dry-run environment)"
+    check_pass "OCI architecture: linux/$(host_architecture)"
+    return 0
   fi
   (( EUID == 0 )) || die "run this deployer as root on a Proxmox VE host"
+  check_pass "Root privileges"
   local command
   for command in pveversion pct pvesm pvesh dpkg; do
     command -v "$command" >/dev/null 2>&1 || die "missing Proxmox command: $command"
+    check_pass "Required command: $command"
   done
 
   local versions pve container lxc
-  versions="$(pveversion --verbose)"
+  versions="$(pveversion --verbose)" || die "pveversion --verbose failed"
   pve="$(version_value pve-manager <<<"$versions")"
   container="$(version_value pve-container <<<"$versions")"
   lxc="$(version_value lxc-pve <<<"$versions")"
@@ -188,36 +199,83 @@ validate_host() {
     die "preserving the OCI application user requires pve-container 6.1.0 or newer"
   dpkg --compare-versions "$lxc" ge 6.0.5-4 || \
     die "preserving OCI supplementary groups requires lxc-pve 6.0.5-4 or newer"
-  printf 'Pre-flight: Proxmox VE %s, pve-container %s, lxc-pve %s.\n' \
-    "$pve" "$container" "$lxc"
+  check_pass "Proxmox VE $pve (requires 9.1+)"
+  check_pass "pve-container $container (requires 6.1.0+)"
+  check_pass "lxc-pve $lxc (requires 6.0.5-4+)"
+  check_pass "OCI architecture: linux/$(host_architecture)"
 }
 
 ensure_dependencies() {
-  local packages=()
-  command -v jq >/dev/null 2>&1 || packages+=(jq)
-  command -v skopeo >/dev/null 2>&1 || packages+=(skopeo)
-  if (( ! NO_TUI && ! NON_INTERACTIVE )) && ! command -v whiptail >/dev/null 2>&1; then
-    packages+=(whiptail)
+  local packages=() dependency
+  for dependency in jq skopeo; do
+    if command -v "$dependency" >/dev/null 2>&1; then
+      check_pass "Host dependency: $dependency"
+    else
+      printf '  [INSTALL] Host dependency: %s\n' "$dependency"
+      packages+=("$dependency")
+    fi
+  done
+  if (( ! NO_TUI && ! NON_INTERACTIVE )); then
+    if command -v whiptail >/dev/null 2>&1; then
+      check_pass "Host dependency: whiptail"
+    else
+      printf '  [INSTALL] Host dependency: whiptail\n'
+      packages+=(whiptail)
+    fi
+  else
+    check_skip "Host dependency: whiptail (TUI disabled)"
   fi
   ((${#packages[@]})) || return 0
-  printf 'Required host packages: %s\n' "${packages[*]}"
-  run apt-get update
-  run apt-get install -y --no-install-recommends "${packages[@]}"
+  run apt-get update || die "apt package index update failed"
+  run apt-get install -y --no-install-recommends "${packages[@]}" || \
+    die "could not install required host dependencies: ${packages[*]}"
+  if (( DRY_RUN )); then
+    check_skip "Dependency verification (dry-run only)"
+    return 0
+  fi
+  for dependency in "${packages[@]}"; do
+    command -v "$dependency" >/dev/null 2>&1 || die "dependency installation did not provide: $dependency"
+    check_pass "Installed host dependency: $dependency"
+  done
 }
 
 validate_answers() {
   if (( NON_INTERACTIVE )) && [[ -z "$ANSWERS_FILE" ]]; then
     die "--non-interactive requires --answers PATH"
   fi
-  [[ -z "$ANSWERS_FILE" ]] && return
+  if [[ -z "$ANSWERS_FILE" ]]; then
+    check_pass "Configuration input: interactive prompts"
+    return 0
+  fi
   [[ -f "$ANSWERS_FILE" ]] || die "answers file not found: $ANSWERS_FILE"
+  check_pass "Answers file exists: $ANSWERS_FILE"
   local mode
   mode="$(stat -c '%a' "$ANSWERS_FILE")"
   (( (8#$mode & 077) == 0 )) || \
     die "answers file $ANSWERS_FILE must not be accessible by group or other users (chmod 600)"
+  check_pass "Answers file permissions: mode $mode"
   jq -e 'type == "object"' "$ANSWERS_FILE" >/dev/null || \
     die "answers file must contain a JSON object"
-  printf 'Loaded installer answers from %s\n' "$ANSWERS_FILE"
+  check_pass "Answers file JSON structure"
+}
+
+terminal_available() {
+  [[ -r /dev/tty && -w /dev/tty ]] && (: </dev/tty) 2>/dev/null
+}
+
+configure_interface() {
+  if (( NON_INTERACTIVE )); then
+    check_skip "Interactive UI (--non-interactive selected)"
+    return 0
+  fi
+  terminal_available || die "no controlling terminal is available; use --non-interactive with --answers"
+  if (( NO_TUI )); then
+    check_pass "Interactive UI: line-oriented prompts on /dev/tty"
+    return 0
+  fi
+  command -v whiptail >/dev/null 2>&1 || die "whiptail is unavailable after dependency pre-flight"
+  TUI=1
+  check_pass "Interactive UI: whiptail on /dev/tty"
 }
 
 has_answer() {
@@ -403,6 +461,8 @@ configure_deployment() {
     proxmox_oci_root_storage "${root_entries[@]}")"
   TEMPLATE_STORAGE="$(storage_choice "OCI image cache" "$TEMPLATE_STORAGE" "$template_default" \
     proxmox_oci_template_storage "${template_entries[@]}")"
+  check_pass "Container root storage: $ROOT_STORAGE (rootdir)"
+  check_pass "OCI archive storage: $TEMPLATE_STORAGE (vztmpl)"
 
   [[ -n "$SEPARATE_MOUNTS" ]] || \
     SEPARATE_MOUNTS="$(prompt_yes_no "Create separate persistent config and data volumes?" 1 proxmox_oci_separate_mounts)"
@@ -411,8 +471,12 @@ configure_deployment() {
       proxmox_oci_data_storage "${root_entries[@]}")"
     CONFIG_STORAGE="$(storage_choice "Configuration" "$CONFIG_STORAGE" "$ROOT_STORAGE" \
       proxmox_oci_config_storage "${root_entries[@]}")"
+    check_pass "Persistent data storage: $DATA_STORAGE"
+    check_pass "Persistent config storage: $CONFIG_STORAGE"
   elif [[ -n "$DATA_STORAGE" || -n "$CONFIG_STORAGE" ]]; then
     die "separate storage options require --separate-mounts"
+  else
+    check_skip "Separate persistent config/data volumes"
   fi
 
   if [[ "$SETUP" == advanced ]]; then
@@ -469,6 +533,9 @@ validate_deployment() {
     validate_number "--ctid" "$CTID" 100
     (( CTID <= 999999999 )) || die "--ctid must be at most 999999999"
   fi
+  check_pass "Container hostname: $HOSTNAME"
+  (( DRY_RUN )) || check_pass "Linux bridge exists: $BRIDGE"
+  check_pass "Resource values: ${CORES} vCPU, ${MEMORY_MB} MiB RAM, ${DISK_GB} GiB root disk"
 }
 
 host_architecture() {
@@ -495,7 +562,8 @@ select_tag() {
   if [[ -n "$TAG" ]]; then
     for tag in "${tags[@]}"; do [[ "$tag" == "$TAG" ]] && { found=1; break; }; done
     (( found )) || die "OCI tag is not available: $TAG"
-    return
+    check_pass "OCI image tag is published: $TAG"
+    return 0
   fi
   for tag in "${tags[@]}"; do
     [[ -n "$preferred" ]] || { [[ "$tag" == v* ]] && preferred="$tag"; }
@@ -507,6 +575,7 @@ select_tag() {
   done
   [[ -n "$preferred" ]] || preferred="$([[ " ${tags[*]} " == *' main '* ]] && echo main || echo "${tags[0]}")"
   TAG="$(prompt_choice "Published OCI image" "$preferred" proxmox_oci_tag "${pairs[@]}")"
+  check_pass "OCI image tag is published: $TAG"
 }
 
 validate_digest() {
@@ -916,13 +985,14 @@ main() {
   printf '%0.s=' {1..48}; echo
   echo "Standalone fresh-install workflow; existing CTIDs are never replaced."
   (( DRY_RUN )) && echo "Dry run: host changes will only be previewed."
+  echo
+  echo "Pre-flight checks"
+  echo "-----------------"
 
   validate_host
   ensure_dependencies
   validate_answers
-  if (( ! NO_TUI && ! NON_INTERACTIVE && ! DRY_RUN )) && command -v whiptail >/dev/null 2>&1 && [[ -r /dev/tty ]]; then
-    TUI=1
-  fi
+  configure_interface
   [[ -n "$SETUP" ]] || SETUP="$(prompt_choice "Setup mode" default proxmox_oci_setup \
     default "recommended resources and DHCP networking" \
     advanced "custom CTID, resources, bridge, and disk sizes")"
@@ -936,10 +1006,13 @@ main() {
     fi
   fi
   if (( ! DRY_RUN )) && pct config "$CTID" >/dev/null 2>&1; then die "container ID $CTID already exists"; fi
+  check_pass "Container ID is unused: $CTID"
 
   local digest archive_file archive_volume archive_path config_file env_file address url_host
   digest="$(image_digest)"
+  check_pass "Platform-specific image digest resolved: $digest"
   validate_selected_image "$digest"
+  check_pass "OCI image contract: linux/$(host_architecture), user inkplate, expected entrypoint"
   show_plan "$digest"
   if (( ! ASSUME_YES )); then
     [[ "$(prompt_yes_no "Create and start this container?" 0 proxmox_oci_confirm)" == 1 ]] || {

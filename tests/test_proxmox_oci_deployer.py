@@ -125,7 +125,10 @@ printf 'continued\\n'
         result = shell(command)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "continued\n")
+        self.assertIn("[PASS] Host dependency: jq", result.stdout)
+        self.assertIn("[PASS] Host dependency: skopeo", result.stdout)
+        self.assertIn("[PASS] Host dependency: whiptail", result.stdout)
+        self.assertTrue(result.stdout.endswith("continued\n"))
 
     def test_tui_uses_the_controlling_terminal_and_captures_only_the_answer(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -194,6 +197,7 @@ printf 'continued\\n'
         result = shell(command)
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("[FAIL]", result.stderr)
         self.assertIn("invalid DNS hostname", result.stderr)
 
     def test_resolves_the_host_platform_digest_from_a_multiarch_index(self):
@@ -383,6 +387,13 @@ main --non-interactive --answers "$ANSWERS" --yes --tag main \
             secret_env = output_env.read_text(encoding="utf-8")
 
         self.assertIn("Deployment completed successfully.", result.stdout)
+        self.assertIn("Pre-flight checks", result.stdout)
+        self.assertIn("[SKIP] Interactive UI (--non-interactive selected)", result.stdout)
+        self.assertIn("[PASS] Container root storage: root-store", result.stdout)
+        self.assertIn("[PASS] OCI image tag is published: main", result.stdout)
+        self.assertIn("[PASS] Container ID is unused: 321", result.stdout)
+        self.assertIn("[PASS] Platform-specific image digest resolved:", result.stdout)
+        self.assertIn("[PASS] OCI image contract:", result.stdout)
         self.assertIn("http://192.0.2.25:8080/status", result.stdout)
         self.assertIn('host: "::"', config)
         self.assertIn("renderer: pillow", config)
