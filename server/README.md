@@ -915,6 +915,16 @@ Storage is selected explicitly in the guided flow:
 - final acceptance verifies PID 1 runs as `inkplate` and that the separate
   config volume rejects writes before reporting success
 
+The recommended OCI defaults reflect the measured footprint of the published
+image: 1 vCPU, 256 MiB RAM, 256 MiB swap, and 1 GiB each for the root, generated
+data, and read-only configuration volumes. The storage-backed volumes use PVE's
+portable `STORAGE_ID:SIZE_IN_GiB` allocation form and can be grown later with
+normal Proxmox volume controls. The application binds to the IPv6 wildcard
+`::`, while the container requests both IPv4 DHCP and IPv6 SLAAC (`ip6=auto`).
+On the normal Linux dual-stack socket default, the listener accepts both IPv6
+and IPv4 connections; an IPv6 network still needs router advertisements to
+provide a routable address.
+
 The advanced flow additionally prompts for CTID, hostname, bridge, cores,
 memory, and disk sizes. Every value can also be provided on the command line;
 run `./bin/deploy_proxmox_oci --help` for the complete list. Repeatable installs

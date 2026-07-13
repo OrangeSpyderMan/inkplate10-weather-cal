@@ -41,6 +41,13 @@ MIN_CONTAINER_VERSION = (6, 1, 0)
 MIN_LXC_VERSION = (6, 0, 5, 4)
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 OCI_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
+DEFAULT_BIND_HOST = "::"
+DEFAULT_ROOT_DISK_GB = 1
+DEFAULT_DATA_DISK_GB = 1
+DEFAULT_CONFIG_DISK_GB = 1
+DEFAULT_MEMORY_MB = 256
+DEFAULT_CORES = 1
+DEFAULT_SWAP_MB = 256
 
 
 class PromptUI:
@@ -208,6 +215,13 @@ def configuration_prompts(ui: PromptUI):
             setattr(install_server, name, value)
 
 
+def collect_configuration_answers(ui: PromptUI):
+    with configuration_prompts(ui):
+        return install_server.collect_answers(
+            {}, {"server.host": DEFAULT_BIND_HOST}, mode="systemd"
+        )
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="deploy_proxmox_oci",
@@ -320,7 +334,7 @@ def main():
     root_options = available_storage("rootdir", args.dry_run)
     template_options = available_storage("vztmpl", args.dry_run)
     configure_deployment_args(args, setup, ui, root_options, template_options)
-    legacy.validate_arguments(args)
+    validate_deployment_arguments(args)
     validate_hostname(args.hostname)
     validate_bridge(args.bridge, args.dry_run)
 
@@ -361,8 +375,7 @@ def main():
         print("Container creation cancelled; no container was created.")
         return 0
 
-    with configuration_prompts(ui):
-        answers = install_server.collect_answers({}, {}, mode="systemd")
+    answers = collect_configuration_answers(ui)
     config_text = install_server.render_config(answers, mode="systemd")
     env_text = install_server.render_env(
         answers,
@@ -388,7 +401,7 @@ def main():
         if args.dry_run:
             print("Dry run complete; no container was created.")
             return 0
-        legacy.wait_until_ready(ctid)
+        wait_until_ready(ctid, str(answers["host"]), int(answers["port"]))
         verify_runtime_acceptance(ctid, plan.separate_mounts)
     except BaseException:
         created = create_attempted and container_exists(ctid)
@@ -401,9 +414,11 @@ def main():
     address = legacy.container_address(ctid)
     print("\nDeployment completed successfully.")
     print(f"Container: {ctid} (running)")
-    print(f"Calendar:  http://{address}:8080/calendar.png")
-    print(f"Viewer:    http://{address}:8080/app")
-    print(f"Status:    http://{address}:8080/status")
+    url_host = f"[{address}]" if ":" in address else address
+    port = int(answers["port"])
+    print(f"Calendar:  http://{url_host}:{port}/calendar.png")
+    print(f"Viewer:    http://{url_host}:{port}/app")
+    print(f"Status:    http://{url_host}:{port}/status")
     print(f"Console:   pct console {ctid}")
     return 0
 
@@ -531,11 +546,21 @@ def configure_deployment_args(args, setup, ui, root_options, template_options):
 
     args.hostname = args.hostname if args.hostname is not None else "inkplate-weather"
     args.bridge = args.bridge if args.bridge is not None else "vmbr0"
-    args.disk_gb = args.disk_gb if args.disk_gb is not None else 8
-    args.data_disk_gb = args.data_disk_gb if args.data_disk_gb is not None else 4
-    args.config_disk_gb = args.config_disk_gb if args.config_disk_gb is not None else 1
-    args.memory = args.memory if args.memory is not None else 1024
-    args.cores = args.cores if args.cores is not None else 2
+    args.disk_gb = (
+        args.disk_gb if args.disk_gb is not None else DEFAULT_ROOT_DISK_GB
+    )
+    args.data_disk_gb = (
+        args.data_disk_gb
+        if args.data_disk_gb is not None
+        else DEFAULT_DATA_DISK_GB
+    )
+    args.config_disk_gb = (
+        args.config_disk_gb
+        if args.config_disk_gb is not None
+        else DEFAULT_CONFIG_DISK_GB
+    )
+    args.memory = args.memory if args.memory is not None else DEFAULT_MEMORY_MB
+    args.cores = args.cores if args.cores is not None else DEFAULT_CORES
     if setup != "advanced":
         return
 
@@ -550,11 +575,31 @@ def configure_deployment_args(args, setup, ui, root_options, template_options):
         "proxmox_oci_bridge",
     )
     args.cores = ui.integer("CPU cores", args.cores, 1, 128, "proxmox_oci_cores")
-    args.memory = ui.integer("Memory (MiB)", args.memory, 512, 1048576, "proxmox_oci_memory")
-    args.disk_gb = ui.integer("Root disk (GiB)", args.disk_gb, 4, 1048576, "proxmox_oci_disk_gb")
+    args.memory = ui.integer("Memory (MiB)", args.memory, 256, 1048576, "proxmox_oci_memory")
+    args.disk_gb = ui.integer("Root disk (GiB)", args.disk_gb, 1, 1048576, "proxmox_oci_disk_gb")
     if args.separate_mounts:
         args.data_disk_gb = ui.integer("Data disk (GiB)", args.data_disk_gb, 1, 1048576, "proxmox_oci_data_disk_gb")
         args.config_disk_gb = ui.integer("Config disk (GiB)", args.config_disk_gb, 1, 1024, "proxmox_oci_config_disk_gb")
+
+
+def validate_deployment_arguments(args):
+    """Validate the native OCI workflow without changing the legacy deployer."""
+    if args.ctid is not None and not 100 <= args.ctid <= 999999999:
+        raise SystemExit("ERROR: --ctid must be between 100 and 999999999.")
+    if args.disk_gb < 1:
+        raise SystemExit("ERROR: --disk-gb must be at least 1.")
+    if args.data_disk_gb < 1:
+        raise SystemExit("ERROR: --data-disk-gb must be at least 1.")
+    if args.config_disk_gb < 1:
+        raise SystemExit("ERROR: --config-disk-gb must be at least 1.")
+    if args.memory < 256:
+        raise SystemExit("ERROR: --memory must be at least 256 MiB.")
+    if args.cores < 1:
+        raise SystemExit("ERROR: --cores must be positive.")
+    if (args.data_storage or args.config_storage) and not args.separate_mounts:
+        raise SystemExit(
+            "ERROR: separate storage options require --separate-mounts."
+        )
 
 
 def network_bridges():
@@ -870,8 +915,9 @@ def create_container(ctid, archive_volume, args, plan, tag, digest):
         "--rootfs", f"{plan.root_storage}:{args.disk_gb}",
         "--memory", str(args.memory),
         "--cores", str(args.cores),
-        "--swap", "512",
-        "--net0", f"name=eth0,bridge={args.bridge},ip=dhcp,type=veth",
+        "--swap", str(DEFAULT_SWAP_MB),
+        "--net0",
+        f"name=eth0,bridge={args.bridge},ip=dhcp,ip6=auto,type=veth",
         "--unprivileged", "1",
         "--onboot", "1",
         "--description", description,
@@ -900,6 +946,34 @@ def wait_for_container_exec(ctid: int, dry_run: bool):
             return
         time.sleep(1)
     raise SystemExit(f"ERROR: container {ctid} did not become available for setup.")
+
+
+def wait_until_ready(ctid: int, host: str, port: int):
+    address = ipaddress.ip_address(host)
+    if address.is_unspecified:
+        probe_host = "::1" if address.version == 6 else "127.0.0.1"
+    else:
+        probe_host = host
+    probe = (
+        "import http.client,sys; "
+        f"c=http.client.HTTPConnection({probe_host!r},{port},timeout=5); "
+        "c.request('GET','/api/v1/ready'); "
+        "r=c.getresponse(); r.read(); "
+        "sys.exit(0 if r.status == 200 else r.status)"
+    )
+    for _ in range(36):
+        result = subprocess.run(
+            ["pct", "exec", str(ctid), "--", "python3", "-c", probe],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return
+        time.sleep(5)
+    raise SystemExit(
+        f"ERROR: container {ctid} did not become ready on {host}:{port}. "
+        f"Inspect with: pct console {ctid}"
+    )
 
 
 def bootstrap_configuration(ctid, config_file, env_file, plan, dry_run):
@@ -1004,8 +1078,9 @@ def show_plan(args, ctid, tag, digest, plan):
     print(f"Digest: {digest}")
     print(f"Platform: linux/{host_oci_architecture()}")
     print(f"Container: {ctid} ({args.hostname}), unprivileged, on-boot")
-    print(f"Network: {args.bridge}, IPv4 DHCP")
-    print(f"Resources: {args.cores} cores, {args.memory} MiB RAM")
+    print(f"Network: {args.bridge}, IPv4 DHCP, IPv6 SLAAC")
+    core_label = "core" if args.cores == 1 else "cores"
+    print(f"Resources: {args.cores} {core_label}, {args.memory} MiB RAM")
     print(f"OCI cache: {args.template_storage}")
     print(f"Root disk: {plan.root_storage}:{args.disk_gb} GiB")
     if plan.separate_mounts:

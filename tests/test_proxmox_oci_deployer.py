@@ -427,7 +427,47 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
 
         self.assertEqual(args.disk_gb, 0)
         with self.assertRaisesRegex(SystemExit, "disk-gb"):
-            deployer.legacy.validate_arguments(args)
+            deployer.validate_deployment_arguments(args)
+
+    def test_default_setup_uses_measured_oci_resource_footprint(self):
+        args = types.SimpleNamespace(
+            ctid=None,
+            storage="root-store",
+            template_storage="template-store",
+            separate_mounts=True,
+            data_storage="root-store",
+            config_storage="root-store",
+            hostname=None,
+            bridge=None,
+            disk_gb=None,
+            data_disk_gb=None,
+            config_disk_gb=None,
+            memory=None,
+            cores=None,
+        )
+
+        deployer.configure_deployment_args(
+            args,
+            "default",
+            mock.Mock(),
+            [("root-store", "root storage")],
+            [("template-store", "template storage")],
+        )
+        deployer.validate_deployment_arguments(args)
+
+        self.assertEqual(args.cores, 1)
+        self.assertEqual(args.memory, 256)
+        self.assertEqual(args.disk_gb, 1)
+        self.assertEqual(args.data_disk_gb, 1)
+        self.assertEqual(args.config_disk_gb, 1)
+
+    @mock.patch.object(deployer.install_server, "collect_answers", return_value={})
+    def test_oci_configuration_defaults_to_ipv6_wildcard(self, collect):
+        deployer.collect_configuration_answers(mock.Mock())
+
+        collect.assert_called_once_with(
+            {}, {"server.host": "::"}, mode="systemd"
+        )
 
     @mock.patch.object(deployer.legacy, "run")
     def test_create_uses_unprivileged_container_and_persistent_mounts(self, run):
@@ -461,6 +501,11 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertEqual(command[:4], ["pct", "create", "123", "local:vztmpl/inkplate.tar"])
         self.assertEqual(command[command.index("--unprivileged") + 1], "1")
         self.assertEqual(command[command.index("--onboot") + 1], "1")
+        self.assertEqual(command[command.index("--swap") + 1], "256")
+        self.assertIn(
+            "name=eth0,bridge=vmbr0,ip=dhcp,ip6=auto,type=veth",
+            command,
+        )
         self.assertIn(
             "data-store:4,mp=/srv/inkplate/server/data",
             [item.removesuffix(",backup=1") for item in command],
@@ -472,6 +517,17 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertIn("data-store:4,mp=/srv/inkplate/server/data,backup=1", command)
         self.assertIn("config-store:1,mp=/srv/inkplate/server/config,backup=1", command)
         self.assertNotIn("experimental", " ".join(command).lower())
+
+    @mock.patch.object(deployer.subprocess, "run")
+    def test_readiness_probe_uses_ipv6_loopback_for_wildcard(self, run):
+        run.return_value = types.SimpleNamespace(returncode=0)
+
+        deployer.wait_until_ready(123, "::", 9090)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["pct", "exec", "123", "--"])
+        self.assertIn("HTTPConnection('::1',9090", command[-1])
+        compile(command[-1], "<ipv6-readiness-probe>", "exec")
 
     @mock.patch.object(deployer, "set_config_mount_read_only")
     @mock.patch.object(deployer, "verify_application_storage")
@@ -686,7 +742,7 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             mock.patch.object(deployer, "pull_image") as pull_image,
             mock.patch.object(deployer, "create_container") as create_container,
             mock.patch.object(deployer, "bootstrap_configuration") as bootstrap,
-            mock.patch.object(deployer.legacy, "wait_until_ready") as wait_ready,
+            mock.patch.object(deployer, "wait_until_ready") as wait_ready,
             mock.patch.object(deployer, "verify_runtime_acceptance") as verify_runtime,
             mock.patch.object(deployer.legacy, "container_address", return_value="192.0.2.10"),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
@@ -700,7 +756,7 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
         self.assertEqual(create_container.call_args.args[0], 222)
         self.assertEqual(create_container.call_args.args[1], "template-store:vztmpl/inkplate-weather-main-aaaaaaaaaaaa.tar")
         bootstrap.assert_called_once()
-        wait_ready.assert_called_once_with(222)
+        wait_ready.assert_called_once_with(222, "0.0.0.0", 8080)
         verify_runtime.assert_called_once_with(222, True)
         self.assertIn("Deployment completed successfully.", stdout.getvalue())
         self.assertIn("http://192.0.2.10:8080/status", stdout.getvalue())
@@ -885,7 +941,7 @@ class ProxmoxOciDeployerTests(unittest.TestCase):
             mock.patch.object(deployer, "create_container"),
             mock.patch.object(deployer, "bootstrap_configuration"),
             mock.patch.object(
-                deployer.legacy,
+                deployer,
                 "wait_until_ready",
                 side_effect=SystemExit("not ready"),
             ),
