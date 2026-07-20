@@ -89,10 +89,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_release_workflows_dispatch_versioned_builds_and_sync_next(self):
         publish_workflow = (REPO_ROOT / ".github/workflows/publish-release.yml").read_text()
         prepare_workflow = (REPO_ROOT / ".github/workflows/prepare-release.yml").read_text()
+        release_docs = (REPO_ROOT / "docs/releasing.md").read_text()
 
         self.assertIn("gh workflow run firmware.yml", publish_workflow)
-        self.assertIn('if [ "$RELEASE_CREATED" = true ]', publish_workflow)
-        self.assertIn("Firmware build was triggered by publishing", publish_workflow)
         self.assertIn("--ref \"$VERSION\"", publish_workflow)
         self.assertIn("-f release_tag=\"$VERSION\"", publish_workflow)
         self.assertIn("gh workflow run container-publish.yml", publish_workflow)
@@ -101,6 +100,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("--base next", publish_workflow)
         self.assertIn("--head \"$branch\"", publish_workflow)
         self.assertIn("Merge this PR using a merge commit", prepare_workflow)
+        self.assertIn("events created", release_docs)
+        self.assertIn("explicit dispatch", release_docs)
 
     def test_container_workflow_embeds_shared_version_manifest(self):
         publish_workflow = (

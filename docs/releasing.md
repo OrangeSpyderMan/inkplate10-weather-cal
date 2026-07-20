@@ -17,6 +17,13 @@ so release tags remain in the integration branch's ancestry.
 The publish workflow is safe to retry when the release tag already points to
 the current `main`. It will refuse to move an existing tag.
 
+The explicit firmware and container workflow dispatches in **Publish Release**
+are intentional. The GitHub Release is created with the workflow's
+`GITHUB_TOKEN`, and GitHub does not start new workflow runs from events created
+by that token. In particular, the firmware workflow's `release` trigger does
+not replace the explicit dispatch. Retrying **Publish Release** must also
+redispatch the builds so missing assets or images can be recovered.
+
 Do not merge new work into `next` between merging the release PR and running
 the publish workflow. Publication verifies that current `main` is the exact
 merge commit of the matching release PR.
