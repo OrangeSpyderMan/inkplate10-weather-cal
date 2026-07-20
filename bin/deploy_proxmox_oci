@@ -1,0 +1,1238 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+APP_NAME="Inkplate Weather Calendar"
+IMAGE="ghcr.io/orangespyderman/inkplate10-weather-cal"
+PROJECT_URL="https://github.com/OrangeSpyderMan/inkplate10-weather-cal"
+PROJECT_ICON_URL="${PROJECT_URL}/raw/main/server/views/pwa/icons/weathercal-icon-192.png"
+OCI_ENTRYPOINT="/srv/inkplate/server/container_entrypoint.py"
+CONFIG_DIR="/srv/inkplate/server/config"
+DATA_DIR="/srv/inkplate/server/data"
+CONFIG_PATH="${CONFIG_DIR}/config.yaml"
+ENV_PATH="${CONFIG_DIR}/weather.env"
+
+DEFAULT_HOST="::"
+DEFAULT_PORT=8080
+DEFAULT_REFRESH_MINUTES=180
+DEFAULT_LOCATION="Landry, FR"
+DEFAULT_WEATHER="openweathermapv3"
+DEFAULT_FORECASTS=6
+DEFAULT_FORECAST_SLICE_HOURS=3
+DEFAULT_FORECAST_LEAD_MINUTES=15
+DEFAULT_ROOT_DISK_GB=1
+DEFAULT_DATA_DISK_GB=1
+DEFAULT_CONFIG_DISK_GB=1
+DEFAULT_MEMORY_MB=256
+MIN_MEMORY_MB=128
+DEFAULT_CORES=1
+DEFAULT_SWAP_MB=256
+
+DRY_RUN=0
+ASSUME_YES=0
+NO_TUI=0
+KEEP_FAILED=0
+NON_INTERACTIVE=0
+SETUP=""
+TAG=""
+CTID=""
+TEMPLATE_STORAGE=""
+ROOT_STORAGE=""
+SEPARATE_MOUNTS=""
+DATA_STORAGE=""
+CONFIG_STORAGE=""
+BRIDGE="vmbr0"
+IPV4_MODE="dhcp"
+IPV4_ADDRESS=""
+IPV4_GATEWAY=""
+IPV6_MODE="none"
+IPV6_ADDRESS=""
+IPV6_GATEWAY=""
+MQTT_INSTANCE_ID=""
+HOSTNAME="inkplate-weather"
+DISK_GB="$DEFAULT_ROOT_DISK_GB"
+DATA_DISK_GB="$DEFAULT_DATA_DISK_GB"
+CONFIG_DISK_GB="$DEFAULT_CONFIG_DISK_GB"
+MEMORY_MB="$DEFAULT_MEMORY_MB"
+CORES="$DEFAULT_CORES"
+ANSWERS_FILE=""
+TUI=0
+WORKDIR=""
+CREATE_ATTEMPTED=0
+
+usage() {
+  cat <<'EOF'
+Deploy the published Inkplate Weather Calendar OCI image on Proxmox VE 9.1+.
+
+Usage: deploy_proxmox_oci [OPTIONS]
+
+  --tag TAG                    OCI image tag (for example main, next, v4.0.0)
+  --setup default|advanced     Recommended defaults or advanced resource wizard
+  --ctid ID                    New Proxmox container ID
+  --template-storage STORAGE   vzdump-template-capable OCI archive cache
+  --storage STORAGE            rootdir-capable root disk storage
+  --[no-]separate-mounts       Enable or disable persistent config/data volumes
+  --data-storage STORAGE       Storage for generated application data
+  --config-storage STORAGE     Storage for configuration and secrets
+  --bridge BRIDGE              Proxmox Linux bridge (default: vmbr0)
+  --ip dhcp|ADDRESS/PREFIX     IPv4 configuration (default: dhcp)
+  --gateway ADDRESS            IPv4 gateway for a static address
+  --ip6 none|ADDRESS/PREFIX    IPv6 configuration (default: none)
+  --gateway6 ADDRESS           IPv6 gateway for a static address
+  --mqtt-instance-id ID        Unique six-character base-36 MQTT server ID
+  --hostname NAME              Container hostname
+  --disk-gb SIZE               Root disk size in GiB (default: 1)
+  --data-disk-gb SIZE          Data volume size in GiB (default: 1)
+  --config-disk-gb SIZE        Config volume size in GiB (default: 1)
+  --memory MIB                 Container RAM in MiB (default: 256; minimum: 128)
+  --cores COUNT                Container CPU cores (default: 1)
+  --answers PATH               JSON configuration answers file (mode 0600)
+  --non-interactive            Disable prompts; requires --answers
+  --no-tui                     Use line-oriented prompts instead of whiptail
+  --yes                        Skip final creation confirmation
+  --keep-failed                Retain a newly created CT after a failure
+  --dry-run                    Preview without changing the host
+  -h, --help                   Show this help
+EOF
+}
+
+die() {
+  printf '  [FAIL] %s\n' "$*" >&2
+  exit 1
+}
+
+check_pass() {
+  printf '  [PASS] %s\n' "$*"
+}
+
+check_skip() {
+  printf '  [SKIP] %s\n' "$*"
+}
+
+run() {
+  printf 'Running:'
+  printf ' %q' "$@"
+  printf '\n'
+  if (( DRY_RUN )); then
+    return 0
+  fi
+  "$@"
+}
+
+container_exists() {
+  [[ -n "$CTID" ]] && pct config "$CTID" >/dev/null 2>&1
+}
+
+rollback_container() {
+  printf 'Deployment failed; removing newly created container %s.\n' "$CTID" >&2
+  pct stop "$CTID" >/dev/null 2>&1 || true
+  pct destroy "$CTID" --purge 1 || true
+}
+
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if (( status != 0 && CREATE_ATTEMPTED && ! KEEP_FAILED )) && container_exists; then
+    rollback_container
+  elif (( status != 0 && CREATE_ATTEMPTED && KEEP_FAILED )) && container_exists; then
+    printf 'Container %s was retained for diagnosis.\n' "$CTID" >&2
+  fi
+  [[ -z "$WORKDIR" ]] || rm -rf -- "$WORKDIR"
+  exit "$status"
+}
+
+need_value() {
+  [[ $# -ge 2 && -n "$2" ]] || die "$1 requires a value"
+}
+
+parse_args() {
+  while (( $# )); do
+    case "$1" in
+      --tag) need_value "$1" "${2:-}"; TAG="$2"; shift 2 ;;
+      --tag=*) TAG="${1#*=}"; shift ;;
+      --setup) need_value "$1" "${2:-}"; SETUP="$2"; shift 2 ;;
+      --setup=*) SETUP="${1#*=}"; shift ;;
+      --ctid) need_value "$1" "${2:-}"; CTID="$2"; shift 2 ;;
+      --template-storage) need_value "$1" "${2:-}"; TEMPLATE_STORAGE="$2"; shift 2 ;;
+      --storage) need_value "$1" "${2:-}"; ROOT_STORAGE="$2"; shift 2 ;;
+      --separate-mounts) SEPARATE_MOUNTS=1; shift ;;
+      --no-separate-mounts) SEPARATE_MOUNTS=0; shift ;;
+      --data-storage) need_value "$1" "${2:-}"; DATA_STORAGE="$2"; shift 2 ;;
+      --config-storage) need_value "$1" "${2:-}"; CONFIG_STORAGE="$2"; shift 2 ;;
+      --bridge) need_value "$1" "${2:-}"; BRIDGE="$2"; shift 2 ;;
+      --ip)
+        need_value "$1" "${2:-}"
+        if [[ "$2" == dhcp ]]; then
+          IPV4_MODE=dhcp; IPV4_ADDRESS=""
+        else
+          IPV4_MODE=static; IPV4_ADDRESS="$2"
+        fi
+        shift 2
+        ;;
+      --gateway) need_value "$1" "${2:-}"; IPV4_GATEWAY="$2"; shift 2 ;;
+      --ip6)
+        need_value "$1" "${2:-}"
+        if [[ "$2" == none ]]; then
+          IPV6_MODE=none; IPV6_ADDRESS=""
+        else
+          IPV6_MODE=static; IPV6_ADDRESS="$2"
+        fi
+        shift 2
+        ;;
+      --gateway6) need_value "$1" "${2:-}"; IPV6_GATEWAY="$2"; shift 2 ;;
+      --mqtt-instance-id) need_value "$1" "${2:-}"; MQTT_INSTANCE_ID="$2"; shift 2 ;;
+      --hostname) need_value "$1" "${2:-}"; HOSTNAME="$2"; shift 2 ;;
+      --disk-gb) need_value "$1" "${2:-}"; DISK_GB="$2"; shift 2 ;;
+      --data-disk-gb) need_value "$1" "${2:-}"; DATA_DISK_GB="$2"; shift 2 ;;
+      --config-disk-gb) need_value "$1" "${2:-}"; CONFIG_DISK_GB="$2"; shift 2 ;;
+      --memory) need_value "$1" "${2:-}"; MEMORY_MB="$2"; shift 2 ;;
+      --cores) need_value "$1" "${2:-}"; CORES="$2"; shift 2 ;;
+      --answers) need_value "$1" "${2:-}"; ANSWERS_FILE="$2"; shift 2 ;;
+      --non-interactive) NON_INTERACTIVE=1; shift ;;
+      --no-tui) NO_TUI=1; shift ;;
+      --yes) ASSUME_YES=1; shift ;;
+      --keep-failed) KEEP_FAILED=1; shift ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; break ;;
+      *) die "unknown option: $1" ;;
+    esac
+  done
+  (( $# == 0 )) || die "unexpected argument: $1"
+}
+
+version_value() {
+  local package="$1"
+  awk -v package="$package" '$1 == package ":" { print $2; exit }'
+}
+
+validate_host() {
+  if (( DRY_RUN )) && ! command -v pveversion >/dev/null 2>&1; then
+    check_skip "Proxmox host checks (commands are unavailable in this dry-run environment)"
+    check_pass "OCI architecture: linux/$(host_architecture)"
+    return 0
+  fi
+  (( EUID == 0 )) || die "run this deployer as root on a Proxmox VE host"
+  check_pass "Root privileges"
+  local command
+  for command in pveversion pct pvesm pvesh dpkg; do
+    command -v "$command" >/dev/null 2>&1 || die "missing Proxmox command: $command"
+    check_pass "Required command: $command"
+  done
+
+  local versions pve container lxc
+  versions="$(pveversion --verbose)" || die "pveversion --verbose failed"
+  pve="$(version_value pve-manager <<<"$versions")"
+  container="$(version_value pve-container <<<"$versions")"
+  lxc="$(version_value lxc-pve <<<"$versions")"
+  [[ -n "$pve" && -n "$container" && -n "$lxc" ]] || \
+    die "unable to determine installed Proxmox versions"
+  if [[ "$pve" != 9.* ]] || ! dpkg --compare-versions "$pve" ge 9.1; then
+    die "native OCI containers require Proxmox VE 9.1 or newer"
+  fi
+  dpkg --compare-versions "$container" ge 6.1.0 || \
+    die "preserving the OCI application user requires pve-container 6.1.0 or newer"
+  dpkg --compare-versions "$lxc" ge 6.0.5-4 || \
+    die "preserving OCI supplementary groups requires lxc-pve 6.0.5-4 or newer"
+  check_pass "Proxmox VE $pve (requires 9.1+)"
+  check_pass "pve-container $container (requires 6.1.0+)"
+  check_pass "lxc-pve $lxc (requires 6.0.5-4+)"
+  check_pass "OCI architecture: linux/$(host_architecture)"
+}
+
+ensure_dependencies() {
+  local packages=() dependency
+  for dependency in jq skopeo; do
+    if command -v "$dependency" >/dev/null 2>&1; then
+      check_pass "Host dependency: $dependency"
+    else
+      printf '  [INSTALL] Host dependency: %s\n' "$dependency"
+      packages+=("$dependency")
+    fi
+  done
+  if (( ! NO_TUI && ! NON_INTERACTIVE )); then
+    if command -v whiptail >/dev/null 2>&1; then
+      check_pass "Host dependency: whiptail"
+    else
+      printf '  [INSTALL] Host dependency: whiptail\n'
+      packages+=(whiptail)
+    fi
+  else
+    check_skip "Host dependency: whiptail (TUI disabled)"
+  fi
+  ((${#packages[@]})) || return 0
+  run apt-get update || die "apt package index update failed"
+  run apt-get install -y --no-install-recommends "${packages[@]}" || \
+    die "could not install required host dependencies: ${packages[*]}"
+  if (( DRY_RUN )); then
+    check_skip "Dependency verification (dry-run only)"
+    return 0
+  fi
+  for dependency in "${packages[@]}"; do
+    command -v "$dependency" >/dev/null 2>&1 || die "dependency installation did not provide: $dependency"
+    check_pass "Installed host dependency: $dependency"
+  done
+}
+
+validate_answers() {
+  if (( NON_INTERACTIVE )) && [[ -z "$ANSWERS_FILE" ]]; then
+    die "--non-interactive requires --answers PATH"
+  fi
+  if [[ -z "$ANSWERS_FILE" ]]; then
+    check_pass "Configuration input: interactive prompts"
+    return 0
+  fi
+  [[ -f "$ANSWERS_FILE" ]] || die "answers file not found: $ANSWERS_FILE"
+  check_pass "Answers file exists: $ANSWERS_FILE"
+  local mode
+  mode="$(stat -c '%a' "$ANSWERS_FILE")"
+  (( (8#$mode & 077) == 0 )) || \
+    die "answers file $ANSWERS_FILE must not be accessible by group or other users (chmod 600)"
+  check_pass "Answers file permissions: mode $mode"
+  jq -e 'type == "object"' "$ANSWERS_FILE" >/dev/null || \
+    die "answers file must contain a JSON object"
+  check_pass "Answers file JSON structure"
+}
+
+terminal_available() {
+  [[ -r /dev/tty && -w /dev/tty ]] && (: </dev/tty) 2>/dev/null
+}
+
+configure_interface() {
+  if (( NON_INTERACTIVE )); then
+    check_skip "Interactive UI (--non-interactive selected)"
+    return 0
+  fi
+  terminal_available || die "no controlling terminal is available; use --non-interactive with --answers"
+  if (( NO_TUI )); then
+    check_pass "Interactive UI: line-oriented prompts on /dev/tty"
+    return 0
+  fi
+  command -v whiptail >/dev/null 2>&1 || die "whiptail is unavailable after dependency pre-flight"
+  TUI=1
+  check_pass "Interactive UI: whiptail on /dev/tty"
+}
+
+has_answer() {
+  [[ -n "$ANSWERS_FILE" ]] && jq -e --arg key "$1" 'has($key)' "$ANSWERS_FILE" >/dev/null
+}
+
+answer_string() {
+  jq -r --arg key "$1" '.[$key] | if . == null then "" else tostring end' "$ANSWERS_FILE"
+}
+
+cancelled() {
+  echo "OCI deployment cancelled." >&2
+  exit 130
+}
+
+tui_value() {
+  local value status
+  set +e
+  value=$(whiptail "$@" --output-fd 3 3>&1 1>/dev/tty 2>/dev/tty </dev/tty)
+  status=$?
+  set -e
+  (( status == 0 )) || cancelled
+  printf '%s' "$value"
+}
+
+prompt_choice() {
+  local label="$1" default="$2" key="$3"
+  shift 3
+  local options=("$@") allowed=() i value
+  for ((i=0; i<${#options[@]}; i+=2)); do allowed+=("${options[i]}"); done
+  if has_answer "$key"; then
+    value="$(answer_string "$key")"
+  elif (( NON_INTERACTIVE )); then
+    value="$default"
+  elif (( TUI )); then
+    value="$(tui_value --backtitle "$APP_NAME" --title "$label" \
+      --default-item "$default" --menu "$label" 20 78 12 "${options[@]}")"
+  else
+    printf '%s:\n' "$label" >/dev/tty
+    for ((i=0; i<${#options[@]}; i+=2)); do
+      printf '  %d. %s - %s%s\n' "$((i/2+1))" "${options[i]}" "${options[i+1]}" \
+        "$([[ "${options[i]}" == "$default" ]] && echo ' [default]')" >/dev/tty
+    done
+    while true; do
+      read -r -p "Choose [$default]: " value </dev/tty
+      [[ -n "$value" ]] || value="$default"
+      if [[ "$value" =~ ^[0-9]+$ ]] && (( value >= 1 && value <= ${#allowed[@]} )); then
+        value="${allowed[value-1]}"
+      fi
+      [[ " ${allowed[*]} " == *" $value "* ]] && break
+      echo "Please choose one of the listed options." >/dev/tty
+    done
+  fi
+  [[ " ${allowed[*]} " == *" $value "* ]] || \
+    die "answer $key must be one of: ${allowed[*]}"
+  printf '%s' "$value"
+}
+
+prompt_text() {
+  local label="$1" default="$2" required="$3" key="$4" value=""
+  if has_answer "$key"; then
+    value="$(answer_string "$key")"
+  elif (( NON_INTERACTIVE )); then
+    value="$default"
+  elif (( TUI )); then
+    value="$(tui_value --backtitle "$APP_NAME" --title "$label" \
+      --inputbox "$label" 10 78 "$default")"
+  else
+    read -r -p "$label${default:+ [$default]}: " value </dev/tty
+    [[ -n "$value" ]] || value="$default"
+  fi
+  if [[ "$required" == 1 && -z "$value" ]]; then
+    die "missing required answer: $key"
+  fi
+  printf '%s' "$value"
+}
+
+prompt_secret() {
+  local label="$1" key="$2" value=""
+  if has_answer "$key"; then
+    value="$(answer_string "$key")"
+  elif (( NON_INTERACTIVE )); then
+    die "missing required non-interactive answer: $key"
+  elif (( TUI )); then
+    value="$(tui_value --backtitle "$APP_NAME" --title "$label" \
+      --passwordbox "$label" 10 78)"
+  else
+    read -r -s -p "$label: " value </dev/tty
+    echo >/dev/tty
+  fi
+  [[ -n "$value" ]] || die "$label is required"
+  printf '%s' "$value"
+}
+
+prompt_int() {
+  local label="$1" default="$2" minimum="$3" maximum="$4" key="$5" value
+  while true; do
+    value="$(prompt_text "$label" "$default" 1 "$key")"
+    [[ "$value" =~ ^[0-9]+$ ]] && (( value >= minimum && value <= maximum )) && break
+    if (( NON_INTERACTIVE )) || has_answer "$key"; then
+      die "answer $key must be from $minimum to $maximum"
+    fi
+    echo "Enter a whole number from $minimum to $maximum." >/dev/tty
+  done
+  printf '%s' "$value"
+}
+
+prompt_yes_no() {
+  local label="$1" default="$2" key="$3" value status
+  if has_answer "$key"; then
+    value="$(answer_string "$key" | tr '[:upper:]' '[:lower:]')"
+    case "$value" in
+      1|true|yes|on) echo 1; return ;;
+      0|false|no|off) echo 0; return ;;
+      *) die "answer $key must be true or false" ;;
+    esac
+  fi
+  (( NON_INTERACTIVE )) && { echo "$default"; return; }
+  if (( TUI )); then
+    local flags=(--backtitle "$APP_NAME" --title "$label")
+    [[ "$default" == 1 ]] || flags+=(--defaultno)
+    set +e
+    whiptail "${flags[@]}" --yesno "$label" 10 78 </dev/tty >/dev/tty 2>&1
+    status=$?
+    set -e
+    (( status == 255 )) && cancelled
+    (( status == 0 )) && echo 1 || echo 0
+    return
+  fi
+  while true; do
+    read -r -p "$label [$([[ "$default" == 1 ]] && echo Y/n || echo y/N)]: " value </dev/tty
+    value="${value,,}"
+    [[ -z "$value" ]] && { echo "$default"; return; }
+    [[ "$value" =~ ^(y|yes)$ ]] && { echo 1; return; }
+    [[ "$value" =~ ^(n|no)$ ]] && { echo 0; return; }
+  done
+}
+
+storage_options() {
+  local content="$1"
+  if (( DRY_RUN )) && ! command -v pvesm >/dev/null 2>&1; then
+    [[ "$content" == rootdir ]] && printf 'local-lvm|LXC volume storage\nlocal|directory storage\n' || \
+      printf 'local|container-template storage\n'
+    return
+  fi
+  pvesm status --content "$content" | awk 'NR > 1 && $3 == "active" { print $1 "|" $2 " storage" }'
+}
+
+storage_choice() {
+  local label="$1" requested="$2" default="$3" key="$4"
+  shift 4
+  local entries=("$@") pairs=() entry name value found=0
+  for entry in "${entries[@]}"; do
+    name="${entry%%|*}"
+    pairs+=("$name" "${entry#*|}")
+    [[ "$name" == "$requested" ]] && found=1
+  done
+  ((${#pairs[@]})) || die "no active Proxmox storage supports $label"
+  if [[ -n "$requested" ]]; then
+    (( found )) || die "$label storage is unavailable: $requested"
+    value="$requested"
+  else
+    value="$(prompt_choice "$label" "$default" "$key" "${pairs[@]}")"
+  fi
+  printf '%s' "$value"
+}
+
+default_storage() {
+  local preferred="$1" entry
+  shift
+  (($#)) || die "no active Proxmox storage is available"
+  for entry in "$@"; do [[ "${entry%%|*}" == "$preferred" ]] && { echo "$preferred"; return; }; done
+  echo "${1%%|*}"
+}
+
+generate_instance_id() {
+  local alphabet=0123456789abcdefghijklmnopqrstuvwxyz result="" byte
+  while ((${#result} < 6)); do
+    byte="$(od -An -N1 -tu1 /dev/urandom)"
+    byte="${byte//[[:space:]]/}"
+    [[ "$byte" =~ ^[0-9]+$ ]] || die "unable to generate MQTT instance ID"
+    (( byte < 252 )) || continue
+    result+="${alphabet:byte%36:1}"
+  done
+  printf '%s' "$result"
+}
+
+configure_deployment() {
+  local root_entries template_entries root_default template_default
+  mapfile -t root_entries < <(storage_options rootdir)
+  mapfile -t template_entries < <(storage_options vztmpl)
+  root_default="$(default_storage local-lvm "${root_entries[@]}")"
+  template_default="$(default_storage local "${template_entries[@]}")"
+  ROOT_STORAGE="$(storage_choice "Container root" "$ROOT_STORAGE" "$root_default" \
+    proxmox_oci_root_storage "${root_entries[@]}")"
+  TEMPLATE_STORAGE="$(storage_choice "OCI image cache" "$TEMPLATE_STORAGE" "$template_default" \
+    proxmox_oci_template_storage "${template_entries[@]}")"
+  check_pass "Container root storage: $ROOT_STORAGE (rootdir)"
+  check_pass "OCI archive storage: $TEMPLATE_STORAGE (vztmpl)"
+  [[ -n "$MQTT_INSTANCE_ID" ]] || MQTT_INSTANCE_ID="$(generate_instance_id)"
+
+  [[ -n "$SEPARATE_MOUNTS" ]] || \
+    SEPARATE_MOUNTS="$(prompt_yes_no "Create separate persistent config and data volumes?" 1 proxmox_oci_separate_mounts)"
+  if (( SEPARATE_MOUNTS )); then
+    DATA_STORAGE="$(storage_choice "Generated data" "$DATA_STORAGE" "$ROOT_STORAGE" \
+      proxmox_oci_data_storage "${root_entries[@]}")"
+    CONFIG_STORAGE="$(storage_choice "Configuration" "$CONFIG_STORAGE" "$ROOT_STORAGE" \
+      proxmox_oci_config_storage "${root_entries[@]}")"
+    check_pass "Persistent data storage: $DATA_STORAGE"
+    check_pass "Persistent config storage: $CONFIG_STORAGE"
+  elif [[ -n "$DATA_STORAGE" || -n "$CONFIG_STORAGE" ]]; then
+    die "separate storage options require --separate-mounts"
+  else
+    check_skip "Separate persistent config/data volumes"
+  fi
+
+  if [[ "$SETUP" == advanced ]]; then
+    HOSTNAME="$(prompt_text "Container hostname" "$HOSTNAME" 1 proxmox_oci_hostname)"
+    local bridge_pairs=() path name
+    for path in /sys/class/net/vmbr*; do
+      [[ -d "$path/bridge" ]] || continue
+      name="${path##*/}"; bridge_pairs+=("$name" "Proxmox Linux bridge")
+    done
+    ((${#bridge_pairs[@]})) || bridge_pairs=(vmbr0 "Proxmox Linux bridge")
+    BRIDGE="$(prompt_choice "Network bridge" "$BRIDGE" proxmox_oci_bridge "${bridge_pairs[@]}")"
+    IPV4_MODE="$(prompt_choice "IPv4 configuration" "$IPV4_MODE" proxmox_oci_ipv4_mode \
+      dhcp "Obtain an address automatically" \
+      static "Use a fixed IPv4 address")"
+    if [[ "$IPV4_MODE" == static ]]; then
+      IPV4_ADDRESS="$(prompt_text "Static IPv4 address (CIDR, e.g. 192.168.1.184/24)" \
+        "$IPV4_ADDRESS" 1 proxmox_oci_ipv4_address)"
+      IPV4_GATEWAY="$(prompt_text "IPv4 gateway (optional)" \
+        "$IPV4_GATEWAY" 0 proxmox_oci_ipv4_gateway)"
+    fi
+    IPV6_MODE="$(prompt_choice "IPv6 configuration" "$IPV6_MODE" proxmox_oci_ipv6_mode \
+      none "Do not configure a static IPv6 address" \
+      static "Use a fixed IPv6 address")"
+    if [[ "$IPV6_MODE" == static ]]; then
+      IPV6_ADDRESS="$(prompt_text "Static IPv6 address (CIDR, e.g. 2001:db8::184/64)" \
+        "$IPV6_ADDRESS" 1 proxmox_oci_ipv6_address)"
+      IPV6_GATEWAY="$(prompt_text "IPv6 gateway (optional)" \
+        "$IPV6_GATEWAY" 0 proxmox_oci_ipv6_gateway)"
+    fi
+    MQTT_INSTANCE_ID="$(prompt_text "MQTT instance ID" "$MQTT_INSTANCE_ID" 1 \
+      proxmox_oci_mqtt_instance_id)"
+    CORES="$(prompt_int "CPU cores" "$CORES" 1 128 proxmox_oci_cores)"
+    MEMORY_MB="$(prompt_int "Memory (MiB)" "$MEMORY_MB" "$MIN_MEMORY_MB" 1048576 proxmox_oci_memory)"
+    DISK_GB="$(prompt_int "Root disk (GiB)" "$DISK_GB" 1 1048576 proxmox_oci_disk_gb)"
+    if (( SEPARATE_MOUNTS )); then
+      DATA_DISK_GB="$(prompt_int "Data disk (GiB)" "$DATA_DISK_GB" 1 1048576 proxmox_oci_data_disk_gb)"
+      CONFIG_DISK_GB="$(prompt_int "Config disk (GiB)" "$CONFIG_DISK_GB" 1 1024 proxmox_oci_config_disk_gb)"
+    fi
+  fi
+}
+
+validate_number() {
+  local label="$1" value="$2" minimum="$3"
+  [[ "$value" =~ ^[0-9]+$ ]] || die "$label must be a whole number"
+  (( value >= minimum )) || die "$label must be at least $minimum"
+}
+
+bridge_exists() {
+  [[ -d "/sys/class/net/$1/bridge" ]]
+}
+
+validate_hostname() {
+  local hostname="$1" label labels=()
+  ((${#hostname} <= 253)) || return 1
+  IFS=. read -r -a labels <<<"$hostname"
+  ((${#labels[@]})) || return 1
+  for label in "${labels[@]}"; do
+    [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
+  done
+}
+
+validate_ipv4() {
+  local address="$1" octet octets=()
+  [[ "$address" =~ ^[0-9]+([.][0-9]+){3}$ ]] || return 1
+  IFS=. read -r -a octets <<<"$address"
+  for octet in "${octets[@]}"; do
+    [[ "$octet" == 0 || "$octet" != 0* ]] || return 1
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
+
+validate_ipv4_cidr() {
+  local value="$1" address prefix
+  [[ "$value" == */* ]] || return 1
+  address="${value%/*}"
+  prefix="${value##*/}"
+  validate_ipv4 "$address" || return 1
+  [[ "$prefix" =~ ^[0-9]+$ ]] && (( 10#$prefix <= 32 ))
+}
+
+validate_ipv6() {
+  local address="$1" left right part group count=0 groups=()
+  [[ "$address" == *:* && "$address" =~ ^[0-9A-Fa-f:]+$ ]] || return 1
+  [[ "$address" != *:::* ]] || return 1
+  if [[ "$address" == *::* ]]; then
+    left="${address%%::*}"
+    right="${address#*::}"
+    [[ "$right" != *::* ]] || return 1
+    for part in "$left" "$right"; do
+      [[ -n "$part" ]] || continue
+      IFS=: read -r -a groups <<<"$part"
+      for group in "${groups[@]}"; do
+        [[ "$group" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+        ((count += 1))
+      done
+    done
+    (( count < 8 ))
+    return
+  fi
+  IFS=: read -r -a groups <<<"$address"
+  ((${#groups[@]} == 8)) || return 1
+  for group in "${groups[@]}"; do
+    [[ "$group" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+  done
+}
+
+validate_ipv6_cidr() {
+  local value="$1" address prefix
+  [[ "$value" == */* ]] || return 1
+  address="${value%/*}"
+  prefix="${value##*/}"
+  validate_ipv6 "$address" || return 1
+  [[ "$prefix" =~ ^[0-9]+$ ]] && (( 10#$prefix <= 128 ))
+}
+
+validate_deployment() {
+  [[ "$SETUP" =~ ^(default|advanced)$ ]] || die "--setup must be default or advanced"
+  validate_hostname "$HOSTNAME" || die "invalid DNS hostname: $HOSTNAME"
+  [[ "$BRIDGE" =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || die "invalid Linux bridge name: $BRIDGE"
+  if (( ! DRY_RUN )); then
+    bridge_exists "$BRIDGE" || die "Linux network bridge does not exist: $BRIDGE"
+  fi
+  [[ "$IPV4_MODE" =~ ^(dhcp|static)$ ]] || die "IPv4 configuration must be dhcp or static"
+  if [[ "$IPV4_MODE" == static ]]; then
+    validate_ipv4_cidr "$IPV4_ADDRESS" || \
+      die "static IPv4 address must use valid CIDR notation (for example 192.168.1.184/24)"
+    [[ -z "$IPV4_GATEWAY" ]] || validate_ipv4 "$IPV4_GATEWAY" || \
+      die "IPv4 gateway must be a valid address"
+  elif [[ -n "$IPV4_ADDRESS" || -n "$IPV4_GATEWAY" ]]; then
+    die "a static IPv4 address or gateway requires static IPv4 configuration"
+  fi
+  [[ "$IPV6_MODE" =~ ^(none|static)$ ]] || die "IPv6 configuration must be none or static"
+  if [[ "$IPV6_MODE" == static ]]; then
+    validate_ipv6_cidr "$IPV6_ADDRESS" || \
+      die "static IPv6 address must use valid CIDR notation (for example 2001:db8::184/64)"
+    [[ -z "$IPV6_GATEWAY" ]] || validate_ipv6 "$IPV6_GATEWAY" || \
+      die "IPv6 gateway must be a valid address"
+  elif [[ -n "$IPV6_ADDRESS" || -n "$IPV6_GATEWAY" ]]; then
+    die "a static IPv6 address or gateway requires static IPv6 configuration"
+  fi
+  [[ -z "$MQTT_INSTANCE_ID" || "$MQTT_INSTANCE_ID" =~ ^[a-z0-9]{6}$ ]] || \
+    die "MQTT instance ID must contain six lowercase base-36 characters"
+  validate_number "--disk-gb" "$DISK_GB" 1
+  validate_number "--data-disk-gb" "$DATA_DISK_GB" 1
+  validate_number "--config-disk-gb" "$CONFIG_DISK_GB" 1
+  validate_number "--memory" "$MEMORY_MB" "$MIN_MEMORY_MB"
+  validate_number "--cores" "$CORES" 1
+  if [[ -n "$CTID" ]]; then
+    validate_number "--ctid" "$CTID" 100
+    (( CTID <= 999999999 )) || die "--ctid must be at most 999999999"
+  fi
+  check_pass "Container hostname: $HOSTNAME"
+  (( DRY_RUN )) || check_pass "Linux bridge exists: $BRIDGE"
+  if [[ "$IPV4_MODE" == static ]]; then
+    check_pass "Network: $BRIDGE, static IPv4 $IPV4_ADDRESS${IPV4_GATEWAY:+ via $IPV4_GATEWAY}"
+  else
+    check_pass "Network: $BRIDGE, IPv4 DHCP"
+  fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    check_pass "Network: $BRIDGE, static IPv6 $IPV6_ADDRESS${IPV6_GATEWAY:+ via $IPV6_GATEWAY}"
+  else
+    check_skip "Static IPv6 addressing"
+  fi
+  check_pass "Resource values: ${CORES} vCPU, ${MEMORY_MB} MiB RAM, ${DISK_GB} GiB root disk"
+  [[ -z "$MQTT_INSTANCE_ID" ]] || check_pass "MQTT instance ID: $MQTT_INSTANCE_ID"
+}
+
+host_architecture() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) die "published OCI images do not support host architecture: $(uname -m)" ;;
+  esac
+}
+
+available_tags() {
+  if (( DRY_RUN )) && ! command -v skopeo >/dev/null 2>&1; then
+    printf 'main\nnext\nv4.0.0\n'
+    return
+  fi
+  skopeo list-tags "docker://${IMAGE}" | jq -r '.Tags[]' | \
+    awk '/^(main|next|v4([.][0-9]+){1,2}([._-].*)?)$/' | sort -Vr
+}
+
+select_tag() {
+  local tags=() tag pairs=() preferred="" found=0
+  mapfile -t tags < <(available_tags)
+  ((${#tags[@]})) || die "no supported v4 OCI image tags were found"
+  if [[ -n "$TAG" ]]; then
+    for tag in "${tags[@]}"; do [[ "$tag" == "$TAG" ]] && { found=1; break; }; done
+    (( found )) || die "OCI tag is not available: $TAG"
+    check_pass "OCI image tag is published: $TAG"
+    return 0
+  fi
+  for tag in "${tags[@]}"; do
+    [[ -n "$preferred" ]] || { [[ "$tag" == v* ]] && preferred="$tag"; }
+    case "$tag" in
+      main) pairs+=("$tag" "stable branch image") ;;
+      next) pairs+=("$tag" "development branch image") ;;
+      *) pairs+=("$tag" "versioned release image") ;;
+    esac
+  done
+  [[ -n "$preferred" ]] || preferred="$([[ " ${tags[*]} " == *' main '* ]] && echo main || echo "${tags[0]}")"
+  TAG="$(prompt_choice "Published OCI image" "$preferred" proxmox_oci_tag "${pairs[@]}")"
+  check_pass "OCI image tag is published: $TAG"
+}
+
+validate_digest() {
+  [[ "$1" =~ ^sha256:[0-9a-f]{64}$ ]] || die "registry returned an invalid OCI digest: $1"
+}
+
+image_digest() {
+  local arch raw digest
+  arch="$(host_architecture)"
+  if (( DRY_RUN )) && ! command -v skopeo >/dev/null 2>&1; then
+    echo 'sha256:<resolved-during-install>'
+    return
+  fi
+  raw="$(skopeo inspect --raw "docker://${IMAGE}:${TAG}")" || die "unable to inspect OCI manifest"
+  if jq -e '.manifests | type == "array"' >/dev/null 2>&1 <<<"$raw"; then
+    digest="$(jq -r --arg arch "$arch" \
+      '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' \
+      <<<"$raw" | head -n1)"
+    [[ -n "$digest" ]] || die "OCI image has no linux/$arch manifest"
+  else
+    digest="sha256:$(printf '%s' "$raw" | sha256sum | awk '{print $1}')"
+  fi
+  validate_digest "$digest"
+  echo "$digest"
+}
+
+validate_image_json() {
+  local json="$1" source="$2" arch user
+  arch="$(host_architecture)"
+  jq -e 'type == "object" and (.config | type == "object")' >/dev/null <<<"$json" || \
+    die "$source configuration is not a JSON object"
+  jq -e --arg entry "$OCI_ENTRYPOINT" \
+    '[(.config.Entrypoint // [])[], (.config.Cmd // [])[]] | index($entry) != null' \
+    >/dev/null <<<"$json" || die "$source does not start $OCI_ENTRYPOINT"
+  user="$(jq -r '.config.User // "" | split(":")[0]' <<<"$json")"
+  [[ "$user" == inkplate ]] || die "$source must run as user inkplate; found: ${user:-<empty>}"
+  jq -e --arg arch "$arch" '.os == "linux" and .architecture == $arch' >/dev/null <<<"$json" || \
+    die "$source platform does not match linux/$arch"
+}
+
+validate_selected_image() {
+  [[ "$1" == 'sha256:<resolved-during-install>' ]] && { echo "Would verify image entrypoint, user, OS, and architecture."; return; }
+  local config
+  config="$(skopeo inspect --config "docker://${IMAGE}@$1")" || die "unable to inspect OCI image configuration"
+  validate_image_json "$config" "selected OCI image"
+}
+
+archive_member() {
+  tar -xOf "$1" "$2" 2>/dev/null || tar -xOf "$1" "./$2" 2>/dev/null
+}
+
+archive_member_hash() {
+  archive_member "$1" "$2" | sha256sum | awk '{print "sha256:" $1}'
+}
+
+archive_member_size() {
+  archive_member "$1" "$2" | wc -c | tr -d ' '
+}
+
+verify_archive() {
+  local archive="$1" arch index descriptor manifest_digest manifest_hex manifest manifest_size
+  local config_digest config_hex config config_size actual
+  arch="$(host_architecture)"
+  index="$(archive_member "$archive" index.json)" || die "OCI archive has no image index"
+  jq -e '.schemaVersion == 2 and (.manifests | type == "array")' >/dev/null <<<"$index" || \
+    die "OCI archive contains an invalid image index"
+  descriptor="$(jq -c --arg arch "$arch" \
+    '.manifests[] | select(.mediaType == "application/vnd.oci.image.manifest.v1+json") | select((has("platform") | not) or (.platform.os // "linux") == "linux" and .platform.architecture == $arch)' \
+    <<<"$index" | head -n1)"
+  [[ -n "$descriptor" ]] || die "OCI archive has no Proxmox-compatible linux/$arch image manifest"
+  manifest_digest="$(jq -r '.digest' <<<"$descriptor")"; validate_digest "$manifest_digest"
+  manifest_hex="${manifest_digest#sha256:}"
+  manifest="$(archive_member "$archive" "blobs/sha256/$manifest_hex")" || die "OCI archive is missing its image manifest"
+  actual="$(archive_member_hash "$archive" "blobs/sha256/$manifest_hex")"
+  [[ "$actual" == "$manifest_digest" ]] || die "OCI archive image manifest digest mismatch"
+  manifest_size="$(archive_member_size "$archive" "blobs/sha256/$manifest_hex")"
+  [[ "$manifest_size" == "$(jq -r '.size' <<<"$descriptor")" ]] || \
+    die "OCI archive image manifest size mismatch"
+  jq -e '.schemaVersion == 2 and .config.mediaType == "application/vnd.oci.image.config.v1+json"' \
+    >/dev/null <<<"$manifest" || die "OCI archive contains an unsupported image manifest"
+  config_digest="$(jq -r '.config.digest' <<<"$manifest")"; validate_digest "$config_digest"
+  config_hex="${config_digest#sha256:}"
+  config="$(archive_member "$archive" "blobs/sha256/$config_hex")" || die "OCI archive is missing its image configuration"
+  actual="$(archive_member_hash "$archive" "blobs/sha256/$config_hex")"
+  [[ "$actual" == "$config_digest" ]] || die "OCI archive image configuration digest mismatch"
+  config_size="$(archive_member_size "$archive" "blobs/sha256/$config_hex")"
+  [[ "$config_size" == "$(jq -r '.config.size' <<<"$manifest")" ]] || \
+    die "OCI archive image configuration size mismatch"
+  validate_image_json "$config" "cached OCI image"
+}
+
+archive_name() {
+  local safe_tag suffix
+  safe_tag="${TAG//[^A-Za-z0-9_.-]/-}"
+  suffix="${1#sha256:}"; suffix="${suffix:0:12}"
+  [[ "$suffix" =~ ^[0-9a-f]{12}$ ]] || suffix=unresolved
+  printf 'inkplate-weather-%s-%s.tar' "$safe_tag" "$suffix"
+}
+
+pull_image() {
+  local digest="$1" archive_path="$2" partial source
+  if [[ -f "$archive_path" ]]; then
+    if (verify_archive "$archive_path"); then
+      printf 'Using cached OCI archive: %s\n' "$archive_path"
+      return
+    fi
+    printf 'Replacing incompatible cached archive: %s\n' "$archive_path"
+  fi
+  source="docker://${IMAGE}:${TAG}"
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] && source="docker://${IMAGE}@${digest}"
+  if (( DRY_RUN )); then
+    run skopeo copy --retry-times 3 --format oci "$source" "oci-archive:${archive_path}"
+    return
+  fi
+  mkdir -p "$(dirname "$archive_path")"
+  partial="$(mktemp --tmpdir="$(dirname "$archive_path")" ".$(basename "$archive_path").XXXXXX.partial")"
+  rm -f "$partial"
+  if ! run skopeo copy --retry-times 3 --format oci "$source" "oci-archive:${partial}"; then
+    rm -f "$partial"; return 1
+  fi
+  if ! (verify_archive "$partial"); then
+    rm -f "$partial"
+    die "downloaded OCI archive failed validation"
+  fi
+  mv -f "$partial" "$archive_path"
+}
+
+yaml_quote() {
+  jq -Rn --arg value "$1" '$value'
+}
+
+env_quote() {
+  local value="$1"
+  [[ -z "$value" ]] && return
+  if [[ "$value" =~ ^[A-Za-z0-9_./:=+@%-]+$ ]]; then printf '%s' "$value"; return; fi
+  value="$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/\\$/g')"
+  printf '"%s"' "$value"
+}
+
+collect_configuration() {
+  echo; echo "Configuration"; echo "-------------"
+  HOST_BIND="$(prompt_text "Server bind IP" "$DEFAULT_HOST" 1 host)"
+  [[ "$HOST_BIND" =~ ^[0-9A-Fa-f:.]+$ ]] || die "host must be an IPv4 or IPv6 address"
+  SERVER_PORT="$(prompt_int "Server port" "$DEFAULT_PORT" 1 65535 port)"
+  REFRESH_MINUTES="$(prompt_int "Refresh interval in minutes" "$DEFAULT_REFRESH_MINUTES" 1 1440 refresh_minutes)"
+  LOCATION="$(prompt_text "Location for weather/map lookup" "$DEFAULT_LOCATION" 1 location)"
+  WEATHER_SERVICE="$(prompt_choice "Weather provider" "$DEFAULT_WEATHER" weather_service \
+    openweathermapv4 "OpenWeatherMap One Call 4.0" \
+    openweathermapv3 "OpenWeatherMap One Call 3.0" \
+    accuweather "AccuWeather")"
+  WEATHER_API_KEY="$(prompt_secret "Weather API key" weather_api_key)"
+  GOOGLE_API_KEY="$(prompt_secret "Google Static Maps API key" google_api_key)"
+  GOOGLE_MAP_ID="$(prompt_secret "Google Static Maps Map ID" google_staticmaps_mapid)"
+  NUM_FORECASTS="$(prompt_int "Number of forecast slots" "$DEFAULT_FORECASTS" 1 12 num_hourly_forecasts)"
+  FORECAST_SLICE="$(prompt_int "Forecast slot spacing in hours" "$DEFAULT_FORECAST_SLICE_HOURS" 1 24 forecast_slice_hours)"
+  FORECAST_LEAD="$(prompt_int "Forecast lead time in minutes" "$DEFAULT_FORECAST_LEAD_MINUTES" 0 180 forecast_lead_minutes)"
+  METRIC="$(prompt_yes_no "Use metric units?" 1 metric)"
+  NETATMO_ENABLED="$(prompt_yes_no "Use Netatmo for live current conditions?" 0 netatmo_enabled)"
+  NETATMO_CLIENT_ID=""; NETATMO_CLIENT_SECRET=""; NETATMO_REFRESH_TOKEN=""
+  NETATMO_DEVICE_ID=""; NETATMO_MODULE_ID=""; NETATMO_WIND_ID=""; NETATMO_RAIN_ID=""
+  if (( NETATMO_ENABLED )); then
+    NETATMO_CLIENT_ID="$(prompt_secret "Netatmo client ID" netatmo_client_id)"
+    NETATMO_CLIENT_SECRET="$(prompt_secret "Netatmo client secret" netatmo_client_secret)"
+    NETATMO_REFRESH_TOKEN="$(prompt_secret "Netatmo refresh token" netatmo_refresh_token)"
+    NETATMO_DEVICE_ID="$(prompt_text "Netatmo device ID (optional)" "" 0 netatmo_device_id)"
+    NETATMO_MODULE_ID="$(prompt_text "Netatmo module ID (optional)" "" 0 netatmo_module_id)"
+    NETATMO_WIND_ID="$(prompt_text "Netatmo wind module ID (optional)" "" 0 netatmo_wind_module_id)"
+    NETATMO_RAIN_ID="$(prompt_text "Netatmo rain module ID (optional)" "" 0 netatmo_rain_module_id)"
+  fi
+  MQTT_WEATHER_ENABLED="$(prompt_yes_no "Publish weather data to MQTT?" 0 mqtt_weather_enabled)"
+  MQTT_WEATHER_BROKER=localhost; MQTT_WEATHER_PORT=1883; MQTT_WEATHER_TOPIC="inkplate/weather-calendar"
+  if (( MQTT_WEATHER_ENABLED )); then
+    MQTT_WEATHER_BROKER="$(prompt_text "MQTT weather publisher broker" localhost 0 mqtt_weather_broker)"
+    MQTT_WEATHER_PORT="$(prompt_int "MQTT weather publisher port" 1883 1 65535 mqtt_weather_port)"
+    MQTT_WEATHER_TOPIC="$(prompt_text "MQTT weather base topic" "$MQTT_WEATHER_TOPIC" 0 mqtt_weather_base_topic)"
+  fi
+  MQTT_DIAGNOSTICS_ENABLED="$(prompt_yes_no "Listen for Inkplate diagnostics on MQTT?" 0 mqtt_diagnostics_enabled)"
+  MQTT_DIAGNOSTICS_BROKER=localhost; MQTT_DIAGNOSTICS_PORT=1883; MQTT_DIAGNOSTICS_TOPIC="inkplate/weather-calendar/diagnostics"
+  if (( MQTT_DIAGNOSTICS_ENABLED )); then
+    MQTT_DIAGNOSTICS_BROKER="$(prompt_text "MQTT diagnostic listener broker" localhost 0 mqtt_diagnostics_broker)"
+    MQTT_DIAGNOSTICS_PORT="$(prompt_int "MQTT diagnostic listener port" 1883 1 65535 mqtt_diagnostics_port)"
+    MQTT_DIAGNOSTICS_TOPIC="$(prompt_text "MQTT diagnostic topic" "$MQTT_DIAGNOSTICS_TOPIC" 0 mqtt_diagnostics_topic)"
+  fi
+}
+
+render_configuration() {
+  local config_file="$1" env_file="$2" true_false current_source
+  [[ "$METRIC" == 1 ]] && true_false=true || true_false=false
+  [[ "$NETATMO_ENABLED" == 1 ]] && current_source=netatmo || current_source=weather
+  cat >"$config_file" <<EOF
+---
+server:
+  enabled: true
+  host: $(yaml_quote "$HOST_BIND")
+  port: $SERVER_PORT
+  alwayson: true
+  refreshminutes: $REFRESH_MINUTES
+weather:
+  service: $(yaml_quote "$WEATHER_SERVICE")
+  apikey: \${WEATHER_API_KEY}
+  num_hourly_forecasts: $NUM_FORECASTS
+  forecastslicehours: $FORECAST_SLICE
+  forecastleadminutes: $FORECAST_LEAD
+  metric: $true_false
+current_conditions:
+  source: $current_source
+  netatmo:
+    client_id: \${NETATMO_CLIENT_ID:-}
+    client_secret: \${NETATMO_CLIENT_SECRET:-}
+    refresh_token: \${NETATMO_REFRESH_TOKEN:-}
+    token_file: data/netatmo-token.json
+    device_id: \${NETATMO_DEVICE_ID:-}
+    module_id: \${NETATMO_MODULE_ID:-}
+    wind_module_id: \${NETATMO_WIND_MODULE_ID:-}
+    rain_module_id: \${NETATMO_RAIN_MODULE_ID:-}
+google:
+  apikey: \${GOOGLE_API_KEY}
+  staticmaps_mapid: \${GOOGLE_STATICMAPS_MAPID}
+location: $(yaml_quote "$LOCATION")
+outputs:
+  default: inkplate10-portrait
+  profiles:
+    inkplate10-portrait:
+      enabled: true
+      renderer: pillow
+      width: 825
+      height: 1200
+      filename: calendar.png
+mqtt:
+  instance_id: $(yaml_quote "$MQTT_INSTANCE_ID")
+  weather:
+    enabled: $([[ "$MQTT_WEATHER_ENABLED" == 1 ]] && echo true || echo false)
+    broker: $(yaml_quote "${MQTT_WEATHER_BROKER:-localhost}")
+    port: $MQTT_WEATHER_PORT
+    base_topic: $(yaml_quote "${MQTT_WEATHER_TOPIC:-inkplate/weather-calendar}")
+    retain: true
+    qos: 0
+  diagnostics:
+    enabled: $([[ "$MQTT_DIAGNOSTICS_ENABLED" == 1 ]] && echo true || echo false)
+    broker: $(yaml_quote "${MQTT_DIAGNOSTICS_BROKER:-localhost}")
+    port: $MQTT_DIAGNOSTICS_PORT
+    topic: $(yaml_quote "${MQTT_DIAGNOSTICS_TOPIC:-inkplate/weather-calendar/diagnostics}")
+    qos: 0
+EOF
+  {
+    echo "# Generated by the standalone Proxmox OCI deployer."
+    printf 'WEATHER_API_KEY=%s\n' "$(env_quote "$WEATHER_API_KEY")"
+    printf 'GOOGLE_API_KEY=%s\n' "$(env_quote "$GOOGLE_API_KEY")"
+    printf 'GOOGLE_STATICMAPS_MAPID=%s\n' "$(env_quote "$GOOGLE_MAP_ID")"
+    if (( NETATMO_ENABLED )); then
+      printf 'NETATMO_CLIENT_ID=%s\n' "$(env_quote "$NETATMO_CLIENT_ID")"
+      printf 'NETATMO_CLIENT_SECRET=%s\n' "$(env_quote "$NETATMO_CLIENT_SECRET")"
+      printf 'NETATMO_REFRESH_TOKEN=%s\n' "$(env_quote "$NETATMO_REFRESH_TOKEN")"
+      printf 'NETATMO_DEVICE_ID=%s\n' "$(env_quote "$NETATMO_DEVICE_ID")"
+      printf 'NETATMO_MODULE_ID=%s\n' "$(env_quote "$NETATMO_MODULE_ID")"
+      printf 'NETATMO_WIND_MODULE_ID=%s\n' "$(env_quote "$NETATMO_WIND_ID")"
+      printf 'NETATMO_RAIN_MODULE_ID=%s\n' "$(env_quote "$NETATMO_RAIN_ID")"
+    fi
+  } >"$env_file"
+  chmod 0600 "$config_file" "$env_file"
+}
+
+description() {
+  local digest="$1"
+  cat <<EOF
+<div align='center'>
+  <a href='${PROJECT_URL}' target='_blank' rel='noopener noreferrer'>
+    <img src='${PROJECT_ICON_URL}' alt='Inkplate Weather Calendar logo' style='width:96px;height:96px;'/>
+  </a>
+  <h2 style='font-size:24px;margin:16px 0 8px;'>Inkplate Weather Calendar</h2>
+  <p style='margin:8px 0 16px;'>Weather forecasts and calendars for Inkplate e-paper displays.</p>
+  <p><a href='${PROJECT_URL}' target='_blank'>GitHub</a> · <a href='${PROJECT_URL}/blob/main/server/README.md' target='_blank'>Documentation</a> · <a href='${PROJECT_URL}/pkgs/container/inkplate10-weather-cal' target='_blank'>Container image</a> · <a href='${PROJECT_URL}/issues' target='_blank'>Issues</a></p>
+  <p style='font-size:12px;'><strong>Image:</strong> <code>${IMAGE}:${TAG}</code><br/><strong>Digest:</strong> <code>${digest}</code></p>
+</div>
+EOF
+}
+
+next_ctid() {
+  (( DRY_RUN )) && ! command -v pvesh >/dev/null 2>&1 && { echo 100; return; }
+  pvesh get /cluster/nextid
+}
+
+show_plan() {
+  local digest="$1" core_label=cores network_label
+  [[ "$CORES" == 1 ]] && core_label=core
+  if [[ "$IPV4_MODE" == static ]]; then
+    network_label="static IPv4 ${IPV4_ADDRESS}${IPV4_GATEWAY:+ via $IPV4_GATEWAY}"
+  else
+    network_label="IPv4 DHCP"
+  fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    network_label+="; static IPv6 ${IPV6_ADDRESS}${IPV6_GATEWAY:+ via $IPV6_GATEWAY}"
+  else
+    network_label+="; no static IPv6"
+  fi
+  cat <<EOF
+
+Deployment plan
+---------------
+Image: ${IMAGE}:${TAG}
+Digest: ${digest}
+Platform: linux/$(host_architecture)
+Container: ${CTID} (${HOSTNAME}), unprivileged, on-boot
+Network: ${BRIDGE}, ${network_label}, PVE host-managed OCI addressing
+Resources: ${CORES} ${core_label}, ${MEMORY_MB} MiB RAM
+OCI cache: ${TEMPLATE_STORAGE}
+Root disk: ${ROOT_STORAGE}:${DISK_GB} GiB
+EOF
+  if (( SEPARATE_MOUNTS )); then
+    echo "Data: ${DATA_STORAGE}:${DATA_DISK_GB} GiB -> ${DATA_DIR} (rw)"
+    echo "Config: ${CONFIG_STORAGE}:${CONFIG_DISK_GB} GiB -> ${CONFIG_DIR} (ro after setup)"
+  else
+    echo "Config/data: stored on the root disk"
+  fi
+}
+
+network_config() {
+  local config="name=eth0,bridge=${BRIDGE},ip="
+  if [[ "$IPV4_MODE" == static ]]; then
+    config+="$IPV4_ADDRESS"
+    [[ -z "$IPV4_GATEWAY" ]] || config+=",gw=$IPV4_GATEWAY"
+  else
+    config+="dhcp"
+  fi
+  if [[ "$IPV6_MODE" == static ]]; then
+    config+=",ip6=$IPV6_ADDRESS"
+    [[ -z "$IPV6_GATEWAY" ]] || config+=",gw6=$IPV6_GATEWAY"
+  fi
+  printf '%s,type=veth' "$config"
+}
+
+create_container() {
+  local archive_volume="$1" digest="$2" notes network command
+  notes="$(description "$digest")"
+  network="$(network_config)"
+  command=(pct create "$CTID" "$archive_volume"
+    --hostname "$HOSTNAME"
+    --rootfs "${ROOT_STORAGE}:${DISK_GB}"
+    --memory "$MEMORY_MB"
+    --cores "$CORES"
+    --swap "$DEFAULT_SWAP_MB"
+    --net0 "$network"
+    --unprivileged 1 --onboot 1 --description "$notes")
+  if (( SEPARATE_MOUNTS )); then
+    command+=(--mp0 "${DATA_STORAGE}:${DATA_DISK_GB},mp=${DATA_DIR},backup=1")
+    command+=(--mp1 "${CONFIG_STORAGE}:${CONFIG_DISK_GB},mp=${CONFIG_DIR},backup=1")
+  fi
+  CREATE_ATTEMPTED=1
+  run "${command[@]}"
+}
+
+wait_for_exec() {
+  (( DRY_RUN )) && { echo "Would wait for container $CTID to accept pct exec commands."; return; }
+  local _
+  for _ in {1..20}; do pct exec "$CTID" -- true >/dev/null 2>&1 && return; sleep 1; done
+  die "container $CTID did not become available for setup"
+}
+
+set_config_read_only() {
+  local mount
+  if (( DRY_RUN )); then
+    mount="${CONFIG_STORAGE}:${CONFIG_DISK_GB},mp=${CONFIG_DIR},backup=1"
+  else
+    mount="$(pct config "$CTID" | LC_ALL=C grep -a '^mp1:' | head -n1 | cut -d: -f2- | sed 's/^ //')"
+    [[ -n "$mount" ]] || die "unable to find config mount mp1 for container $CTID"
+  fi
+  mount="$(printf '%s' "$mount" | sed -E 's/,ro=[^,]+//g'),ro=1"
+  run pct set "$CTID" --mp1 "$mount"
+}
+
+bootstrap_configuration() {
+  local config_file="$1" env_file="$2"
+  run pct set "$CTID" --entrypoint "/bin/sleep infinity"
+  run pct start "$CTID"
+  wait_for_exec
+  run pct exec "$CTID" -- mkdir -p "$CONFIG_DIR" "$DATA_DIR"
+  run pct exec "$CTID" -- chown inkplate:inkplate "$CONFIG_DIR" "$DATA_DIR"
+  run pct push "$CTID" "$config_file" "$CONFIG_PATH" --user inkplate --group inkplate --perms 0600
+  run pct push "$CTID" "$env_file" "$ENV_PATH" --user inkplate --group inkplate --perms 0600
+  run pct exec "$CTID" -- su -s /bin/sh -c \
+    "test -r '$CONFIG_PATH' && touch '$DATA_DIR/.installer-write-test' && rm '$DATA_DIR/.installer-write-test'" inkplate
+  if (( DRY_RUN )); then
+    run pct stop "$CTID"
+  else
+    pct stop "$CTID" || true
+  fi
+  (( SEPARATE_MOUNTS )) && set_config_read_only
+  run pct set "$CTID" --entrypoint "$OCI_ENTRYPOINT"
+  run pct start "$CTID"
+}
+
+wait_until_ready() {
+  (( DRY_RUN )) && { echo "Would wait for /api/v1/ready on $HOST_BIND:$SERVER_PORT."; return; }
+  local probe_host="$HOST_BIND" _
+  [[ "$HOST_BIND" == "::" ]] && probe_host="::1"
+  [[ "$HOST_BIND" == "0.0.0.0" ]] && probe_host="127.0.0.1"
+  for _ in {1..36}; do
+    pct exec "$CTID" -- python3 -c \
+      "import http.client,sys;c=http.client.HTTPConnection('$probe_host',$SERVER_PORT,timeout=5);c.request('GET','/api/v1/ready');r=c.getresponse();r.read();sys.exit(0 if r.status==200 else 1)" \
+      >/dev/null 2>&1 && return
+    sleep 5
+  done
+  die "container $CTID did not become ready on $HOST_BIND:$SERVER_PORT"
+}
+
+verify_runtime() {
+  (( DRY_RUN )) && { echo "Would verify the application user and config protection."; return; }
+  local expected actual
+  expected="$(pct exec "$CTID" -- id -u inkplate)"
+  actual="$(pct exec "$CTID" -- stat -c %u /proc/1)"
+  [[ "$actual" == "$expected" ]] || die "PID 1 uid $actual, expected $expected"
+  if (( SEPARATE_MOUNTS )); then
+    if pct exec "$CTID" -- touch "$CONFIG_DIR/.installer-ro-test" >/dev/null 2>&1; then
+      pct exec "$CTID" -- rm -f "$CONFIG_DIR/.installer-ro-test" || true
+      die "config mount is writable"
+    fi
+  fi
+  echo "Runtime verification: application user and config protection are correct."
+}
+
+container_address() {
+  local addresses address
+  addresses="$(pct exec "$CTID" -- hostname -I 2>/dev/null || true)"
+  for address in $addresses; do [[ "$address" == *.* ]] && { echo "$address"; return; }; done
+  for address in $addresses; do [[ "$address" == *:* ]] && { echo "$address"; return; }; done
+  echo "<container-address>"
+}
+
+main() {
+  trap cleanup EXIT
+  trap 'exit 130' INT HUP TERM
+  parse_args "$@"
+  echo "$APP_NAME — Proxmox OCI deployer"
+  printf '%0.s=' {1..48}; echo
+  echo "Standalone fresh-install workflow; existing CTIDs are never replaced."
+  (( DRY_RUN )) && echo "Dry run: host changes will only be previewed."
+  echo
+  echo "Pre-flight checks"
+  echo "-----------------"
+
+  validate_host
+  ensure_dependencies
+  validate_answers
+  configure_interface
+  [[ -n "$SETUP" ]] || SETUP="$(prompt_choice "Setup mode" default proxmox_oci_setup \
+    default "recommended resources and DHCP networking" \
+    advanced "custom CTID, resources, bridge, and disk sizes")"
+  configure_deployment
+  validate_deployment
+  select_tag
+  if [[ -z "$CTID" ]]; then
+    CTID="$(next_ctid)"
+    if [[ "$SETUP" == advanced ]]; then
+      CTID="$(prompt_int "Container ID" "$CTID" 100 999999999 proxmox_oci_ctid)"
+    fi
+  fi
+  if (( ! DRY_RUN )) && pct config "$CTID" >/dev/null 2>&1; then die "container ID $CTID already exists"; fi
+  check_pass "Container ID is unused: $CTID"
+
+  local digest archive_file archive_volume archive_path config_file env_file address url_host
+  digest="$(image_digest)"
+  check_pass "Platform-specific image digest resolved: $digest"
+  validate_selected_image "$digest"
+  check_pass "OCI image contract: linux/$(host_architecture), user inkplate, expected entrypoint"
+  show_plan "$digest"
+  if (( ! ASSUME_YES )); then
+    [[ "$(prompt_yes_no "Create and start this container?" 0 proxmox_oci_confirm)" == 1 ]] || {
+      echo "Container creation cancelled; no container was created."; return 0;
+    }
+  fi
+  collect_configuration
+  WORKDIR="$(mktemp -d /tmp/inkplate-oci.XXXXXXXX)"
+  config_file="$WORKDIR/config.yaml"; env_file="$WORKDIR/weather.env"
+  render_configuration "$config_file" "$env_file"
+  archive_file="$(archive_name "$digest")"
+  archive_volume="${TEMPLATE_STORAGE}:vztmpl/${archive_file}"
+  if (( DRY_RUN )); then
+    archive_path="/var/lib/vz/template/cache/${archive_file}"
+    echo "Would resolve template volume $archive_volume to $archive_path."
+  else
+    archive_path="$(pvesm path "$archive_volume")" || die "unable to resolve template storage path"
+  fi
+  pull_image "$digest" "$archive_path"
+  create_container "$archive_volume" "$digest"
+  bootstrap_configuration "$config_file" "$env_file"
+  wait_until_ready
+  verify_runtime
+
+  (( DRY_RUN )) && { echo "Dry run complete; no container was created."; return; }
+  address="$(container_address)"; url_host="$address"
+  [[ "$address" == *:* ]] && url_host="[$address]"
+  cat <<EOF
+
+Deployment completed successfully.
+Container: ${CTID} (running)
+Calendar:  http://${url_host}:${SERVER_PORT}/calendar.png
+Viewer:    http://${url_host}:${SERVER_PORT}/app
+Status:    http://${url_host}:${SERVER_PORT}/status
+Shell:     pct enter ${CTID}
+EOF
+  CREATE_ATTEMPTED=0
+}
+
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+main "$@"

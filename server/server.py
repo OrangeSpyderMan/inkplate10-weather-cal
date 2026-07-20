@@ -6,6 +6,7 @@ import sys
 import time
 import logging.config
 from datetime import timedelta
+from mqtt_identity import mqtt_client_id
 from mqtt_publisher import MqttWeatherPublisher
 from artifacts import ArtifactStore
 from configuration import load_config
@@ -357,13 +358,13 @@ def build_mqtt_weather_publisher(mqtt_config):
     base_topic = mqtt_config.get("base_topic", "inkplate/weather-calendar")
     retain = mqtt_config.get("retain", True)
     qos = mqtt_config.get("qos", 0)
-
     return MqttWeatherPublisher(
         broker=broker,
         port=port,
         base_topic=base_topic,
         retain=retain,
         qos=qos,
+        client_id=mqtt_client_id("weather", mqtt_config.get("instance_id")),
     )
 
 

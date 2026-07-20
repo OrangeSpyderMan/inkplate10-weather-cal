@@ -35,7 +35,7 @@ Both a server and client are required. The main workload is on the server, which
    when its content has changed.
 5. Returns to deep sleep for the configured refresh interval.
 
-#### Features:
+#### Client features
 
 - Ultra-low power consumption:
   - approx 21µA in deep sleep
@@ -63,7 +63,7 @@ Both a server and client are required. The main workload is on the server, which
    exits; web serving has an independent lifecycle.
 7. A cronjob can run the producer before the client's configured refresh interval elapses.
 
-#### Features:
+#### Server features
 
 See the [server](/server) for more features.
 
@@ -86,7 +86,7 @@ See the [server](/server) for more features.
   life measured in months, but actual runtime depends heavily on the refresh
   interval, WiFi connection time and retries, battery condition, and
   self-discharge. The client's typical deep-sleep and awake current figures are
-  listed under [Client features](#features). Here is
+  listed under [Client features](#client-features). Here is
   [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
 - **CR2032 3V coin cell ~€1**
@@ -110,7 +110,7 @@ See the [server](/server) for more features.
 
 The generic release firmware reads `config.yaml` from the root of an SD card:
 
-```
+```yaml
 display:
   # 0, 1, 2, or 3; each step rotates the display clockwise by 90 degrees.
   rotation: 1
@@ -278,6 +278,36 @@ The Proxmox option directs you to the dedicated fresh-install-only preview:
 ```bash
 sudo ./bin/install_proxmox --dry-run
 ```
+
+A new, parallel OCI deployment flow for fully updated PVE 9.1+ hosts is also
+available without changing the existing installers. From a Proxmox shell, the
+one-line entry point is:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
+```
+
+It provides a `whiptail` TUI with default and advanced setup modes, pulls a
+published GHCR image, prompts for Proxmox image/root/config/data storage, and
+offers static IPv4 and IPv6 addressing in advanced setup while retaining IPv4
+DHCP as the default. PVE manages the configured static addresses, gateways, and
+resolver settings for the application container. It keeps secrets in a protected
+read-only config volume and only reports success after the new container's
+readiness endpoint responds and its process identity and config protection pass
+runtime checks. Run the same flow remotely over SSH by opening a root shell on
+the PVE host and running the one-liner there.
+
+The URL selects the complete standalone installer and `--tag` selects only the
+OCI image. Test the `next` installer with the `next` image using:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
+```
+
+See [the server deployment guide](server/README.md#guided-proxmox-ve-9-oci-deployment)
+for prerequisites, CLI automation, storage behavior, rollback, and security
+notes. The existing `bin/install_proxmox` and `bin/install_remote` paths remain
+available and unchanged.
 
 Interactive Proxmox runs list available LXC storage and can create separate
 mounts for generated data and read-only config. Use `--storage`,

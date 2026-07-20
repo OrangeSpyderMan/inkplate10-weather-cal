@@ -89,6 +89,9 @@ class ProducerConfig:
             default={},
             required=False,
         ) or {}
+        mqtt_weather_config = dict(mqtt_config.get("weather") or {})
+        if mqtt_config.get("instance_id") is not None:
+            mqtt_weather_config["instance_id"] = mqtt_config["instance_id"]
         output_profiles, default_output_profile = load_output_profiles(config)
 
         return cls(
@@ -146,7 +149,7 @@ class ProducerConfig:
                 )
             ),
             realtime_config=realtime_config or {},
-            mqtt_weather_config=(mqtt_config.get("weather") or {}),
+            mqtt_weather_config=mqtt_weather_config,
             output_profiles=output_profiles,
             default_output_profile=default_output_profile,
         )

@@ -11,6 +11,7 @@ from rough.generator import RoughGenerator
 ASSET_ROOT = Path(__file__).resolve().parent / "views" / "html"
 BASE_WIDTH = 825
 BASE_HEIGHT = 1200
+MAX_FORECAST_COLUMNS = 12
 
 
 class PillowCalendarRenderer:
@@ -182,18 +183,20 @@ class CalendarCanvas:
             self._text("MAP UNAVAILABLE", (BASE_WIDTH / 2, top + 200), 32)
 
     def _forecast(self, hourly):
-        forecasts = list(hourly[:7])
+        forecasts = list(hourly[:MAX_FORECAST_COLUMNS])
         if not forecasts:
             return
         count = len(forecasts)
         column = 760 / count
+        hour_font_size = max(22, min(35, round(column * 0.34)))
+        icon_size = min(96, round(column * 0.96))
         left = 32
         for index, forecast in enumerate(forecasts):
             center = left + column * (index + 0.5)
             timestamp = forecast.get("dt")
             hour = timestamp.strftime("%-I%p").lower() if timestamp else "--"
-            self._text(hour, (center, 674), 35, anchor="mm")
-            self._icon(forecast.get("icon"), (center, 750), 96)
+            self._text(hour, (center, 674), hour_font_size, anchor="mm")
+            self._icon(forecast.get("icon"), (center, 750), icon_size)
 
         chart_left = 48
         chart_right = 790
@@ -206,6 +209,8 @@ class CalendarCanvas:
         unit = forecasts[0]["temperature"].get("unit", "")
         temp_min, temp_max = ((5, 104) if "F" in unit else (-15, 40))
         step = (chart_right - chart_left) / count
+        temperature_font_size = max(18, min(27, round(step * 0.32)))
+        rain_font_size = max(16, min(22, round(step * 0.27)))
         self.draw.line(
             self._box((24, chart_bottom, 801, chart_bottom)),
             fill=160,
@@ -239,12 +244,12 @@ class CalendarCanvas:
             self._outlined_text(
                 "{}°".format(_measurement(temperature)),
                 (center, label_y),
-                27,
+                temperature_font_size,
             )
             self._text(
                 "{}%".format(_measurement(rain_probability)),
                 (center, 1140),
-                22,
+                rain_font_size,
                 anchor="mm",
             )
 

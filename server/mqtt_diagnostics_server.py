@@ -10,6 +10,7 @@ from pathlib import Path
 from artifacts import ArtifactStore
 from configuration import load_config
 from mqtt_diagnostics import MqttDiagnosticListener
+from mqtt_identity import mqtt_client_id
 
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -38,6 +39,10 @@ def build_listener(config, store=None):
             "inkplate/weather-calendar/diagnostics",
         ),
         qos=diagnostics_config.get("qos", 0),
+        client_id=mqtt_client_id(
+            "diagnostics",
+            mqtt_config.get("instance_id"),
+        ),
         store=store,
     )
 

@@ -64,6 +64,31 @@ class ProducerConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.realtime_config, legacy_config)
 
+    def test_passes_shared_mqtt_instance_id_to_weather_publisher(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {},
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+                "mqtt": {
+                    "instance_id": "4f9k2m",
+                    "weather": {"enabled": True},
+                },
+            }
+        )
+
+        self.assertEqual(
+            settings.mqtt_weather_config["instance_id"],
+            "4f9k2m",
+        )
+
     def test_accepts_missing_server_section_when_checking_enabled(self):
         self.assertTrue(producer_enabled({}))
         self.assertFalse(producer_enabled({"server": {"enabled": False}}))
@@ -154,6 +179,25 @@ class ProducerConfigTests(unittest.TestCase):
                     "location": "Landry, FR",
                 }
             )
+
+    def test_preserves_large_forecast_slot_configurations(self):
+        settings = ProducerConfig.from_config(
+            {
+                "server": {},
+                "weather": {
+                    "service": "openweathermapv3",
+                    "apikey": "weather-key",
+                    "num_hourly_forecasts": 13,
+                },
+                "google": {
+                    "apikey": "google-key",
+                    "staticmaps_mapid": "map-id",
+                },
+                "location": "Landry, FR",
+            }
+        )
+
+        self.assertEqual(settings.hourly_forecasts, 13)
 
     def test_rejects_negative_forecast_lead_minutes(self):
         with self.assertRaisesRegex(

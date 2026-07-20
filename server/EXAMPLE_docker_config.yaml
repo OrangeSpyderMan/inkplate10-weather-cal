@@ -42,6 +42,8 @@ outputs:
       # options:
       #   supersample: 2
 mqtt:
+  # Set this to a unique six-character base-36 value when servers share a broker.
+  # instance_id: 4f9k2m
   weather:
     # Optional weather data publisher for other local clients.
     enabled: false

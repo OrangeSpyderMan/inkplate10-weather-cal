@@ -80,6 +80,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
@@ -95,25 +96,32 @@ jobs:
 
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "GitHub Release $VERSION already exists"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             gh release create "$VERSION" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --title "$VERSION" \
               --generate-notes
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Dispatch release builds
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          RELEASE_CREATED: ${{ steps.release.outputs.created }}
         run: |
           set -euo pipefail
 
-          gh workflow run firmware.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$VERSION" \
-            -f release_tag="$VERSION"
+          if [ "$RELEASE_CREATED" = true ]; then
+            echo "Firmware build was triggered by publishing the GitHub Release"
+          else
+            gh workflow run firmware.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$VERSION" \
+              -f release_tag="$VERSION"
+          fi
 
           gh workflow run container-publish.yml \
             --repo "$GITHUB_REPOSITORY" \

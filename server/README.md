@@ -2,15 +2,11 @@
 
 A Python service for the weather calendar client with direct Pillow rendering.
 
-
-
 Example 1                  | Example 2                 | Example 3
 :-------------------------:|:-------------------------:|:-------------------------:
 <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/c37e6b65-a226-40d7-b1c7-cb3d72973054 width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/71958bcb-839d-447a-b671-a4cb5fbca25e width=300 /> | <img src=https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/90608c9f-c16e-4d56-9edc-13b9d85ef659 width=300 />
 
 <img width="1044" alt="Screenshot 2023-05-17 at 01 07 53" src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/e02e672b-7ad0-431d-8a29-c2740857a4d7">
-
-
 
 - Uses [AccuWeather](https://developer.accuweather.com/) or [OpenWeatherMap](https://openweathermap.org/api) APIs for weather data.
 - Uses Google's [StaticMaps API](https://developers.google.com/maps/documentation/maps-static/overview) to generate a static map of your area.
@@ -163,8 +159,9 @@ group, start a new login session or run `newgrp docker` before retrying.
 This provider follows AccuWeather's current Core Weather API contract, using
 HTTPS and Bearer authentication. It is covered by mocked contract tests but is
 not exercised against the live API in CI.
- 
+
 In order to obtain an API Key, you will need to:
+
 1. Sign up to [developer.accuweather.com](https://developer.accuweather.com/).
 2. Select a Core Weather API plan and generate an API key.
 
@@ -296,6 +293,8 @@ weather data without talking directly to the weather provider APIs.
 
 ```yaml
 mqtt:
+  # Must be unique when multiple servers use the same broker.
+  instance_id: 4f9k2m
   weather:
     enabled: true
     broker: localhost
@@ -310,6 +309,12 @@ mqtt:
     topic: inkplate/weather-calendar/diagnostics
     qos: 0
 ```
+
+The instance ID is shared by the publisher and diagnostics listener to form
+distinct MQTT client IDs such as `inkplate-weather.4f9k2m` and
+`inkplate-diag.4f9k2m`. This prevents multiple servers on one broker from
+disconnecting each other. It must contain exactly six lowercase base-36
+characters, keeping the complete client IDs within 23 characters.
 
 When enabled, the server publishes retained JSON payloads after a successful
 weather refresh:
@@ -545,7 +550,7 @@ calendar image.
 
 ### Google StaticMaps API
 
-<img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" />
+<img src="https://github.com/chrisjtwomey/inkplate10-weather-cal/assets/5797356/b3f2efd0-23c0-4b9f-81e6-5684fc470ecc" width="800" alt="Inkplate calendar with a styled static map" />
 
 In order to generate a static map of your area you will need to sign up to [Google's developer console](https://developers.google.com/):
 
@@ -575,7 +580,7 @@ At startup the server fetches this static map, converts it to a dithered graysca
 The native installation baseline is Debian 13 (Trixie) or another supported
 distribution providing Python 3.13 or newer. Ensure Python 3 is installed:
 
-```
+```console
 python3 --version
 Python 3.13.5
 ```
@@ -583,7 +588,8 @@ Python 3.13.5
 Download project and install dependencies. The default main branch is the latest
 stable branch. The next branch contains changes planned for the next release -
 it should be OK to use, but may be less tested.
-```
+
+```bash
 git clone https://github.com/OrangeSpyderMan/inkplate10-weather-cal
 cd inkplate10-weather-cal
 cp server/config/EXAMPLE_config.yaml server/config/config.yaml
@@ -608,13 +614,17 @@ python3 server/web_server.py
 ```
 
 Run the server 9am each day:
-```
+
+```bash
 crontab -e
 ```
+
 Add this line:
-```
+
+```cron
 0 9 * * * /usr/bin/python3 /path/to/inkplate10-weather-cal/server/server.py
 ```
+
 This scheduled form expects `server.alwayson: false`; keep
 `server/web_server.py` running separately. `/path/to/inkplate10-weather-cal`
 should be updated to the absolute path of your checkout.
@@ -802,7 +812,207 @@ podman run -d \
 
 Use `docker run` with the same arguments if you prefer Docker.
 
-### Proxmox VE 9.1 OCI LXC
+### Guided Proxmox VE 9 OCI Deployment
+
+`bin/deploy_proxmox_oci` is a parallel, fresh-install deployment path for
+fully updated Proxmox VE 9.1 and later 9.x releases. It requires
+`pve-container` 6.1.0 or newer and `lxc-pve` 6.0.5-4 or newer so PVE preserves
+the OCI image's non-root application identity. It does not replace or modify
+the existing `bin/install_server`, `bin/install_proxmox`, or
+`bin/install_remote` workflows.
+
+Run it directly in the Proxmox shell with the Helper-Scripts-style one-line
+entry point:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/main/bin/deploy_proxmox_oci)"
+```
+
+For a remote host, first open a root shell on that PVE host and run the same
+command there. The standalone installer deliberately does not embed a second
+SSH deployment mechanism; the existing `bin/install_remote` workflow remains
+available for repository-based remote installation.
+
+#### Testing the `next` image
+
+To test both the deployment changes on `next` and its matching image, use:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag next
+```
+
+The installer source and OCI image remain independent: the URL selects the
+complete standalone Bash installer to execute, while `--tag` selects only the
+OCI image. For example, this deliberately uses the `next` installer with the
+`main` image:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OrangeSpyderMan/inkplate10-weather-cal/next/bin/deploy_proxmox_oci)" -- --tag main
+```
+
+The inverse combination is syntactically possible once the deployer is present
+on `main`, but is not guaranteed to be compatible: a `next` image may introduce
+a configuration or runtime contract that only the matching `next` deployment
+code understands. Matching source and image channels is therefore the normal
+and recommended path. In every case, the selected image is resolved to its
+platform-specific digest before download.
+
+There is no branch inference, source archive, bootstrap URL, or second installer
+download. The script fetched from `main`, `next`, a release tag, or another
+branch is the installer that runs.
+
+The standalone deployer follows the operational patterns documented by the
+[Proxmox Community Scripts project](https://community-scripts.org/docs/ct/detailed_guide):
+
+- a minimal default setup and a configurable advanced setup
+- pre-flight validation before container creation
+- an explicit `[PASS]`, `[FAIL]`, `[INSTALL]`, or `[SKIP]` result for each
+  host command, PVE version, architecture, dependency, terminal/UI, storage,
+  network, CTID, registry, digest, and image-contract check
+- `whiptail` menus and protected password prompts, with `--no-tui` fallback
+- an unprivileged, DHCP-enabled, on-boot LXC by default, with static IPv4 and
+  IPv6 in advanced setup
+- a final deployment summary and explicit confirmation
+- cleanup of a newly created CT when bootstrap or readiness fails; use
+  `--keep-failed` to retain it for diagnosis
+- success only after `/api/v1/ready` returns successfully from inside the CT
+  and PID 1 is verified to run as the image's `inkplate` user
+
+The installer is one Bash program and does not require Python on the Proxmox
+host. Its explicit host-side dependencies are `jq`, `skopeo`, and, for the TUI,
+`whiptail`; it installs any that are missing from the PVE/Debian repositories
+before container creation. It queries the public GHCR package, offers versioned
+release images before the `main` and `next` branch images, resolves and pins the
+host-specific AMD64 or ARM64 source manifest digest, and records that digest in
+the container description. Downloads use that immutable source digest and a
+temporary file.
+Skopeo explicitly converts the registry's Docker v2 manifest to an OCI manifest
+because PVE's importer requires an OCI media type in the archive index; this
+conversion necessarily gives the local manifest a different digest. Before an
+archive is moved into the user-selected Proxmox `vztmpl` cache, the deployer
+checks its index media type, platform, descriptor hashes and sizes, and image
+configuration. Cached archives receive the same validation before reuse and an
+incompatible cache entry is replaced atomically. PVE's native OCI support was
+introduced in 9.1, so PVE 9.0 is rejected rather than failing partway through
+creation.
+
+This repository-local implementation is Community-Scripts-inspired, not yet a
+drop-in Community Scripts contribution. Their current contribution format uses
+a Bash `ct/AppName.sh` entry point, sources `build.func`, and delegates the
+in-container work to `install/AppName-install.sh`. Before proposing this
+deployer upstream, its host orchestration must be adapted to that framework (or
+the maintainers must explicitly accept native-OCI tooling as a different script
+category). The upstream contribution checklist also expects an application
+update function plus successful default and advanced installation tests; this
+fresh-install-only workflow does not satisfy those gates yet. Keeping it
+separate avoids coupling that future port to the existing deployment scripts.
+
+Storage is selected explicitly in the guided flow:
+
+- the OCI archive cache must use active `vztmpl` storage
+- the container root disk must use active `rootdir` storage
+- separate Proxmox-managed config and data volumes are recommended and enabled
+  by default
+- `/srv/inkplate/server/data` stays read-write for snapshots and rendered output
+- `/srv/inkplate/server/config` is populated with `config.yaml` and protected
+  `weather.env`, then changed to read-only before the application starts
+- both separate volumes are included in Proxmox backups (`backup=1`)
+- setup verifies the image's `inkplate` user can read config and write data
+  before the final container start
+- final acceptance verifies PID 1 runs as `inkplate` and that the separate
+  config volume rejects writes before reporting success
+
+The recommended OCI defaults reflect the measured footprint of the published
+image: 1 vCPU, 256 MiB RAM, 256 MiB swap, and 1 GiB each for the root, generated
+data, and read-only configuration volumes. The storage-backed volumes use PVE's
+portable `STORAGE_ID:SIZE_IN_GiB` allocation form and can be grown later with
+normal Proxmox volume controls. The application binds to the IPv6 wildcard
+`::`, so the normal Linux dual-stack socket default accepts both IPv6 and IPv4
+connections. PVE automatically enables host-managed networking for the OCI
+application container. DHCP remains the IPv4 default; advanced setup can
+instead configure static IPv4 and IPv6 addresses in CIDR notation. Static IPv6
+is not configured by default. PVE's host-managed OCI networking installs the
+static address and optional `gw6` directly in the LXC network configuration;
+SLAAC (`ip6=auto`) is not supported in this mode. Supply an IPv6 gateway when
+the container needs a default IPv6 route, or leave it blank for an on-link-only
+configuration. PVE supplies the container resolver configuration from the host
+when no nameserver is explicitly configured, so the application container does
+not need its own RA or RDNSS client. IPv6 availability still depends on the host
+and local network providing a routable prefix.
+
+Advanced and command-line installs may lower RAM to 128 MiB. The 256 MiB
+recommendation remains because the OCI entry point supervises the producer,
+diagnostics process, and Gunicorn master/worker processes together; use the
+128 MiB setting only where occasional swap use during rendering is acceptable.
+
+The PVE container notes use the same general presentation as Community Scripts:
+the Inkplate application icon and title, direct links to the GitHub repository,
+documentation, published container package and issue tracker, followed by the
+pinned image reference and digest for provenance. The visual assets are loaded
+from this repository; deployment does not depend on them being available.
+
+The advanced flow additionally prompts for CTID, hostname, bridge, IPv4 DHCP or
+static addressing, optional static IPv6, MQTT instance ID, cores, memory, and
+disk sizes. Static addresses must include their prefix, for example
+`192.168.1.184/24` and
+`2001:db8::184/64`. Gateways are optional. These network values can also be
+supplied with `--ip ADDRESS/PREFIX`, `--gateway ADDRESS`, `--ip6
+ADDRESS/PREFIX`, and `--gateway6 ADDRESS`; `--ip dhcp` and `--ip6 none` are the
+defaults. Run `./bin/deploy_proxmox_oci --help` for the complete option list.
+Repeatable installs can reuse the existing JSON answers format. Copy the
+example, replace every placeholder secret, and restrict it before use:
+
+```bash
+sudo install -m 0600 bin/install_server.answers.example.json /root/inkplate-answers.json
+sudoedit /root/inkplate-answers.json
+sudo ./bin/deploy_proxmox_oci \
+  --non-interactive \
+  --answers /root/inkplate-answers.json \
+  --yes \
+  --tag v4.0.0 \
+  --storage local-lvm \
+  --template-storage local \
+  --separate-mounts \
+  --data-storage local-lvm \
+  --config-storage local-lvm
+```
+
+The deployer refuses an answers file readable by group or other users because
+it contains API credentials and may contain Netatmo tokens.
+
+Every new deployment receives a random six-character base-36 MQTT instance ID.
+Advanced setup can edit it, and `--mqtt-instance-id ID` supplies it directly.
+The value is persisted as `mqtt.instance_id` in `config.yaml`; with separate
+mounts enabled, that file is on the dedicated configuration volume rather than
+the container root filesystem.
+
+For unattended static addressing, add these deployment-specific keys to that
+JSON answers file and select advanced setup:
+
+```json
+{
+  "proxmox_oci_setup": "advanced",
+  "proxmox_oci_ipv4_mode": "static",
+  "proxmox_oci_ipv4_address": "192.168.1.184/24",
+  "proxmox_oci_ipv4_gateway": "192.168.1.1",
+  "proxmox_oci_ipv6_mode": "static",
+  "proxmox_oci_ipv6_address": "2001:db8::184/64",
+  "proxmox_oci_ipv6_gateway": ""
+}
+```
+
+This path is intentionally fresh-install-only. It refuses an existing CTID and
+does not yet implement in-place OCI image updates. Use a release tag in the raw
+GitHub URL when you want the deployment code itself to be immutable; the
+selected application image is independently resolved and recorded by digest.
+
+Useful references:
+
+- [Community Scripts container guide](https://community-scripts.org/docs/ct/detailed_guide)
+- [Community Scripts configuration guide](https://community-scripts.org/docs/guides/configuration_reference)
+- [Proxmox `pct` documentation](https://pve.proxmox.com/pve-docs/pct.1.html)
+
+### Existing Proxmox VE 9.1 OCI LXC Preview
 
 Proxmox VE 9.1 can create LXC containers from OCI images. This image should be
 usable as an OCI source, but treat this as newer and less tested than Docker

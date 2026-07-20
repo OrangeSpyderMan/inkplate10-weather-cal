@@ -11,6 +11,7 @@ sys.path.insert(0, str(SERVER_DIR))
 
 import mqtt_diagnostics
 import mqtt_diagnostics_server
+import mqtt_identity
 import mqtt_publisher
 
 
@@ -194,7 +195,24 @@ class MqttDiagnosticServerTests(unittest.TestCase):
             port=1884,
             topic="inkplate/diagnostics",
             qos=1,
+            client_id="inkplate-diagnostics-server",
             store=store,
+        )
+
+    @mock.patch("mqtt_diagnostics_server.MqttDiagnosticListener")
+    def test_uses_instance_id_for_diagnostic_client(self, listener_class):
+        mqtt_diagnostics_server.build_listener(
+            {
+                "mqtt": {
+                    "instance_id": "4f9k2m",
+                    "diagnostics": {"enabled": True},
+                }
+            }
+        )
+
+        self.assertEqual(
+            listener_class.call_args.kwargs["client_id"],
+            "inkplate-diag.4f9k2m",
         )
 
     @mock.patch("mqtt_diagnostics_server.load_config")
@@ -237,6 +255,18 @@ class MqttWeatherPublisherTests(unittest.TestCase):
             callback_api_version=mqtt_publisher.mqtt.CallbackAPIVersion.VERSION2,
             client_id="weather-client",
         )
+
+    def test_builds_stable_role_specific_client_ids(self):
+        self.assertEqual(
+            mqtt_identity.mqtt_client_id("weather", "4f9k2m"),
+            "inkplate-weather.4f9k2m",
+        )
+        self.assertEqual(
+            mqtt_identity.mqtt_client_id("diagnostics", "4f9k2m"),
+            "inkplate-diag.4f9k2m",
+        )
+        with self.assertRaisesRegex(ValueError, "base-36"):
+            mqtt_identity.mqtt_client_id("weather", "NOT-VALID")
 
     @mock.patch("mqtt_publisher.create_mqtt_client")
     def test_publishes_all_topics_with_paho_2_timeout(self, create_client):
