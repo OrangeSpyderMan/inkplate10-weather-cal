@@ -46,9 +46,9 @@ class ProducerConfig:
                 required=False,
             )
         )
-        if not 0 <= hourly_forecasts <= 12:
+        if hourly_forecasts < 0:
             raise ConfigurationError(
-                f"num_hourly_forecasts {hourly_forecasts} must be from 0 to 12"
+                f"num_hourly_forecasts {hourly_forecasts} must be non-negative"
             )
         forecast_slice_hours = _positive_int(
             config,

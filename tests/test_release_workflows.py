@@ -91,6 +91,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         prepare_workflow = (REPO_ROOT / ".github/workflows/prepare-release.yml").read_text()
 
         self.assertIn("gh workflow run firmware.yml", publish_workflow)
+        self.assertIn('if [ "$RELEASE_CREATED" = true ]', publish_workflow)
+        self.assertIn("Firmware build was triggered by publishing", publish_workflow)
         self.assertIn("--ref \"$VERSION\"", publish_workflow)
         self.assertIn("-f release_tag=\"$VERSION\"", publish_workflow)
         self.assertIn("gh workflow run container-publish.yml", publish_workflow)
