@@ -359,6 +359,13 @@ make firmware-install-cli
 The installer downloads a pinned Arduino CLI release for your OS/architecture.
 The `.tools/` directory is ignored by git so the binary is not committed. If you
 already have `arduino-cli` installed on your `PATH`, you can skip this step.
+The Inkplate build tools also require Python 3 and its `pyserial` package. If
+`pyserial` is not available in your active Python environment, activate the
+intended virtualenv and install it:
+
+```bash
+python3 -m pip install pyserial
+```
 
 Then install the Inkplate board package and required libraries (these libraries are installed locally under `build/sketchbook/` to avoid polluting your global Arduino library directory):
 
@@ -373,10 +380,10 @@ missing setup work before compiling:
 make world
 ```
 
-`world` installs the repo-local Arduino CLI if needed, installs the Inkplate
-board package or firmware libraries if they are missing, then runs
-`firmware-compile`. Pass the same build options you would pass to
-`firmware-compile`, for example:
+`world` first verifies the required host Python dependencies, installs the
+repo-local Arduino CLI if needed, installs the Inkplate board package or
+firmware libraries if they are missing, then runs `firmware-compile`. Pass the
+same build options you would pass to `firmware-compile`, for example:
 
 ```bash
 make world CONFIG=firmware-config.yaml

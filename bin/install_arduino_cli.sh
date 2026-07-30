@@ -130,11 +130,12 @@ echo
 echo
 echo "Checking host dependencies..."
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "WARNING: 'python3' was not found in your PATH. It is required for firmware upload."
+  echo "WARNING: 'python3' was not found in your PATH. It is required to compile and upload firmware."
 else
   echo "Found: $(python3 --version 2>&1)"
-  if ! python3 -c "import serial" >/dev/null 2>&1; then
-    echo "WARNING: 'pyserial' is not installed for python3. It is required for firmware upload."
+  if ! python3 -c "import serial; from serial.tools import list_ports" >/dev/null 2>&1; then
+    echo "WARNING: 'pyserial' is not installed for python3. It is required to compile and upload firmware."
+    echo "Activate the intended virtualenv and run: python3 -m pip install pyserial"
   else
     echo "Found: pyserial"
   fi
