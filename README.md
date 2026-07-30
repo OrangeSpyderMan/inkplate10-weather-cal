@@ -37,10 +37,11 @@ Both a server and client are required. The main workload is on the server, which
 
 #### Client features
 
-- Ultra-low power consumption:
+- Ultra-low power consumption.  Battery life is at least two months under normal operation with hourly forecast refreshes. Actual life may be longer :
   - approx 21µA in deep sleep
   - approx 240mA awake
   - approx 30 seconds awake time daily
+  - average ~7.5mV / day drop over 2 months (though lithium batteries do not have a linear discharge rate...)
 - Real-time clock is normally synchronized from NTP at most once every 24
   hours; the retained RTC is used between synchronizations.
 - Daylight savings time handled automatically.
