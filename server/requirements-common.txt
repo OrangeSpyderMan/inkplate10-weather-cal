@@ -1,4 +1,4 @@
-packaging==26.2
+packaging==26.3
 PyYAML==6.0.3
 googlemaps==4.10.0
 Flask==3.1.3
