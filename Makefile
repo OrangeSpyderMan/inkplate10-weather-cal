@@ -33,7 +33,7 @@ endif
 
 FIRMWARE_BUILD_PROPERTIES := --build-property "compiler.cpp.extra_flags=$(FIRMWARE_COMMON_BUILD_FLAGS) $(FIRMWARE_MODE_BUILD_FLAGS)"
 
-.PHONY: world version-manifest firmware-world firmware-ensure-cli firmware-ensure-setup firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
+.PHONY: world version-manifest firmware-world firmware-ensure-host-deps firmware-ensure-cli firmware-ensure-setup firmware-install-cli firmware-setup firmware-generate-version firmware-generate-config firmware-compile firmware-upload firmware-clean firmware-distclean firmware-board-list
 
 world: firmware-world
 
@@ -41,9 +41,25 @@ version-manifest:
 	python3 bin/generate_version_manifest.py $(if $(FIRMWARE_VERSION),--version "$(FIRMWARE_VERSION)")
 
 firmware-world:
+	$(MAKE) firmware-ensure-host-deps
 	$(MAKE) firmware-ensure-cli
 	$(MAKE) firmware-ensure-setup
 	$(MAKE) firmware-compile
+
+firmware-ensure-host-deps:
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		echo "Missing required host dependency: python3" >&2; \
+		echo "Install Python 3, then retry 'make world'." >&2; \
+		exit 1; \
+	fi
+	@if ! python3 -c 'import serial; from serial.tools import list_ports' >/dev/null 2>&1; then \
+		echo "Missing or incompatible Python module: pyserial" >&2; \
+		echo "Active Python: $$(command -v python3)" >&2; \
+		echo "Activate the intended virtualenv and install pyserial with:" >&2; \
+		echo "  python3 -m pip install pyserial" >&2; \
+		exit 1; \
+	fi
+	@echo "Firmware host dependencies are available ($$(command -v python3))."
 
 firmware-ensure-cli:
 	@if command -v "$(ARDUINO_CLI)" >/dev/null 2>&1; then \
