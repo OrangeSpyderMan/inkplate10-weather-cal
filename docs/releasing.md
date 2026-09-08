@@ -4,6 +4,19 @@ The repository uses `next` as the integration branch and `main` as the stable
 release branch. Release merge commits on `main` must be merged back into `next`
 so release tags remain in the integration branch's ancestry.
 
+## CodeQL coverage
+
+CodeQL uses GitHub's default setup with the extended query suite. Default setup
+scans pushes and pull requests targeting the default branch and protected
+branches. Keep `next` protected so integration changes are scanned before release.
+Its minimal protection blocks force pushes and deletion without requiring pull
+requests or additional status checks for direct pushes.
+
+The generated CodeQL workflow does not support manual dispatch. A push to `next`
+triggers analysis; verify the run's commit and branch before interpreting results.
+An alert fixed on `next` can remain open on `main` until the fix is released and
+that branch is scanned.
+
 ## Automated release
 
 1. Run **Prepare Release** from the Actions page and enter a stable SemVer tag,

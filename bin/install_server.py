@@ -222,6 +222,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             render_config(answers, mode=mode),
             dry_run=dry_run,
             mode=0o644,
+            sensitive=False,
         )
         write_text_atomic(
             repo_root / DOCKER_ENV_FILE,
@@ -233,6 +234,7 @@ def install_compose(repo_root: Path, dry_run: bool, mode: str) -> None:
             ),
             dry_run=dry_run,
             mode=0o600,
+            sensitive=True,
         )
     elif action == "update":
         update_compose_build_env(
@@ -342,6 +344,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             dry_run=dry_run,
             mode=0o600,
             sudo=True,
+            sensitive=False,
         )
         write_text_atomic(
             NATIVE_ENV_FILE,
@@ -349,6 +352,7 @@ def install_systemd(repo_root: Path, dry_run: bool) -> None:
             dry_run=dry_run,
             mode=0o600,
             sudo=True,
+            sensitive=True,
         )
         run(["chown", f"{APP_USER}:{APP_GROUP}", str(INSTALL_DIR / SERVER_CONFIG)], sudo=True, dry_run=dry_run)
         run(["chown", "root:root", str(NATIVE_ENV_FILE)], sudo=True, dry_run=dry_run)
@@ -860,6 +864,7 @@ def update_compose_build_env(
         "\n".join(updated),
         dry_run=dry_run,
         mode=0o600,
+        sensitive=True,
     )
 
 
@@ -1290,10 +1295,23 @@ def strip_inline_comment(value: str) -> str:
     return value.split("#", 1)[0].rstrip()
 
 
-def write_text_atomic(path: Path, text: str, dry_run: bool, mode: int, sudo: bool = False) -> None:
+def write_text_atomic(
+    path: Path,
+    text: str,
+    dry_run: bool,
+    mode: int,
+    sudo: bool = False,
+    *,
+    sensitive: bool = True,
+) -> None:
     if dry_run:
         print(f"Would write {path} with mode {oct(mode)}")
-        print_preview(path, text)
+        # Omit the entire payload: line-based redaction cannot safely handle
+        # multiline values, comments, or preserved existing environment text.
+        if sensitive:
+            print("  Contents omitted: may contain secret values.")
+        else:
+            print_preview(path, text)
         return
 
     if sudo and os.geteuid() != 0:
@@ -1347,20 +1365,8 @@ def run(cmd: list[str], dry_run: bool = False, sudo: bool = False, check: bool =
 
 def print_preview(path: Path, text: str) -> None:
     print(f"Preview for {path}:")
-    preview = redact_env_text(text) if path.name in (".env", "weather.env") else text
-    for line in preview.rstrip().splitlines():
+    for line in text.rstrip().splitlines():
         print(f"  {line}")
-
-
-def redact_env_text(text: str) -> str:
-    redacted = []
-    for line in text.splitlines():
-        if not line or line.startswith("#") or "=" not in line:
-            redacted.append(line)
-            continue
-        key, value = line.split("=", 1)
-        redacted.append(f"{key}=<redacted>" if value else line)
-    return "\n".join(redacted)
 
 
 def answer_value(key: str | None, default):

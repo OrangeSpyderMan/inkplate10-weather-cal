@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest import mock
 
 
@@ -223,6 +224,119 @@ class InstallerCopyTests(unittest.TestCase):
 
             self.assertEqual(config_path.stat().st_mode & 0o777, 0o644)
             self.assertEqual(env_path.stat().st_mode & 0o777, 0o600)
+
+    def test_sensitive_write_omits_entire_preview_regardless_of_filename(self):
+        secret = 'first-fragment\ncontinuation\r\n# comment-fragment\rleft-fragment=right-fragment"\\'
+        answers = {
+            key: secret
+            for key in (
+                "weather_api_key", "google_api_key", "google_staticmaps_mapid",
+                "netatmo_client_id", "netatmo_client_secret", "netatmo_refresh_token",
+                "netatmo_device_id", "netatmo_module_id", "netatmo_wind_module_id",
+                "netatmo_rain_module_id",
+            )
+        }
+        text = install_server.render_env(answers, include_optional=True)
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            for filename in (".env", "weather.env", "custom-secrets.conf"):
+                for options in ({}, {"sensitive": True}):
+                    with self.subTest(filename=filename, options=options):
+                        path = pathlib.Path(temporary_dir) / filename
+                        stdout, stderr = io.StringIO(), io.StringIO()
+                        with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                            install_server.write_text_atomic(
+                                path, text, dry_run=True, mode=0o600, **options,
+                            )
+                        self.assertEqual(
+                            stdout.getvalue(),
+                            f"Would write {path} with mode 0o600\n"
+                            "  Contents omitted: may contain secret values.\n",
+                        )
+                        self.assertEqual(stderr.getvalue(), "")
+                        self.assertFalse(path.exists())
+
+    def test_public_config_preview_remains_visible(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            path = pathlib.Path(temporary_dir) / "config.yaml"
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                install_server.write_text_atomic(
+                    path, "server:\n  port: 8080\n", dry_run=True,
+                    mode=0o644, sensitive=False,
+                )
+            self.assertIn("  server:\n    port: 8080\n", stdout.getvalue())
+            self.assertFalse(path.exists())
+
+    def test_sensitive_write_preserves_contents_and_permissions(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            path = pathlib.Path(temporary_dir) / "custom-secrets.conf"
+            text = 'TOKEN="synthetic-first\nsynthetic-second"\n'
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                install_server.write_text_atomic(
+                    path, text, dry_run=False, mode=0o600, sensitive=True,
+                )
+            self.assertEqual(path.read_text(encoding="utf-8"), text)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(stdout.getvalue(), "")
+
+    def test_compose_update_dry_run_omits_preserved_environment(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            path = pathlib.Path(temporary_dir) / ".env"
+            text = 'TOKEN="first\ncontinuation\n# secret-comment\nsecret-left=right"\n'
+            path.write_text(text, encoding="utf-8")
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                install_server.update_compose_build_env(path, dry_run=True)
+            self.assertEqual(
+                stdout.getvalue(),
+                f"Would write {path} with mode 0o600\n"
+                "  Contents omitted: may contain secret values.\n",
+            )
+            self.assertEqual(path.read_text(encoding="utf-8"), text)
+
+    def test_installation_modes_omit_secret_previews(self):
+        answers = json.loads(
+            (REPO_ROOT / "bin/install_server.answers.example.json").read_text()
+        )
+        answers["weather_api_key"] = "synthetic-first\nsynthetic-continuation"
+        for mode in ("docker", "podman", "systemd"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary_dir:
+                root = pathlib.Path(temporary_dir)
+                stdout = io.StringIO()
+                with ExitStack() as stack:
+                    stack.enter_context(mock.patch("sys.stdout", stdout))
+                    for name, value in (
+                        ("INSTALLER_ANSWERS", answers),
+                        ("NON_INTERACTIVE", True),
+                        ("PRIVILEGE_PREFIX", ["sudo"]),
+                        ("INSTALL_DIR", root),
+                        ("NATIVE_ENV_FILE", root / "weather.env"),
+                    ):
+                        stack.enter_context(mock.patch.object(install_server, name, value))
+                    stack.enter_context(mock.patch.object(
+                        install_server, "choose_existing_action", return_value="reconfigure",
+                    ))
+                    stack.enter_context(mock.patch.object(
+                        install_server, "prepare_version_manifest", return_value={},
+                    ))
+                    if mode == "systemd":
+                        stack.enter_context(mock.patch.object(
+                            install_server, "validate_native_platform",
+                        ))
+                        install_server.install_systemd(root, dry_run=True)
+                    else:
+                        install_server.install_compose(root, dry_run=True, mode=mode)
+                output = stdout.getvalue()
+                for secret in (
+                    "synthetic-first", "synthetic-continuation",
+                    answers["google_api_key"], answers["google_staticmaps_mapid"],
+                ):
+                    self.assertNotIn(secret, output)
+                self.assertIn("Contents omitted: may contain secret values.", output)
+                self.assertIn("Preview for", output)
+                self.assertIn("  server:", output)
+                self.assertEqual(list(root.iterdir()), [])
 
     def test_podman_override_relabels_each_config_mount(self):
         override = (

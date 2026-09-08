@@ -93,6 +93,10 @@ Use dry-run mode to preview actions:
 ./bin/install_server --dry-run
 ```
 
+Dry runs show intended file paths, permissions and operational configuration.
+Secret-bearing environment file contents are omitted entirely, including when
+updating an existing installation.
+
 ### Remote installation
 
 `bin/install_remote` can run the Proxmox or systemd installer on another host
