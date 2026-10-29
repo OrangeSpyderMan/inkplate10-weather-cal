@@ -90,6 +90,14 @@ See the [server](/server) for more features.
   listed under [Client features](#client-features). Here is
   [the battery I used](https://cdn-shop.adafruit.com/datasheets/LiIon2000mAh37V.pdf).
 
+  **Measured in daily use: over 2,000 refreshes across roughly three months on
+  a single charge.** A deployed Inkplate 10 running firmware `v4.1.0` recorded
+  approximately 2,140 hourly refresh cycles over 90.5 days between its charge on
+  30 July 2026 and its low-battery cutoff on 29 October 2026. Server-side MQTT
+  diagnostics showed no intervening recharge. This is one observed discharge
+  cycle; the exact unplug time was not logged, and refresh events mark image
+  readiness before the physical panel update completes.
+
 - **CR2032 3V coin cell ~€1**
 
   In order to power the real-time clock for when the board needs to deep sleep. Should be easily-obtainable in any hardware or home store.
