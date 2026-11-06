@@ -4,6 +4,9 @@ import os
 import copy
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
+
+import requests
 
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
@@ -44,6 +47,39 @@ def create_app(
 
 
 def register_routes(app):
+    def proxy_response(path):
+        url = os.environ.get("WEATHER_PROXY_URL")
+        if not url:
+            abort(404)
+        token = os.environ.get("WEATHER_PROXY_TOKEN")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        if request.headers.get("If-None-Match"):
+            headers["If-None-Match"] = request.headers["If-None-Match"]
+        try:
+            upstream = requests.get(f"{url.rstrip('/')}/api/v1/{path}", headers=headers,
+                                    params={"units": request.args.get("units", "metric")}, timeout=10)
+            try:
+                if upstream.status_code not in (200, 304):
+                    return jsonify(error="WeatherProxy unavailable"), 503
+                response = app.response_class(upstream.content, status=upstream.status_code,
+                                              mimetype="application/json")
+                for key in ("ETag", "Cache-Control"):
+                    if key in upstream.headers:
+                        response.headers[key] = upstream.headers[key]
+                return response
+            finally:
+                upstream.close()
+        except requests.RequestException:
+            return jsonify(error="WeatherProxy unavailable"), 503
+
+    @app.get("/api/v1/locations")
+    def proxy_locations():
+        return proxy_response("locations")
+
+    @app.get("/api/v1/locations/<name>/weather")
+    def proxy_weather(name):
+        return proxy_response(f"locations/{quote(name, safe='')}/weather")
+
     @app.get("/api/v1/health")
     def health():
         return jsonify({"status": "ok"})

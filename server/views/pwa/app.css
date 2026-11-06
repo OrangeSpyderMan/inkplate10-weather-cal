@@ -57,3 +57,18 @@ body {
 #status[hidden] {
   display: none;
 }
+
+#live-weather {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  max-width: 32rem;
+  padding: .7rem;
+  background: rgba(247, 245, 236, .96);
+  border-radius: 6px;
+}
+
+#live-weather[hidden] { display: none; }
+#live-weather p { margin: .4rem 0; }
+#weather-location { font: inherit; max-width: 70%; }

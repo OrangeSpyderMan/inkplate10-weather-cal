@@ -1,0 +1,91 @@
+name: WeatherProxy CI
+
+on:
+  push:
+    paths:
+      - 'server/**'
+      - 'bin/*weather_proxy*'
+      - 'bin/install_server.py'
+      - 'bin/install_proxmox.py'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'Dockerfile.weatherproxy'
+      - 'docker-compose.weatherproxy.yml'
+      - 'weather-proxy.example.yaml'
+      - 'docs/weather-proxy.md'
+      - '.github/workflows/weather-proxy.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'bin/*weather_proxy*'
+      - 'bin/install_server.py'
+      - 'bin/install_proxmox.py'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'Dockerfile.weatherproxy'
+      - 'docker-compose.weatherproxy.yml'
+      - 'weather-proxy.example.yaml'
+      - 'docs/weather-proxy.md'
+      - '.github/workflows/weather-proxy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test deployment plans
+        run: python3 -m unittest discover -s tests -p 'test_weather_proxy_installer.py' -v
+      - name: Build standalone proxy image
+        run: docker build -f Dockerfile.weatherproxy -t weatherproxy:ci .
+      - name: Test proxy in isolated image
+        run: |
+          docker run --rm --entrypoint python3 \
+            -v "$PWD/server/tests/test_weather_proxy.py:/tests/test_weather_proxy.py:ro" \
+            weatherproxy:ci -m unittest discover -s /tests -v
+      - name: Smoke test service and durable restart
+        run: |
+          mkdir -p "$RUNNER_TEMP/proxy-config"
+          cat > "$RUNNER_TEMP/proxy-config/weather-proxy.yaml" <<'EOF'
+          storage:
+            backend: sqlite
+            path: /data/weather-proxy.sqlite3
+          locations:
+            landry:
+              name: Landry
+              latitude: 45.57
+              longitude: 6.74
+              timezone: Europe/Paris
+          EOF
+          docker run -d --name proxy-ci -p 18090:8090 \
+            -v "$RUNNER_TEMP/proxy-config:/config:ro" weatherproxy:ci
+          trap 'docker rm -f proxy-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:18090/api/v1/health; then break; fi
+            sleep 1
+          done
+          curl --fail http://localhost:18090/api/v1/locations
+          curl --fail http://localhost:18090/api/v1/status
+          docker restart proxy-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:18090/api/v1/locations; then break; fi
+            sleep 1
+          done
+          curl --fail http://localhost:18090/api/v1/status
+      - name: Build and inspect Python distribution
+        run: |
+          python3 -m pip install build packaging
+          python3 bin/build_weather_proxy.py
+          python3 -m venv "$RUNNER_TEMP/proxy-venv"
+          "$RUNNER_TEMP/proxy-venv/bin/pip" install dist/weatherproxy/*.whl
+          "$RUNNER_TEMP/proxy-venv/bin/weather-proxy" --help
+          cd /tmp
+          "$RUNNER_TEMP/proxy-venv/bin/python" -c 'from weather.accuweather.accuweather import AccuweatherService; from weather_proxy.api import create_app; import importlib.resources as r; assert r.files("weather.openweathermapv3").joinpath("icon-map.json").is_file()'
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: weatherproxy-python
+          path: dist/weatherproxy/*

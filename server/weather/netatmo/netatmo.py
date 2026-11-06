@@ -6,6 +6,7 @@ from os.path import isabs
 from pathlib import Path
 
 import requests
+from .. import http
 
 from ..service import RealtimeProvider
 from ..models import CurrentConditions, Rain, Temperature, Wind
@@ -39,6 +40,10 @@ class NetatmoRealtimeService(RealtimeProvider):
 
     def get_current_conditions(self):
         data = self._get_stations_data()
+        return self.conditions_from_data(data)
+
+    def conditions_from_data(self, data):
+        """Normalize an already fetched account response (shared across stations)."""
         device = self._get_device(data)
         primary_source = self._measurement_source(device, self.module_id)
         dashboard_data = primary_source.get("dashboard_data", {})
@@ -76,6 +81,25 @@ class NetatmoRealtimeService(RealtimeProvider):
             )
 
         return conditions
+
+    def get_stations_data(self):
+        return self._get_stations_data()
+
+    def webhooks(self, url=None):
+        """Inspect registrations, or append one explicitly; never replace others."""
+        token = self._get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        if url is None:
+            response = http.get(f"{self.baseurl}/webhooks/v1/", headers=headers, timeout=20)
+        else:
+            response = http.post(f"{self.baseurl}/webhooks/v1/", headers=headers,
+                                 json={"url": url}, timeout=20)
+        try:
+            if response.status_code != 200:
+                raise ValueError(f"Netatmo webhook registration returned {response.status_code}")
+            return response.json()
+        finally:
+            response.close()
 
     def get_current_temperature(self):
         conditions = self.get_current_conditions()
@@ -130,7 +154,7 @@ class NetatmoRealtimeService(RealtimeProvider):
 
     def _get_stations_data(self):
         token = self._get_access_token()
-        response = requests.get(
+        response = http.get(
             f"{self.baseurl}/api/getstationsdata",
             headers={"Authorization": f"Bearer {token}"},
             timeout=20,
@@ -140,7 +164,7 @@ class NetatmoRealtimeService(RealtimeProvider):
             response.close()
             token_data = self._load_token_data()
             token = self._refresh_access_token(token_data.get("refresh_token"))
-            response = requests.get(
+            response = http.get(
                 f"{self.baseurl}/api/getstationsdata",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=20,
@@ -215,7 +239,7 @@ class NetatmoRealtimeService(RealtimeProvider):
 
     def _refresh_access_token(self, refresh_token=None):
         token = refresh_token or self.refresh_token
-        response = requests.post(
+        response = http.post(
             f"{self.baseurl}/oauth2/token",
             data={
                 "grant_type": "refresh_token",

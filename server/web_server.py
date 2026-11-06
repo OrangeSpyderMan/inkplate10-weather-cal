@@ -51,6 +51,11 @@ def main():
         return 0
 
     profiles, default_profile = load_output_profiles(config)
+    weather = config.get("weather", {})
+    if weather.get("service") == "weatherproxy":
+        os.environ["WEATHER_PROXY_URL"] = weather["url"]
+        if weather.get("token"):
+            os.environ["WEATHER_PROXY_TOKEN"] = weather["token"]
     export_output_profiles(profiles, default_profile)
     argv = gunicorn_argv(config)
     os.execv(sys.executable, argv)

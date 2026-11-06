@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inkplate-weather-proxy"
+version = "4.2.0.dev0"
+description = "Local multi-location forecast and observation proxy with reusable weather providers"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.32,<3", "PyYAML>=6,<7", "Flask>=3.1,<4", "gunicorn>=23,<27", "paho-mqtt>=2.1,<3", "tzdata>=2025"]
+
+[project.scripts]
+weather-proxy = "weather_proxy.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["server"]
+include = ["weather", "weather.*", "weather_proxy", "weather_proxy.*"]
+
+[tool.setuptools.package-data]
+weather = ["**/icon-map.json"]

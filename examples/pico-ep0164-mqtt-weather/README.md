@@ -4,6 +4,15 @@ This is a small MicroPython example for displaying the Inkplate weather MQTT
 snapshot on a Raspberry Pi Pico W fitted to the 52Pi EP-0164 Pico Breadboard
 Kit.
 
+For updates independent of calendar rendering, point `MQTT_BASE_TOPIC` at
+`weatherproxy/locations/landry/weather` from the optional
+[WeatherProxy service](../../docs/weather-proxy.md). The existing calendar topic
+remains supported. The example reconnects with backoff, sends keepalive pings,
+and avoids identical screen redraws. It shows the temperature observation time
+and source stale flag, and detects a feed that stops changing locally. Precise
+age checking for an old retained message at boot requires a synchronized device
+clock; the example does not yet set that clock.
+
 The EP-0164 has a 2.8 inch 240x320 ILI9341 LCD. The 52Pi wiki documents the
 MicroPython display driver and demo wiring:
 

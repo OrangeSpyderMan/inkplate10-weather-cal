@@ -1,6 +1,9 @@
 # WeatherProxy design for 4.2
 
-Status: proposed design; implementation has not started.
+Status: implementation in progress on `feature/weather-proxy`. See
+[running WeatherProxy](weather-proxy.md) for the implemented interfaces,
+deployment options, and current limitations. Direct weather event payload
+ingestion remains dependent on a real Netatmo station capture.
 
 WeatherProxy is a local service that obtains forecasts and observations from
 upstream weather providers, maintains normalized cached state for multiple

@@ -64,6 +64,7 @@ DEFAULT_FORECAST_LEAD_MINUTES = 15
 DEFAULT_LOCATION = "Landry, FR"
 DEFAULT_WEATHER = "openweathermapv3"
 WEATHER_PROVIDER_LABELS = {
+    "weatherproxy": "WeatherProxy (local shared weather service)",
     "openweathermapv4": "OpenWeatherMap One Call 4.0",
     "openweathermapv3": "OpenWeatherMap One Call 3.0",
     "accuweather": "AccuWeather",
@@ -74,6 +75,12 @@ NON_INTERACTIVE = False
 
 
 def main() -> int:
+    # The standalone component has its own arguments and no Google/map setup.
+    if "--component" in sys.argv[1:]:
+        index = sys.argv.index("--component")
+        if index + 1 < len(sys.argv) and sys.argv[index + 1] == "weather-proxy":
+            from install_weather_proxy import main as install_proxy
+            return install_proxy(sys.argv[1:index] + sys.argv[index + 2:])
     parser = argparse.ArgumentParser(
         description="Interactively install the Inkplate weather calendar server."
     )
@@ -495,7 +502,12 @@ def collect_answers(
         default=config.get("weather.service", DEFAULT_WEATHER),
         key="weather_service",
     )
-    answers["weather_api_key"] = prompt_secret(
+    proxy_mode = answers["weather_service"] == "weatherproxy"
+    if proxy_mode:
+        answers["weather_proxy_url"] = prompt_text("WeatherProxy URL", default=config.get("weather.url", "http://localhost:8090"), key="weather_proxy_url")
+        answers["weather_proxy_location"] = prompt_text("WeatherProxy location ID", default=config.get("weather.location", "landry"), key="weather_proxy_location")
+        answers["weather_proxy_token"] = prompt_secret("WeatherProxy API token (optional)", default=env.get("WEATHER_PROXY_TOKEN", ""), required=False, key="weather_proxy_token")
+    answers["weather_api_key"] = "" if proxy_mode else prompt_secret(
         "Weather API key",
         default=env.get("WEATHER_API_KEY", ""),
         required=True,
@@ -547,7 +559,7 @@ def collect_answers(
         "current_conditions.source",
         config.get("current_temperature.source", "weather"),
     )
-    answers["netatmo_enabled"] = prompt_yes_no(
+    answers["netatmo_enabled"] = False if proxy_mode else prompt_yes_no(
         "Use Netatmo for live current conditions?",
         default=current_source == "netatmo",
         key="netatmo_enabled",
@@ -718,7 +730,12 @@ def render_config(answers: dict[str, object], mode: str) -> str:
         f"  refreshminutes: {answers['refresh_minutes']}",
         "weather:",
         f"  service: {answers['weather_service']}",
-        "  apikey: ${WEATHER_API_KEY}",
+        "  apikey: ${WEATHER_API_KEY:-}" if answers["weather_service"] == "weatherproxy" else "  apikey: ${WEATHER_API_KEY}",
+        *([
+            f"  url: {json.dumps(str(answers['weather_proxy_url']))}",
+            f"  location: {json.dumps(str(answers['weather_proxy_location']))}",
+            "  token: ${WEATHER_PROXY_TOKEN:-}",
+        ] if answers["weather_service"] == "weatherproxy" else []),
         f"  num_hourly_forecasts: {answers['num_hourly_forecasts']}",
         "  forecastslicehours: {}".format(
             answers.get("forecast_slice_hours", DEFAULT_FORECAST_SLICE_HOURS)
@@ -783,6 +800,8 @@ def render_env(
         "GOOGLE_API_KEY": str(answers["google_api_key"]),
         "GOOGLE_STATICMAPS_MAPID": str(answers["google_staticmaps_mapid"]),
     }
+    if answers.get("weather_service") == "weatherproxy":
+        values["WEATHER_PROXY_TOKEN"] = str(answers.get("weather_proxy_token", ""))
     if compose:
         build_metadata = build_metadata or {}
         values["INKPLATE_SERVER_PORT"] = str(
@@ -1232,6 +1251,12 @@ def install_copy_ignore(repo_root: Path):
         "*.pyc",
         "*.log",
         "netatmo-token.json",
+        "weather-proxy.yaml",
+        "weather.env",
+        "weather-proxy-install",
+        "*.sqlite3",
+        "*.sqlite3-wal",
+        "*.sqlite3-shm",
     )
 
     def ignore(directory: str, names: list[str]) -> set[str]:

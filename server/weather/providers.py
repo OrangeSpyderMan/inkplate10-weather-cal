@@ -18,6 +18,7 @@ class ProviderDefinition:
 
 
 FORECAST_PROVIDERS = {
+    "weatherproxy": ProviderDefinition("weather.weatherproxy.weatherproxy"),
     "accuweather": ProviderDefinition(
         "weather.accuweather.accuweather",
     ),
@@ -52,6 +53,7 @@ def build_forecast_provider(
     num_hours=6,
     forecast_slice_hours=3,
     forecast_lead_minutes=15,
+    proxy_config=None,
 ):
     name = _provider_name(provider_name, "weather.service")
     if name in REMOVED_FORECAST_PROVIDERS:
@@ -66,16 +68,17 @@ def build_forecast_provider(
             )
         )
 
-    return definition.build(
-        {
-            "apikey": apikey,
-            "location": location,
-            "metric": metric,
-            "num_hours": num_hours,
-            "forecast_slice_hours": forecast_slice_hours,
-            "forecast_lead_minutes": forecast_lead_minutes,
-        }
-    )
+    provider_config = {
+        "apikey": apikey,
+        "location": location,
+        "metric": metric,
+        "num_hours": num_hours,
+        "forecast_slice_hours": forecast_slice_hours,
+        "forecast_lead_minutes": forecast_lead_minutes,
+    }
+    if name == "weatherproxy":
+        provider_config.update(proxy_config or {})
+    return definition.build(provider_config)
 
 
 def build_realtime_provider(config, *, metric=True, base_dir=None):
