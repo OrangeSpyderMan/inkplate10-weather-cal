@@ -132,6 +132,7 @@ server/netatmo-token.json
 /dist/
 /build/
 /server/*.egg-info/
+*.direct-provider.bak
 
 # Local firmware configuration may contain WiFi and MQTT credentials.
 firmware-config.yaml

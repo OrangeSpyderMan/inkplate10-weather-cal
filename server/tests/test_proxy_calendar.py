@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 from pathlib import Path
 import sys
@@ -46,6 +47,27 @@ class CalendarProxyTests(unittest.TestCase):
                 "Authorization": "Bearer private-token", "If-None-Match": '"previous"'})
             self.assertNotIn("private-token", result.get_data(as_text=True))
             response.close.assert_called_once()
+
+    def test_installer_migration_prepares_deployment_without_switching_calendar(self):
+        root = Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location("proxy_migration_installer", root / "bin/install_weather_proxy.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            source = directory / "calendar.yaml"
+            original = json.dumps({**self.config(), "weather": {"service": "openweathermapv4", "apikey": "private-key"}})
+            source.write_text(original)
+            target = directory / "proxy"
+            with mock.patch.object(installer.subprocess, "run"), mock.patch("sys.stdout"):
+                installer.main(["--mode", "oci", "--migrate-calendar", str(source), "--install-dir", str(target),
+                                "--latitude", "45.57", "--longitude", "6.74", "--timezone", "Europe/Paris",
+                                "--proxy-url", "http://proxy:8090"])
+            self.assertEqual(source.read_text(), original)
+            self.assertTrue((target / "weather-proxy.yaml").is_file())
+            self.assertTrue((target / "weather.env").is_file())
+            self.assertTrue((target / "migration/calendar-proxy.yaml").is_file())
+            self.assertNotIn("private-key", (target / "weather-proxy.yaml").read_text())
 
 
 if __name__ == "__main__":

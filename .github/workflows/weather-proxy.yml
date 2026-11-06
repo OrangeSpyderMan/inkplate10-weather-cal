@@ -45,6 +45,7 @@ jobs:
         run: |
           docker run --rm --entrypoint python3 \
             -v "$PWD/server/tests/test_weather_proxy.py:/tests/test_weather_proxy.py:ro" \
+            -v "$PWD/server/tests/test_weather_proxy_migration.py:/tests/test_weather_proxy_migration.py:ro" \
             weatherproxy:ci -m unittest discover -s /tests -v
       - name: Smoke test service and durable restart
         run: |
