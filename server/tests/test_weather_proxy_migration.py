@@ -14,7 +14,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from weather_proxy.config import expand, read_environment, validate
-from weather_proxy.migrate import activate, build_plan, write_plan
+from weather_proxy.migrate import activate, build_plan, write_plan, calendar_config_mode
 
 
 class MigrationTests(unittest.TestCase):
@@ -114,7 +114,10 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(read_environment(self.destination / "weather.env")["WEATHER_API_KEY"], "private-forecast-key")
 
     def test_cutover_requires_usable_forecast_and_preserves_backup(self):
-        os.chmod(self.source, 0o666)
+        self.assertEqual(calendar_config_mode(0o666), 0o644)
+        self.assertEqual(calendar_config_mode(0o777), 0o644)
+        self.assertEqual(calendar_config_mode(0o640), 0o640)
+        self.assertEqual(calendar_config_mode(0o600), 0o600)
         original = self.source.read_bytes()
         write_plan(self.plan(), self.destination)
         response = mock.Mock(status_code=200)
