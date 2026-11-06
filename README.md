@@ -68,6 +68,10 @@ Both a server and client are required. The main workload is on the server, which
 
 See the [server](/server) for more features.
 
+The proposed 4.2 [WeatherProxy design](docs/weather-proxy-design.md) describes a
+shared weather service with multiple locations, forecasts, Netatmo webhooks,
+HTTP and MQTT clients, and optional direct-provider access from the calendar.
+
 ## Bill of Materials
 
 - **Inkplate 10 by Soldered Electronics ~€150**
