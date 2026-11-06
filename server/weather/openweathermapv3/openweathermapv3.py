@@ -1,4 +1,5 @@
 import requests
+from .. import http
 from datetime import datetime, timedelta, timezone
 from ..service import WeatherService
 from ..models import ForecastData
@@ -27,7 +28,7 @@ class OpenWeatherMapv3Service(WeatherService):
         self.lat, self.lon = self._get_location_coords(location)
 
     def fetch(self):
-        res = requests.get(
+        res = http.get(
             self.baseurl
             + "/data/3.0/onecall?lat={}&lon={}&appid={}&units={}".format(
                 self.lat, self.lon, self.apikey, self.units
@@ -166,7 +167,9 @@ class OpenWeatherMapv3Service(WeatherService):
         return self.fetch().hourly_dicts()
 
     def _get_location_coords(self, location):
-        res = requests.get(
+        if isinstance(location, dict):
+            return float(location["latitude"]), float(location["longitude"])
+        res = http.get(
             self.baseurl
             + "/geo/1.0/direct?q={}&limit=1&appid={}".format(
                 location,

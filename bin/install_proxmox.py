@@ -31,6 +31,8 @@ CONFIG_DIR = "/srv/inkplate/server/config"
 DATA_DIR = "/srv/inkplate/server/data"
 CONFIG_PATH = f"{CONFIG_DIR}/config.yaml"
 ENV_PATH = f"{CONFIG_DIR}/weather.env"
+CONTAINER_USER = "inkplate"
+PROBE_URL = "http://127.0.0.1:8080/api/v1/ready"
 
 
 class StoragePlan(NamedTuple):
@@ -50,6 +52,9 @@ def main() -> int:
         )
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--component", choices=("calendar", "weather-proxy"), default="calendar")
+    parser.add_argument("--proxy-config", type=Path, help="Complete WeatherProxy config for /config/weather-proxy.yaml")
+    parser.add_argument("--proxy-env-file", type=Path, help="WeatherProxy KEY=value secrets")
     parser.add_argument(
         "--yes",
         action="store_true",
@@ -88,6 +93,14 @@ def main() -> int:
     parser.add_argument("--answers", type=Path)
     parser.add_argument("--non-interactive", action="store_true")
     args = parser.parse_args()
+    if args.component == "weather-proxy":
+        if not args.proxy_config or not args.proxy_config.is_file():
+            parser.error("WeatherProxy requires --proxy-config PATH")
+        if args.proxy_env_file and not args.proxy_env_file.is_file():
+            parser.error("WeatherProxy environment file does not exist")
+        configure_proxy_component()
+        if args.hostname == "inkplate-weather":
+            args.hostname = "weatherproxy"
 
     if args.non_interactive and args.answers is None:
         raise SystemExit("ERROR: --non-interactive requires --answers PATH.")
@@ -144,16 +157,13 @@ def main() -> int:
         print("No changes made.")
         return 0
 
-    config_answers = install_server.collect_answers(
-        {},
-        {},
-        mode="systemd",
-    )
-    config_text = install_server.render_config(config_answers, mode="systemd")
-    env_text = install_server.render_env(
-        config_answers,
-        include_optional=bool(config_answers["netatmo_enabled"]),
-    )
+    if args.component == "weather-proxy":
+        config_text = args.proxy_config.read_text()
+        env_text = args.proxy_env_file.read_text() if args.proxy_env_file else ""
+    else:
+        config_answers = install_server.collect_answers({}, {}, mode="systemd")
+        config_text = install_server.render_config(config_answers, mode="systemd")
+        env_text = install_server.render_env(config_answers, include_optional=bool(config_answers["netatmo_enabled"]))
 
     archive_name = archive_filename(tag, digest)
     archive_volume = f"{TEMPLATE_STORAGE}:vztmpl/{archive_name}"
@@ -187,10 +197,23 @@ def main() -> int:
     address = container_address(ctid)
     print()
     print(f"Container {ctid} is ready.")
-    print(f"Calendar: http://{address}:8080/calendar.png")
-    print(f"Viewer:   http://{address}:8080/app")
+    if args.component == "weather-proxy":
+        print(f"Locations: http://{address}:8090/api/v1/locations")
+    else:
+        print(f"Calendar: http://{address}:8080/calendar.png")
+        print(f"Viewer:   http://{address}:8080/app")
     print(f"Logs:     pct console {ctid}")
     return 0
+
+
+def configure_proxy_component():
+    global IMAGE, OCI_ENTRYPOINT, CONFIG_DIR, DATA_DIR, CONFIG_PATH, ENV_PATH, CONTAINER_USER, PROBE_URL
+    IMAGE = "ghcr.io/orangespyderman/weatherproxy"
+    OCI_ENTRYPOINT = "/usr/local/bin/weather-proxy"
+    CONFIG_DIR, DATA_DIR = "/config", "/data"
+    CONFIG_PATH, ENV_PATH = "/config/weather-proxy.yaml", "/config/weather.env"
+    CONTAINER_USER = "weatherproxy"
+    PROBE_URL = "http://127.0.0.1:8090/api/v1/health"
 
 
 def validate_arguments(args) -> None:
@@ -635,13 +658,15 @@ def bootstrap_configuration(
                 "--",
                 "mkdir",
                 "-p",
-                "/srv/inkplate/server/config",
-                "/srv/inkplate/server/data",
+                CONFIG_DIR,
+                DATA_DIR,
             ],
             dry_run,
         )
         push_file(ctid, config_file, CONFIG_PATH, dry_run)
         push_file(ctid, env_file, ENV_PATH, dry_run)
+        if CONTAINER_USER == "weatherproxy":
+            run(["pct", "exec", str(ctid), "--", "chown", "weatherproxy:weatherproxy", DATA_DIR], dry_run)
     finally:
         run(["pct", "stop", str(ctid)], dry_run, check=False)
         if storage_plan.separate_mounts:
@@ -701,9 +726,9 @@ def push_file(ctid: int, source: Path, destination: str, dry_run: bool) -> None:
             str(source),
             destination,
             "--user",
-            "inkplate",
+            CONTAINER_USER,
             "--group",
-            "inkplate",
+            CONTAINER_USER,
             "--perms",
             "0600",
         ],
@@ -714,7 +739,7 @@ def push_file(ctid: int, source: Path, destination: str, dry_run: bool) -> None:
 def wait_until_ready(ctid: int) -> None:
     probe = (
         "import urllib.request; "
-        "urllib.request.urlopen('http://127.0.0.1:8080/api/v1/ready', timeout=5)"
+        f"urllib.request.urlopen({PROBE_URL!r}, timeout=5)"
     )
     for _ in range(36):
         result = subprocess.run(

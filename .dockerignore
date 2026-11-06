@@ -20,3 +20,8 @@ server/netatmo-token.json
 server/data
 server/views/calendar.png
 server/views/html/calendar.html
+weather-proxy.yaml
+weather.env
+weather-proxy-install
+dist
+server/*.egg-info

@@ -19,6 +19,13 @@ Neither feature is required for the Inkplate to download the rendered PNG from
 
 ## Server Configuration
 
+For weather feeds that refresh independently of calendar images, the optional
+[WeatherProxy service](weather-proxy.md) publishes complete retained snapshots
+under `weatherproxy/locations/{id}/weather`, with separate current/observation
+topics and freshness metadata. Its topics and client identity are separate from
+the calendar topics documented below. The calendar's existing publisher keeps
+its configured rendering-cycle cadence.
+
 Enable MQTT publishing in `server/config/config.yaml`:
 
 ```yaml

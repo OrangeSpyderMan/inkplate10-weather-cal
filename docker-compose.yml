@@ -16,7 +16,8 @@ x-inkplate-service: &inkplate-service
   extra_hosts:
     - "host.docker.internal:host-gateway"
   environment:
-    WEATHER_API_KEY: ${WEATHER_API_KEY:?set WEATHER_API_KEY in .env or the shell}
+    WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+    WEATHER_PROXY_TOKEN: ${WEATHER_PROXY_TOKEN:-}
     GOOGLE_API_KEY: ${GOOGLE_API_KEY:?set GOOGLE_API_KEY in .env or the shell}
     GOOGLE_STATICMAPS_MAPID: ${GOOGLE_STATICMAPS_MAPID:?set GOOGLE_STATICMAPS_MAPID in .env or the shell}
     NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}

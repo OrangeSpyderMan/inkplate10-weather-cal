@@ -1,0 +1,54 @@
+# Copy to weather-proxy.yaml. All times on the wire are UTC; locations have
+# explicit display timezones. This file contains no credentials itself.
+server:
+  host: 0.0.0.0
+  port: 8090
+storage:
+  backend: sqlite
+  path: /data/weather-proxy.sqlite3
+# Protect LAN API access when required. Webhook signatures are checked separately.
+api_token: ${WEATHER_PROXY_TOKEN:-}
+accounts:
+  owm:
+    provider: openweathermapv3
+    apikey: ${WEATHER_API_KEY}
+    requests_per_hour: 100
+    requests_per_10_seconds: 20
+  # netatmo:
+  #   provider: netatmo
+  #   client_id: ${NETATMO_CLIENT_ID}
+  #   client_secret: ${NETATMO_CLIENT_SECRET}
+  #   refresh_token: ${NETATMO_REFRESH_TOKEN}
+  #   user_id: ${NETATMO_USER_ID}
+  #   reconcile_minutes: 30
+  #   event_min_seconds: 60
+  #   requests_per_hour: 100
+  #   requests_per_10_seconds: 2
+locations:
+  landry:
+    name: Landry
+    latitude: 45.57
+    longitude: 6.74
+    timezone: Europe/Paris
+    forecast:
+      account: owm
+      refresh_minutes: 180
+      stale_minutes: 360
+      num_hours: 24
+    # observations:
+    #   - account: netatmo
+    #     device_id: your-station-id
+    #     module_id: your-outdoor-module-id
+    #     wind_module_id: your-wind-module-id
+    #     rain_module_id: your-rain-module-id
+    #     stale_minutes: 30
+mqtt:
+  enabled: false
+  broker: localhost
+  port: 1883
+  base_topic: weatherproxy
+  client_id: weatherproxy
+  qos: 1
+  # username: ${MQTT_USERNAME}
+  # password: ${MQTT_PASSWORD}
+  # tls: true

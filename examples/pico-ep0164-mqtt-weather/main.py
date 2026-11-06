@@ -125,6 +125,10 @@ def render_lines(payload):
     temp = temperature_text(current)
     icon = icon_label(current.get("icon", ""))
     generated_at = payload.get("generated_at", "")
+    measurement = payload.get("measurement_metadata", {}).get("temperature", {})
+    generated_at = measurement.get("observed_at", generated_at)
+    if measurement.get("stale"):
+        status += " STALE"
 
     lines = [
         "Inkplate Weather",
@@ -237,28 +241,71 @@ def main():
     connect_wifi()
 
     topic = MQTT_BASE_TOPIC.encode()
+    received = [0]
+    stale = [False]
+    last_version = [None]
+    last_lines = [None]
 
     def on_message(received_topic, message):
         try:
+            if not message:
+                display.show_status("Location removed")
+                return
             if isinstance(message, bytes):
                 message = message.decode()
             payload = json.loads(message)
-            display.show_snapshot(payload)
+            if not payload:
+                display.show_status("Location removed")
+                return
+            version = payload.get("revision", payload.get("generated_at"))
+            if version != last_version[0]:
+                received[0] += 1
+                last_version[0] = version
+            lines = render_lines(payload)
+            if lines != last_lines[0] or stale[0]:
+                display.show_snapshot(payload)
+                last_lines[0] = lines
+                stale[0] = False
         except Exception as exc:
             print("Bad MQTT payload:", exc)
-            display.show_status("Bad MQTT payload")
 
     display.show_status("Connecting MQTT")
     client = MQTTClient(MQTT_CLIENT_ID, MQTT_HOST, port=MQTT_PORT, keepalive=60)
     client.set_callback(on_message)
-    client.connect()
-    client.subscribe(topic)
-    display.show_status("Waiting for MQTT")
-    print("Subscribed to", topic)
-
+    delay = 1
+    connected = False
+    last_message = time.ticks_ms()
+    last_ping = time.ticks_ms()
     while True:
-        client.check_msg()
-        time.sleep(IDLE_SLEEP_SECONDS)
+        try:
+            if not connected:
+                connect_wifi()
+                client.connect()
+                client.subscribe(topic)
+                display.show_status("Waiting for MQTT")
+                connected = True
+                delay = 1
+                last_ping = time.ticks_ms()
+            before = received[0]
+            client.check_msg()
+            if received[0] != before:
+                last_message = time.ticks_ms()
+            if time.ticks_diff(time.ticks_ms(), last_ping) >= 30000:
+                client.ping()
+                last_ping = time.ticks_ms()
+            if time.ticks_diff(time.ticks_ms(), last_message) > 30 * 60 * 1000 and not stale[0]:
+                display.show_status("Weather stale")
+                stale[0] = True
+            time.sleep(IDLE_SLEEP_SECONDS)
+        except OSError as exc:
+            print("MQTT reconnect:", exc)
+            connected = False
+            try:
+                client.disconnect()
+            except OSError:
+                pass
+            time.sleep(delay)
+            delay = min(60, delay * 2)
 
 
 if __name__ == "__main__":

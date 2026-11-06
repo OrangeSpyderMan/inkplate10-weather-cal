@@ -19,6 +19,11 @@
   <body>
     <main class="viewer" aria-live="polite">
       <img id="calendar" alt="Weather calendar" decoding="async">
+      <section id="live-weather" hidden aria-label="Current weather">
+        <label>Location <select id="weather-location"></select></label>
+        <p id="conditions"></p>
+        <small id="observation-time"></small>
+      </section>
       <p id="status" role="status">Loading calendar...</p>
     </main>
     <script src="/app.js" defer></script>
