@@ -193,7 +193,8 @@ def main(argv=None):
         # Re-running updates the package but preserves state, config and secrets.
         if args.dry_run or subprocess.run(["id", "weatherproxy"], capture_output=True).returncode:
             run(["useradd", "--system", "--user-group", "--home-dir", directory, "--shell", "/usr/sbin/nologin", "weatherproxy"])
-        run(["chmod", "0711", directory])
+        run(["chown", "weatherproxy:weatherproxy", directory])
+        run(["chmod", "0700", directory])
         run(["python3", "-m", "venv", directory / "venv"])
         run([directory / "venv/bin/pip", "install", "--upgrade", ROOT])
         run(["mkdir", "-p", "-m", "0700", directory / "data"])
@@ -227,9 +228,11 @@ def main(argv=None):
             write_file(directory / "compose.yaml", json.dumps(compose, indent=2), args.dry_run, 0o644)
             # Bind data under the matching runtime UID; no world-readable secrets.
             if not args.dry_run:
-                # The container UID needs traversal, not directory listing.
-                # Credential files remain private to their runtime owner.
-                os.chmod(directory, 0o711)
+                # Give the configured runtime UID private access to its mount;
+                # no directory access is needed for other host/container users.
+                if os.geteuid() == 0:
+                    os.chown(directory, 10001, 10001)
+                os.chmod(directory, 0o700)
                 (directory / "data").mkdir(mode=0o700, exist_ok=True)
                 for filename in ("weather-proxy.yaml", "weather.env"):
                     path = directory / filename

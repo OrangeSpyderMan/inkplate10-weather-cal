@@ -66,7 +66,7 @@ class ProxyInstallerTests(unittest.TestCase):
         self.assertIn("UMask=0077", worker)
         self.assertIn("User=weatherproxy", web)
 
-    def test_container_config_directory_allows_traversal_without_listing(self):
+    def test_container_config_directory_is_private_to_runtime_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = root / "source.yaml"
@@ -74,7 +74,7 @@ class ProxyInstallerTests(unittest.TestCase):
             target = root / "target"
             with mock.patch.object(installer.subprocess, "run"), mock.patch.object(installer.os, "chown"), contextlib.redirect_stdout(io.StringIO()):
                 installer.main(["--config", str(config), "--install-dir", str(target)])
-            self.assertEqual(target.stat().st_mode & 0o007, 0o001)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o700)
             self.assertEqual((target / "weather-proxy.yaml").stat().st_mode & 0o777, 0o600)
 
     def test_proxmox_component_paths_and_ownership(self):
