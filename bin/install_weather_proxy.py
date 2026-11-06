@@ -171,7 +171,9 @@ def main(argv=None):
     def run(command):
         print(shlex.join(map(str, command)))
         if not args.dry_run:
-            subprocess.run(list(map(str, command)), check=True)
+            # Installed code must be readable by the runtime UID even when the
+            # invoking root shell uses umask 077; secrets use explicit 0600.
+            subprocess.run(list(map(str, command)), check=True, umask=0o022)
     # Config must use /data in OCI images and the persistent data/ directory in
     # native installs. Validate through the installed runtime before starting.
     for source, filename in ((args.config, "weather-proxy.yaml"), (args.env_file, "weather.env")):
@@ -191,10 +193,10 @@ def main(argv=None):
         # Re-running updates the package but preserves state, config and secrets.
         if args.dry_run or subprocess.run(["id", "weatherproxy"], capture_output=True).returncode:
             run(["useradd", "--system", "--user-group", "--home-dir", directory, "--shell", "/usr/sbin/nologin", "weatherproxy"])
-        run(["chmod", "0755", directory])
+        run(["chmod", "0711", directory])
         run(["python3", "-m", "venv", directory / "venv"])
         run([directory / "venv/bin/pip", "install", "--upgrade", ROOT])
-        run(["mkdir", "-p", directory / "data"])
+        run(["mkdir", "-p", "-m", "0700", directory / "data"])
         run(["chown", "weatherproxy:weatherproxy", directory / "data", directory / "weather-proxy.yaml"])
         if args.env_file or (directory / "weather.env").exists():
             run(["chown", "weatherproxy:weatherproxy", directory / "weather.env"])
@@ -225,7 +227,9 @@ def main(argv=None):
             write_file(directory / "compose.yaml", json.dumps(compose, indent=2), args.dry_run, 0o644)
             # Bind data under the matching runtime UID; no world-readable secrets.
             if not args.dry_run:
-                os.chmod(directory, 0o755)
+                # The container UID needs traversal, not directory listing.
+                # Credential files remain private to their runtime owner.
+                os.chmod(directory, 0o711)
                 (directory / "data").mkdir(mode=0o700, exist_ok=True)
                 for filename in ("weather-proxy.yaml", "weather.env"):
                     path = directory / filename

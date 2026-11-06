@@ -257,7 +257,10 @@ def _activate_once(directory, *, verify_url=None, dry_run=False):
         stream.write(source.read_text())
     if os.geteuid() == 0:
         os.chown(backup, original.st_uid, original.st_gid)
-    private_write(source, yaml.safe_dump(candidate, sort_keys=False), mode=original.st_mode & 0o777)
+    # Preserve read access needed by an existing container/service, while never
+    # carrying executable bits or group/other write access into the new config.
+    mode = (original.st_mode & 0o777) & ~0o133
+    private_write(source, yaml.safe_dump(candidate, sort_keys=False), mode=mode)
     if os.geteuid() == 0:
         os.chown(source, original.st_uid, original.st_gid)
     print(f"Calendar switched; direct configuration backup: {backup}")

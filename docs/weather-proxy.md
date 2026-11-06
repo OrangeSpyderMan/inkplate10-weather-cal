@@ -153,7 +153,7 @@ inferred from a geocoding place name or from the installer's network namespace.
   --mode docker --migrate-calendar /srv/inkplate/server/config/config.yaml \
   --env-file /etc/inkplate/weather.env --latitude 45.57 --longitude 6.74 \
   --timezone Europe/Paris --location-id landry \
-  --proxy-url http://host.docker.internal:8090 --build --dry-run
+  --proxy-url http://127.0.0.1:8090 --build --dry-run
 ```
 
 For Netatmo, also supply `--netatmo-user-id` unless the existing configuration or
