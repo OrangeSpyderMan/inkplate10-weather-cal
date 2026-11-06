@@ -130,6 +130,88 @@ weather-proxy web --config weather-proxy.yaml
 weather-proxy worker --config weather-proxy.yaml
 ```
 
+## Migrating an existing calendar
+
+The component installer can convert an existing direct OWM 3, OWM 4, or
+AccuWeather configuration into a proxy deployment. Preparation preserves calendar
+outputs, Google/map configuration, units, forecast selection, and diagnostic MQTT
+settings. Forecast credentials move into the proxy's private environment file;
+Netatmo module selections and the latest persisted refresh token are carried
+over. Legacy `current_temperature` configuration is supported.
+
+Migration reads YAML, so run the installer with the existing calendar virtualenv
+Python (which already has PyYAML and requests), or use the installed
+`weather-proxy migrate-calendar` command. Ordinary installation from an already
+prepared proxy YAML still needs only the standard library to bootstrap.
+
+First preview the conversion. Supply actual coordinates, an IANA timezone, and
+a proxy URL reachable **from the calendar runtime**; these cannot be safely
+inferred from a geocoding place name or from the installer's network namespace.
+
+```sh
+/srv/inkplate/inkplate_venv/bin/python3 bin/install_weather_proxy.py \
+  --mode docker --migrate-calendar /srv/inkplate/server/config/config.yaml \
+  --env-file /etc/inkplate/weather.env --latitude 45.57 --longitude 6.74 \
+  --timezone Europe/Paris --location-id landry \
+  --proxy-url http://host.docker.internal:8090 --build --dry-run
+```
+
+For Netatmo, also supply `--netatmo-user-id` unless the existing configuration or
+environment already provides it. Supply `--netatmo-device-id` when the old
+configuration relied on selecting the first station. `--token-file` overrides
+the normal server-relative token path, useful when exporting container data.
+Use `--mqtt-broker` if the old broker hostname was internal to a Compose network
+that the new proxy will not join.
+
+After preview, stop the old calendar producer before generating the real plan
+and starting the proxy, so only one process owns Netatmo token rotation. Rerun
+without `--dry-run`, adding `--start` to deploy/start the proxy. The generated
+`INSTALL_DIR/migration` directory contains private proxy config/secrets, a
+candidate calendar config, and source fingerprints. **The calendar is still
+unchanged.** Existing proxy configuration is not silently replaced.
+Use `--migration-dir` for a fresh plan when regenerating one; previously generated
+plans are not overwritten. Replacing an existing proxy config also requires
+`--replace-config` explicitly.
+
+Once the proxy has acquired weather, activate the candidate:
+
+```sh
+weather-proxy migrate-calendar --output-dir weather-proxy-install/migration \
+  --activate --verify-url http://127.0.0.1:8090 --wait-seconds 180
+```
+
+Alternatively, add `--start --activate-calendar --verify-url URL` to the
+installer command to perform the verified cutover after deployment.
+The installer waits up to `--migration-timeout` seconds (default 180) for data.
+`--verify-url` is the URL reachable from the installer host; it can differ from
+the URL embedded in the calendar config. Cutover checks the actual calendar
+forecast selection and fresh configured Netatmo modules, creates a private
+`config.yaml.direct-provider.bak`, and atomically replaces the calendar config.
+It refuses to overwrite a changed source config/environment or a rotated source
+token file. The original environment file is preserved. If proxy API auth is
+used, put `WEATHER_PROXY_TOKEN` into that calendar environment file beforehand;
+the generated calendar YAML references it rather than embedding the secret.
+
+Restart the calendar web and producer services after activation. For a native
+calendar these are `inkplate` and `inkplate-producer`; for Compose, recreate the
+`inkplate` and `producer` services in the calendar deployment. This reloads the
+new provider and enables browser forwarding. The installer does not stop or
+restart an existing calendar automatically. OCI archive export prepares files
+only; deploy that archive before separately activating the plan.
+
+The preparation command is also available independently:
+
+```sh
+weather-proxy migrate-calendar --calendar-config server/config/config.yaml \
+  --env-file .env --latitude 45.57 --longitude 6.74 --timezone Europe/Paris \
+  --location-id landry --proxy-url http://weather-proxy:8090 \
+  --output-dir migration-plan --dry-run
+```
+
+The backup preserves the direct-provider configuration. Netatmo rollback also
+requires stopping the proxy worker and transferring its **latest** refresh token
+back to the calendar; the old token backup may have been rotated since cutover.
+
 ## Netatmo setup
 
 Configure the account's `user_id` and the station/module IDs on each location.

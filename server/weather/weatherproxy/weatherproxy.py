@@ -45,6 +45,10 @@ class WeatherProxyService:
 
     def fetch(self):
         data = self._get(f"locations/{quote(self.location, safe='')}/weather")
+        return self.forecast_from_payload(data)
+
+    def forecast_from_payload(self, data):
+        """Validate and select slots from a cached proxy response."""
         if data.get("schema_version") != "2.1" or not data.get("forecast", {}).get("available"):
             raise ValueError("WeatherProxy has no compatible forecast")
         self.metadata = data["location"]

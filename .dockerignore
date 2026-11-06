@@ -25,3 +25,5 @@ weather.env
 weather-proxy-install
 dist
 server/*.egg-info
+calendar-proxy.yaml
+*.direct-provider.bak

@@ -12,7 +12,11 @@ from .worker import Worker
 
 
 def main():
+    if sys.argv[1:2] == ["migrate-calendar"]:
+        from .migrate import main as migrate_calendar
+        return migrate_calendar(sys.argv[2:])
     parser = argparse.ArgumentParser(description="WeatherProxy forecast and observation service")
+    parser.epilog = "Prepare or activate a calendar migration with: weather-proxy migrate-calendar --help"
     parser.add_argument("command", choices=("serve", "web", "worker", "check", "webhooks", "register-webhook"), nargs="?", default="serve")
     parser.add_argument("--config")
     parser.add_argument("--account")

@@ -11,17 +11,18 @@ ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
-def expand(value):
+def expand(value, environ=None):
+    environ = os.environ if environ is None else environ
     if isinstance(value, dict):
-        return {k: expand(v) for k, v in value.items()}
+        return {k: expand(v, environ) for k, v in value.items()}
     if isinstance(value, list):
-        return [expand(v) for v in value]
+        return [expand(v, environ) for v in value]
     if not isinstance(value, str):
         return value
     def substitute(match):
         key, default = match.groups()
-        if key in os.environ:
-            return os.environ[key]
+        if key in environ:
+            return environ[key]
         if default is not None:
             return default
         raise ValueError(f"Missing environment variable {key}")
@@ -99,12 +100,13 @@ def load_config(path=None):
     return config
 
 
-def load_environment(path):
+def read_environment(path):
     """Read literal KEY=value secrets; never execute or interpolate shell code."""
     path = Path(path)
     if not path.exists():
-        return
+        return {}
     import json
+    result = {}
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -113,7 +115,19 @@ def load_environment(path):
         if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
             raise ValueError("Invalid WeatherProxy environment file")
         if value.startswith('"'):
-            value = json.loads(value)
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                # Existing calendar installers also escape dollars for Compose.
+                if len(value) < 2 or not value.endswith('"'):
+                    raise ValueError("Invalid quoted environment value") from None
+                value = re.sub(r'\\([\\"$])', r'\1', value[1:-1])
         elif len(value) >= 2 and value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
+        result[key] = value
+    return result
+
+
+def load_environment(path):
+    for key, value in read_environment(path).items():
         os.environ.setdefault(key, value)
