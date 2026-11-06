@@ -120,6 +120,7 @@ def run():
         settings.hourly_forecasts,
         settings.forecast_slice_hours,
         settings.forecast_lead_minutes,
+        **({"proxy_config": settings.weather_proxy_config} if settings.weather_service == "weatherproxy" else {}),
     )
     realtime_svc = build_realtime_provider(
         settings.realtime_config,
@@ -128,11 +129,15 @@ def run():
     )
 
     gapi = GoogleAPIService(settings.google_api_key)
+    map_location = settings.location
+    if settings.weather_service == "weatherproxy":
+        metadata = weather_svc.location_metadata()
+        map_location = f"{metadata['latitude']},{metadata['longitude']}"
     map_file = os.path.join(cwd, "views", "html", "map.png")
     try:
         gapi.save_static_map(
             settings.static_maps_id,
-            settings.location,
+            map_location,
             map_file,
         )
     except Exception as exc:
@@ -193,6 +198,7 @@ def build_weather_service(
     num_hourly_forecasts,
     forecast_slice_hours,
     forecast_lead_minutes,
+    proxy_config=None,
 ):
     return build_forecast_provider(
         service_type,
@@ -202,6 +208,7 @@ def build_weather_service(
         num_hours=num_hourly_forecasts,
         forecast_slice_hours=forecast_slice_hours,
         forecast_lead_minutes=forecast_lead_minutes,
+        **({"proxy_config": proxy_config} if proxy_config is not None else {}),
     )
 
 
@@ -390,6 +397,7 @@ def realtime_service_secrets(service):
 def service_secrets(weather_service, realtime_service):
     return (
         getattr(weather_service, "apikey", None),
+        getattr(weather_service, "token", None),
         *realtime_service_secrets(realtime_service),
     )
 

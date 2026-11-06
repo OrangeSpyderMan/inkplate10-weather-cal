@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
+from .. import http
 
 from ..service import WeatherService
 from ..models import ForecastData
@@ -178,6 +179,8 @@ class OpenWeatherMapv4Service(WeatherService):
         return urlunsplit(parts._replace(query=urlencode(query)))
 
     def _get_location_coords(self, location):
+        if isinstance(location, dict):
+            return float(location["latitude"]), float(location["longitude"])
         data = self._get_json(
             f"{self.baseurl}/geo/1.0/direct",
             params={
@@ -194,7 +197,7 @@ class OpenWeatherMapv4Service(WeatherService):
         return data[0]["lat"], data[0]["lon"]
 
     def _get_json(self, url, params=None):
-        response = requests.get(url, params=params, timeout=20)
+        response = http.get(url, params=params, timeout=20)
         try:
             if response.status_code != 200:
                 raise ValueError(

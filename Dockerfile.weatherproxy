@@ -1,0 +1,32 @@
+FROM python:3.14-slim-trixie
+ARG VERSION=local
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="WeatherProxy" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/OrangeSpyderMan/inkplate10-weather-cal"
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    WEATHER_PROXY_CONFIG=/config/weather-proxy.yaml
+WORKDIR /app
+COPY pyproject.toml /app/
+COPY LICENSE /app/
+COPY server/weather /app/server/weather
+COPY server/weather_proxy /app/server/weather_proxy
+RUN python3 - <<'PY'
+import os
+from pathlib import Path
+import re
+version = os.environ.get("VERSION", "local").removeprefix("v")
+if re.fullmatch(r"\d+\.\d+\.\d+", version):
+    path = Path("pyproject.toml")
+    path.write_text(re.sub(r'^version = "[^"]+"$', f'version = "{version}"', path.read_text(), count=1, flags=re.MULTILINE))
+PY
+RUN pip install --no-cache-dir . && useradd --uid 10001 --user-group --create-home weatherproxy \
+    && mkdir /data && chown weatherproxy:weatherproxy /data
+USER weatherproxy
+VOLUME ["/data"]
+EXPOSE 8090
+ENTRYPOINT ["weather-proxy"]
+CMD ["serve"]

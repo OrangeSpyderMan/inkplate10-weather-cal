@@ -1,5 +1,6 @@
 import requests
-from utils import even_select
+from .. import http
+from ..selection import even_select
 from datetime import datetime
 from ..service import WeatherService
 from ..models import ForecastData
@@ -153,6 +154,12 @@ class AccuweatherService(WeatherService):
         return conditions
 
     def _get_location_key(self, location):
+        if isinstance(location, dict):
+            data = self._get_json(
+                f"{self.baseurl}/locations/v1/cities/geoposition/search",
+                params={"q": f"{location['latitude']},{location['longitude']}"},
+            )
+            return data["Key"]
         path = f"{self.baseurl}/locations/v1/search"
         data = self._get_json(path, params={"q": location})
 
@@ -164,7 +171,7 @@ class AccuweatherService(WeatherService):
         return location_key
 
     def _get_json(self, url, params=None):
-        response = requests.get(
+        response = http.get(
             url,
             headers={"Authorization": f"Bearer {self.apikey}"},
             params=params,

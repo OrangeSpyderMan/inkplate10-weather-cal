@@ -126,6 +126,13 @@ server/config.yaml
 server/data/netatmo-token.json
 server/netatmo-token.json
 .tools/arduino-cli
+/weather-proxy.yaml
+/weather.env
+/weather-proxy-install/
+/dist/
+/build/
+/server/*.egg-info/
+*.direct-provider.bak
 
 # Local firmware configuration may contain WiFi and MQTT credentials.
 firmware-config.yaml
