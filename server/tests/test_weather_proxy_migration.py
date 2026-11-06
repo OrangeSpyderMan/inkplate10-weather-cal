@@ -114,6 +114,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(read_environment(self.destination / "weather.env")["WEATHER_API_KEY"], "private-forecast-key")
 
     def test_cutover_requires_usable_forecast_and_preserves_backup(self):
+        os.chmod(self.source, 0o666)
         original = self.source.read_bytes()
         write_plan(self.plan(), self.destination)
         response = mock.Mock(status_code=200)
@@ -126,6 +127,8 @@ class MigrationTests(unittest.TestCase):
             activate(self.destination, verify_url="http://localhost:8090")
         self.assertEqual(self.source.with_name("config.yaml.direct-provider.bak").read_bytes(), original)
         self.assertEqual(yaml.safe_load(self.source.read_text())["weather"]["service"], "weatherproxy")
+        self.assertEqual(self.source.stat().st_mode & 0o022, 0)
+        self.assertEqual(self.source.with_name("config.yaml.direct-provider.bak").stat().st_mode & 0o777, 0o600)
 
     def test_changed_source_is_not_overwritten(self):
         write_plan(self.plan(), self.destination)

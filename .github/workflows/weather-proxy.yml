@@ -38,7 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Test deployment plans
-        run: python3 -m unittest discover -s tests -p 'test_weather_proxy_installer.py' -v
+        run: |
+          python3 -m pip install 'PyYAML>=6,<7' 'requests>=2.32,<3'
+          python3 -m unittest discover -s tests -p 'test_weather_proxy_installer.py' -v
       - name: Build standalone proxy image
         run: docker build -f Dockerfile.weatherproxy -t weatherproxy:ci .
       - name: Test proxy in isolated image

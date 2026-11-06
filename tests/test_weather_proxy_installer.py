@@ -66,6 +66,17 @@ class ProxyInstallerTests(unittest.TestCase):
         self.assertIn("UMask=0077", worker)
         self.assertIn("User=weatherproxy", web)
 
+    def test_container_config_directory_allows_traversal_without_listing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "source.yaml"
+            config.write_text("locations: {}")
+            target = root / "target"
+            with mock.patch.object(installer.subprocess, "run"), mock.patch.object(installer.os, "chown"), contextlib.redirect_stdout(io.StringIO()):
+                installer.main(["--config", str(config), "--install-dir", str(target)])
+            self.assertEqual(target.stat().st_mode & 0o007, 0o001)
+            self.assertEqual((target / "weather-proxy.yaml").stat().st_mode & 0o777, 0o600)
+
     def test_proxmox_component_paths_and_ownership(self):
         proxmox = module("install_proxmox")
         proxmox.configure_proxy_component()
@@ -93,6 +104,25 @@ class ProxyInstallerTests(unittest.TestCase):
         self.assertIn('location: "landry"', text)
         self.assertNotIn("private-token", text)
         self.assertIn("WEATHER_PROXY_TOKEN", calendar.render_env(answers, False))
+
+
+    @unittest.skipUnless(importlib.util.find_spec("yaml") and importlib.util.find_spec("requests"), "Migration integration needs PyYAML and requests")
+    def test_installer_migration_prepares_deployment_without_switching_calendar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            source = directory / "calendar.yaml"
+            original = json.dumps({"location": "Landry, FR", "weather": {"service": "openweathermapv4", "apikey": "private-key"}})
+            source.write_text(original)
+            target = directory / "proxy"
+            with mock.patch.object(installer.subprocess, "run"), mock.patch("sys.stdout"):
+                installer.main(["--mode", "oci", "--migrate-calendar", str(source), "--install-dir", str(target),
+                                "--latitude", "45.57", "--longitude", "6.74", "--timezone", "Europe/Paris",
+                                "--proxy-url", "http://proxy:8090"])
+            self.assertEqual(source.read_text(), original)
+            self.assertTrue((target / "weather-proxy.yaml").is_file())
+            self.assertTrue((target / "weather.env").is_file())
+            self.assertTrue((target / "migration/calendar-proxy.yaml").is_file())
+            self.assertNotIn("private-key", (target / "weather-proxy.yaml").read_text())
 
 
 if __name__ == "__main__":
