@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 
 from output_profiles import load_output_profiles
@@ -25,6 +25,7 @@ class ProducerConfig:
     mqtt_weather_config: dict
     output_profiles: dict
     default_output_profile: str
+    weather_proxy_config: dict = field(default_factory=dict)
 
     @classmethod
     def from_config(cls, config):
@@ -93,6 +94,9 @@ class ProducerConfig:
         if mqtt_config.get("instance_id") is not None:
             mqtt_weather_config["instance_id"] = mqtt_config["instance_id"]
         output_profiles, default_output_profile = load_output_profiles(config)
+        proxy_mode = config.get("weather", {}).get("service") == "weatherproxy"
+        if proxy_mode and (realtime_config or {}).get("source", "weather") != "weather":
+            raise ConfigurationError("WeatherProxy mode cannot use a second current-conditions overlay")
 
         return cls(
             debug=bool(
@@ -114,7 +118,8 @@ class ProducerConfig:
                     config,
                     "weather",
                     "apikey",
-                    required=True,
+                    default="" if proxy_mode else None,
+                    required=not proxy_mode,
                 )
             ),
             weather_metric=bool(
@@ -152,6 +157,9 @@ class ProducerConfig:
             mqtt_weather_config=mqtt_weather_config,
             output_profiles=output_profiles,
             default_output_profile=default_output_profile,
+            weather_proxy_config={key: config.get("weather", {}).get(key)
+                                  for key in ("url", "location", "token")
+                                  if config.get("weather", {}).get(key) is not None},
         )
 
 

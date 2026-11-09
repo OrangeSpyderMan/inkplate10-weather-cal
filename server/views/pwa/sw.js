@@ -1,4 +1,4 @@
-const CACHE_NAME = "weather-calendar-pwa-v3";
+const CACHE_NAME = "weather-calendar-pwa-v4";
 const APP_SHELL = [
   "/app",
   "/app.css",
@@ -30,7 +30,7 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
 
-  if (url.pathname === "/app/calendar.png") {
+  if (url.pathname === "/app/calendar.png" || url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
     return;
   }

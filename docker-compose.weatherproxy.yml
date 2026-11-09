@@ -1,0 +1,29 @@
+# Independent deployment: docker compose -f docker-compose.weatherproxy.yml up -d --build
+# Podman supports the same OCI image and Compose definition.
+services:
+  weather-proxy:
+    image: ${WEATHER_PROXY_IMAGE:-weatherproxy:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.weatherproxy
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${WEATHER_PROXY_PORT:-8090}:8090"
+    environment:
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+      WEATHER_PROXY_TOKEN: ${WEATHER_PROXY_TOKEN:-}
+      NETATMO_CLIENT_ID: ${NETATMO_CLIENT_ID:-}
+      NETATMO_CLIENT_SECRET: ${NETATMO_CLIENT_SECRET:-}
+      NETATMO_REFRESH_TOKEN: ${NETATMO_REFRESH_TOKEN:-}
+      NETATMO_USER_ID: ${NETATMO_USER_ID:-}
+    volumes:
+      - ./weather-proxy.yaml:/config/weather-proxy.yaml:ro
+      - weather-proxy-data:/data
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  weather-proxy-data:
