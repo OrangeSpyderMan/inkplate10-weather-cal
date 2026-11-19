@@ -88,7 +88,7 @@ jobs:
           cd /tmp
           "$RUNNER_TEMP/proxy-venv/bin/python" -c 'from weather.accuweather.accuweather import AccuweatherService; from weather_proxy.api import create_app; import importlib.resources as r; assert r.files("weather.openweathermapv3").joinpath("icon-map.json").is_file()'
       - name: Upload Python distributions
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: weatherproxy-python
           path: dist/weatherproxy/*
