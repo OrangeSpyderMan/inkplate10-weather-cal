@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -11,13 +12,29 @@ from PIL import Image
 SERVER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
-from pillow_renderer import PillowCalendarRenderer
+from pillow_renderer import CalendarCanvas, PillowCalendarRenderer
 from renderers import build_renderer
 
 
 class PillowCalendarRendererTests(unittest.TestCase):
     def test_registry_builds_pillow_renderer(self):
         self.assertIsInstance(build_renderer("pillow"), PillowCalendarRenderer)
+
+    def test_renders_netatmo_rainfall_over_the_past_hour(self):
+        canvas = CalendarCanvas(825, 1200, supersample=1)
+        netatmo = {"source": "netatmo", "value": 0.2, "live": True}
+        cases = (
+            ({**netatmo, "last_hour": 2.5}, "2.5", True),
+            ({**netatmo, "last_hour": 0}, "0", True),
+            (netatmo, "--", False),
+            ({"source": "openweathermapv3", "value": 1.2}, "1.2", False),
+        )
+        for rain, expected_value, expected_live in cases:
+            with self.subTest(rain=rain), patch.object(canvas, "_measurement_circle") as circle:
+                canvas._top({"rain": {"unit": "mm", "rate_unit": "mm/h", **rain}}, None)
+                circle.assert_called_once_with(
+                    (94, 318), expected_value, "mm/h", live=expected_live,
+                )
 
     def test_renders_complete_grayscale_calendar_atomically(self):
         snapshot = SimpleNamespace(

@@ -125,11 +125,12 @@ class CalendarCanvas:
 
         rain = current.get("rain")
         if rain:
+            rain_value = rain.get("last_hour" if rain.get("source") == "netatmo" else "value")
             self._measurement_circle(
                 (94, 318),
-                _measurement(rain.get("value")),
+                _measurement(rain_value),
                 rain.get("rate_unit") or rain.get("unit", "") + "/h",
-                live=rain.get("live", False),
+                live=rain_value is not None and rain.get("live", False),
             )
 
         wind = current.get("wind")
