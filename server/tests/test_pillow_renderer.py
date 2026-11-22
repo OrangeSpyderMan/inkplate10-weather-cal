@@ -20,11 +20,41 @@ class PillowCalendarRendererTests(unittest.TestCase):
     def test_registry_builds_pillow_renderer(self):
         self.assertIsInstance(build_renderer("pillow"), PillowCalendarRenderer)
 
+    def test_current_temperature_rounds_above_ten_and_fits_in_its_circle(self):
+        center = (731, 318)
+        cases = (
+            (5.2, "5.2°"),
+            (9.9, "9.9°"),
+            (10, "10°"),
+            (10.4, "10°"),
+            (12.6, "13°"),
+            (-12.6, "-12.6°"),
+            (100.2, "100°"),
+            (None, "--°"),
+        )
+        for value, expected in cases:
+            with self.subTest(value=value):
+                canvas = CalendarCanvas(825, 1200, supersample=1)
+                with patch.object(canvas, "_text", wraps=canvas._text) as text:
+                    canvas._top({"temperature": {"value": value}}, None)
+                label, _, size = next(
+                    call.args for call in text.call_args_list if call.args[1] == center
+                )
+                self.assertEqual(label, expected)
+                left, top, right, bottom = canvas._font(size, bold=True).getbbox(label, anchor="mm")
+                half_width = max(abs(left), abs(right))
+                half_height = max(abs(top), abs(bottom))
+                self.assertLessEqual(half_width**2 + half_height**2, 60**2)
+
     def test_renders_netatmo_rainfall_over_the_past_hour(self):
         canvas = CalendarCanvas(825, 1200, supersample=1)
         netatmo = {"source": "netatmo", "value": 0.2, "live": True}
         cases = (
             ({**netatmo, "last_hour": 2.5}, "2.5", True),
+            ({**netatmo, "last_hour": 9.9}, "9.9", True),
+            ({**netatmo, "last_hour": 10}, "10", True),
+            ({**netatmo, "last_hour": 10.4}, "10", True),
+            ({**netatmo, "last_hour": 12.6}, "13", True),
             ({**netatmo, "last_hour": 0}, "0", True),
             (netatmo, "--", False),
             ({"source": "openweathermapv3", "value": 1.2}, "1.2", False),

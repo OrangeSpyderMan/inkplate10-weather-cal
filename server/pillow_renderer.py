@@ -106,11 +106,22 @@ class CalendarCanvas:
         )
 
         temperature = current.get("temperature") or {}
+        temperature_value = temperature.get("value")
+        if temperature_value is not None and float(temperature_value) > 10:
+            temperature_value = round(float(temperature_value))
+        temperature_text = f"{_measurement(temperature_value)}°"
+        temperature_size = 58
+        left, top, right, bottom = self._font(temperature_size, bold=True).getbbox(
+            temperature_text, anchor="mm",
+        )
+        text_radius = math.hypot(max(abs(left), abs(right)), max(abs(top), abs(bottom)))
+        if text_radius > self._size(60):
+            temperature_size = max(1, math.floor(temperature_size * self._size(59) / text_radius))
         self._circle((731, 318), 62, fill=0)
         self._text(
-            "{}°".format(_measurement(temperature.get("value"))),
+            temperature_text,
             (731, 318),
-            58,
+            temperature_size,
             bold=True,
             fill=255,
             anchor="mm",
@@ -126,10 +137,13 @@ class CalendarCanvas:
         rain = current.get("rain")
         if rain:
             rain_value = rain.get("last_hour" if rain.get("source") == "netatmo" else "value")
+            rain_unit = rain.get("rate_unit") or rain.get("unit", "") + "/h"
+            if rain_unit == "mm/h" and rain_value is not None and float(rain_value) > 10:
+                rain_value = round(float(rain_value))
             self._measurement_circle(
                 (94, 318),
                 _measurement(rain_value),
-                rain.get("rate_unit") or rain.get("unit", "") + "/h",
+                rain_unit,
                 live=rain_value is not None and rain.get("live", False),
             )
 
