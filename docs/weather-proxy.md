@@ -311,10 +311,15 @@ falls back to a direct upstream call. Supply enough OWM hours for the calendar's
 desired horizon. AccuWeather retains its existing evenly sampled 12-hour behavior.
 
 The calendar web service forwards location discovery and weather reads under its
-own origin. The PWA shows a location picker and live conditions, polling JSON
-every 30 seconds while visible. It continues showing the calendar's configured
-image; changing the live-panel location does not reconfigure or rerender that
-calendar image. Browser background push and SSE are not implemented.
+own origin. The web app displays a server-rendered calendar PNG and a live
+conditions panel. The PNG's map, current readings, and forecast all use the
+calendar server's `weather.location` setting.
+
+The live panel shows its location name, forecast coordinates, and available
+readings. It polls every 30 seconds while visible. The location chooser appears
+only when WeatherProxy has multiple locations. For example, if `weather.location`
+is `landry`, choosing another location updates the live panel while the calendar
+PNG continues to show Landry. Browser background push and SSE are not implemented.
 
 Point the Pico example's `MQTT_BASE_TOPIC` at
 `weatherproxy/locations/landry/weather`. It retains the existing calendar-topic

@@ -20,7 +20,9 @@
     <main class="viewer" aria-live="polite">
       <img id="calendar" alt="Weather calendar" decoding="async">
       <section id="live-weather" hidden aria-label="Current weather">
-        <label>Location <select id="weather-location"></select></label>
+        <label hidden>Location <select id="weather-location"></select></label>
+        <strong id="weather-location-name" hidden></strong>
+        <small id="weather-coordinates" hidden></small>
         <p id="conditions"></p>
         <small id="observation-time"></small>
       </section>

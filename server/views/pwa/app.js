@@ -49,6 +49,8 @@ if ("serviceWorker" in navigator) {
 
 const liveWeather = document.getElementById("live-weather");
 const locationPicker = document.getElementById("weather-location");
+const locationName = document.getElementById("weather-location-name");
+const coordinates = document.getElementById("weather-coordinates");
 const conditions = document.getElementById("conditions");
 const observationTime = document.getElementById("observation-time");
 let lastWeather = null;
@@ -96,6 +98,12 @@ async function refreshWeather() {
   }
 }
 
+function showCoordinates() {
+  const text = locationPicker.selectedOptions[0]?.dataset.coordinates;
+  coordinates.textContent = text || "";
+  coordinates.hidden = !text;
+}
+
 async function discoverLocations() {
   try {
     const response = await fetch("/api/v1/locations", { cache: "no-cache" });
@@ -105,8 +113,16 @@ async function discoverLocations() {
       const option = document.createElement("option");
       option.value = location.id;
       option.textContent = location.name;
+      if (Number.isFinite(location.latitude) && Number.isFinite(location.longitude)) {
+        option.dataset.coordinates = `(${location.latitude}, ${location.longitude})`;
+      }
       return option;
     }));
+    locationPicker.closest("label").hidden = payload.locations.length < 2;
+    const onlyLocation = payload.locations.length === 1 ? payload.locations[0] : null;
+    locationName.textContent = onlyLocation?.name || "";
+    locationName.hidden = !onlyLocation;
+    showCoordinates();
     if (!payload.locations.length) return;
     liveWeather.hidden = false;
     await refreshWeather();
@@ -115,7 +131,10 @@ async function discoverLocations() {
   }
 }
 
-locationPicker.addEventListener("change", refreshWeather);
+locationPicker.addEventListener("change", () => {
+  showCoordinates();
+  refreshWeather();
+});
 setInterval(refreshWeather, 30 * 1000);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
