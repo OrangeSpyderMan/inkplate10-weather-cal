@@ -43,7 +43,7 @@ Wants=network-online.target
 [Service]
 User=weatherproxy
 Group=weatherproxy
-WorkingDirectory={json.dumps(str(directory))}
+WorkingDirectory={directory}
 Environment={json.dumps(f"WEATHER_PROXY_ENV_FILE={directory}/weather.env")}
 Environment={json.dumps(f"WEATHER_PROXY_STORAGE_PATH={directory}/data/weather-proxy.sqlite3")}
 ExecStart={executable} -m weather_proxy {command} --config {config}

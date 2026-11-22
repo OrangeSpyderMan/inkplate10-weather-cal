@@ -62,6 +62,8 @@ class ProxyInstallerTests(unittest.TestCase):
         worker = installer.systemd_unit(Path("/srv/weatherproxy"), "worker")
         self.assertIn("-m weather_proxy web", web)
         self.assertIn("-m weather_proxy worker", worker)
+        self.assertIn("\nWorkingDirectory=/srv/weatherproxy\n", web)
+        self.assertIn("\nWorkingDirectory=/srv/weatherproxy\n", worker)
         self.assertIn('ReadWritePaths="/srv/weatherproxy/data"', worker)
         self.assertIn("UMask=0077", worker)
         self.assertIn("User=weatherproxy", web)
